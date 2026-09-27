@@ -281,7 +281,7 @@ function ContractTextPanel({
         >{hlText}</mark>
       )
       
-      // Inline reason annotation — rendered below the highlight when selected
+      // Inline reason annotation - rendered below the highlight when selected
       if (hl) {
         segments.push(
           <span
@@ -292,7 +292,7 @@ function ContractTextPanel({
             <span className={`font-semibold ${
               r.severity === 'Critical' ? 'text-red-600' : r.severity === 'High' ? 'text-orange-600' : 'text-yellow-700'
             `}>{r.severity}</span>
-            {' '}— {hl.reason}
+            {' '}- {hl.reason}
           </span>
         )
       }
@@ -325,7 +325,7 @@ function ContractTextPanel({
     </div>
   )
 }
-\n
+
 // ── Main App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -367,7 +367,7 @@ export default function App() {
       <header className="bg-white border-b border-slate-200 px-4 py-3 sm:px-6 sm:py-4">
         <div className="max-w-screen-2xl mx-auto flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="text-base sm:text-lg font-bold text-slate-800 truncate">Southlake Health — Document Risk Dashboard</h1>
+            <h1 className="text-base sm:text-lg font-bold text-slate-800 truncate">Southlake Health - Document Risk Dashboard</h1>
             <p className="text-xs text-slate-500 mt-0.5 hidden sm:block">AI-assisted contract compliance &amp; risk assessment prototype</p>
           </div>
           {/* Mobile menu button */}
@@ -435,7 +435,7 @@ export default function App() {
       </div>
 
       <div className="max-w-screen-2xl mx-auto flex">
-        {/* Left: Contract List — desktop sidebar / mobile overlay */}
+        {/* Left: Contract List - desktop sidebar / mobile overlay */}
         <aside
           className={`
             fixed inset-y-0 left-0 z-40 w-80 bg-white border-r border-slate-200 flex flex-col gap-4 p-4 overflow-y-auto
