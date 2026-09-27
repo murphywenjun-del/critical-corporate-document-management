@@ -232,8 +232,9 @@ function ContractTextPanel({
   highlights,
 }: {
   text: string
-  highlights: Array<{ text: string; severity: Severity }>
+  highlights: Array<{ text: string; severity: Severity; reason: string }>
 }) {
+  const [selectedHighlight, setSelectedHighlight] = useState<{ text: string; severity: Severity; reason: string; lineIdx: number } | null>(null)
   const ranges = buildHighlightRanges(text, highlights)
   const lines = text.split('\n')
   
@@ -340,7 +341,6 @@ export default function App() {
   const [filterType, setFilterType] = useState<string>('All')
   const [filterRisk, setFilterRisk] = useState<string>('All')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [selectedHighlight, setSelectedHighlight] = useState<{ text: string; severity: Severity; reason: string; lineIdx: number } | null>(null)
 
   const types = ['All', ...Array.from(new Set(contracts.map((c) => c.type)))]
   const risks = ['All', 'Low', 'Critical']
