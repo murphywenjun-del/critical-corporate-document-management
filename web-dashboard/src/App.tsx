@@ -258,19 +258,27 @@ function ContractTextPanel({
 
   // Auto-select and scroll to highlight when a flag is clicked
   useEffect(() => {
-    if (!selectedFlagHighlight || !text) return
-    const hl = highlights.find(h => h.text === selectedFlagHighlight)
-    if (!hl) return
-    const idx = text.toLowerCase().indexOf(hl.text.toLowerCase())
-    if (idx === -1) return
-    const lineNum = text.slice(0, idx).split('\n').length
-    setSelectedHighlight({ text: hl.text, severity: hl.severity, reason: hl.reason, lineIdx: lineNum - 1 })
-    // Scroll the highlighted text into view
-    setTimeout(() => {
-      const marked = document.querySelector('mark[title="Click to show/hide reason"]:not([style*="display: none"])')
-      if (marked) marked.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (!selectedFlagHighlight) return
+    // Poll until text is loaded
+    const poll = setInterval(() => {
+      if (!text) return
+      const hl = highlights.find(h => h.text === selectedFlagHighlight)
+      if (!hl) { clearInterval(poll); return }
+      const idx = text.toLowerCase().indexOf(hl.text.toLowerCase())
+      if (idx === -1) { clearInterval(poll); return }
+      const lineNum = text.slice(0, idx).split('\n').length
+      setSelectedHighlight({ text: hl.text, severity: hl.severity, reason: hl.reason, lineIdx: lineNum - 1 })
+      clearInterval(poll)
+      // Scroll into view after React renders
+      setTimeout(() => {
+        const marked = document.querySelector('mark[title="Click to show/hide reason"]:not([style*="display: none"])')
+        if (marked) marked.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 100)
     }, 50)
-  }, [selectedFlagHighlight, text])
+    // Cleanup after 3 seconds max
+    setTimeout(() => clearInterval(poll), 3000)
+    return () => clearInterval(poll)
+  }, [selectedFlagHighlight])
   
   return (
     <div className="text-xs text-slate-700 font-mono leading-relaxed max-h-96 overflow-y-auto bg-slate-50 rounded-lg p-4 border border-slate-200 whitespace-pre-wrap">
