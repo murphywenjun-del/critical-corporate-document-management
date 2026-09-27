@@ -246,94 +246,86 @@ function ContractTextPanel({
     off += l.length + 1
   }
   
+  const renderLine = (line: string, lineIdx: number) => {
+    const ls = lineOffsets[lineIdx]
+    const le = ls + line.length
+    
+    const segments: Array<React.ReactNode> = []
+    let pos = ls
+    
+    for (let ri = 0; ri < ranges.length; ri++) {
+      const r = ranges[ri]
+      if (r.end <= ls || r.start >= le) continue
+      
+      // Text before this range
+      if (r.start > pos) {
+        segments.push(<span key={`b${ri}`}>{line.slice(pos - ls, r.start - ls)}</span>)
+      }
+      
+      // Highlighted segment
+      const segS = Math.max(r.start, ls) - ls
+      const segE = Math.min(r.end, le) - ls
+      const hlText = line.slice(segS, segE)
+      const hl = highlights.find(h => h.text === hlText)
+      const isSelected = selectedHighlight?.text === hlText && selectedHighlight?.lineIdx === lineIdx
+      
+      segments.push(
+        <mark
+          key={`h${ri}`}
+          className={`px-0.5 rounded cursor-pointer hover:opacity-80 ${highlightBgColor[r.severity]} ${isSelected ? 'ring-2 ring-offset-0.5 ring-slate-400' : ''}`}
+          onClick={() => setSelectedHighlight(prev =>
+            prev?.text === hlText && prev?.lineIdx === lineIdx ? null :
+            hl ? { text: hlText, severity: r.severity, reason: hl.reason, lineIdx } : null
+          )}
+          title="Click to show/hide reason"
+        >{hlText}</mark>
+      )
+      
+      // Inline reason annotation — rendered below the highlight when selected
+      if (hl) {
+        segments.push(
+          <span
+            key={`a${ri}`}
+            className="block ml-2 mt-0.5 mb-1 text-[10px] text-slate-500 border-l-2 border-slate-300 pl-2 leading-snug"
+            style={{ display: isSelected ? 'block' : 'none' }}
+          >
+            <span className={`font-semibold ${
+              r.severity === 'Critical' ? 'text-red-600' : r.severity === 'High' ? 'text-orange-600' : 'text-yellow-700'
+            `}>{r.severity}</span>
+            {' '}— {hl.reason}
+          </span>
+        )
+      }
+      
+      pos = Math.max(pos, r.end)
+    }
+    
+    if (pos < le) {
+      segments.push(<span key="rest">{line.slice(pos - ls)}</span>)
+    }
+    
+    if (segments.length === 0) {
+      if (line.trim() === '') return <div key={lineIdx} />
+      if (line.startsWith('# ')) return <h2 key={lineIdx} className="text-sm font-bold text-slate-800 mt-3 mb-1">{line.slice(2)}</h2>
+      if (line.startsWith('## ')) return <h3 key={lineIdx} className="text-xs font-bold text-slate-700 mt-2 mb-1">{line.slice(3)}</h3>
+      if (line.startsWith('- ')) return <li key={lineIdx} className="ml-4 list-disc">{line.slice(2)}</li>
+      return <p key={lineIdx} className="mb-0.5">{line}</p>
+    }
+    
+    if (line.trim() === '') return <div key={lineIdx} />
+    if (line.startsWith('# ')) return <h2 key={lineIdx} className="text-sm font-bold text-slate-800 mt-3 mb-1">{segments}</h2>
+    if (line.startsWith('## ')) return <h3 key={lineIdx} className="text-xs font-bold text-slate-700 mt-2 mb-1">{segments}</h3>
+    if (line.startsWith('- ')) return <li key={lineIdx} className="ml-4 list-disc">{segments}</li>
+    return <p key={lineIdx} className="mb-0.5">{segments}</p>
+  }
+  
   return (
     <div className="text-xs text-slate-700 font-mono leading-relaxed max-h-96 overflow-y-auto bg-slate-50 rounded-lg p-4 border border-slate-200 whitespace-pre-wrap">
-      {lines.map((line, i) => {
-        const ls = lineOffsets[i]
-        const le = ls + line.length
-        
-        const segments: Array<{ text: string; severity: Severity | null }> = []
-        let pos = ls
-        
-        for (const r of ranges) {
-          if (r.end <= ls || r.start >= le) continue
-          // Text before this range (within this line)
-          if (r.start > pos) {
-            segments.push({ text: line.slice(pos - ls, r.start - ls), severity: null })
-          }
-          // Range portion within this line
-          const segS = Math.max(r.start, ls) - ls
-          const segE = Math.min(r.end, le) - ls
-          segments.push({ text: line.slice(segS, segE), severity: r.severity })
-          pos = Math.max(pos, r.end)
-        }
-        
-        if (pos < le) {
-          segments.push({ text: line.slice(pos - ls), severity: null })
-        }
-        
-        if (segments.length === 0 || (segments.length === 1 && !segments[0].severity && segments[0].text === line)) {
-          if (line.trim() === '') return <div key={i} />
-          if (line.startsWith('# ')) return <h2 key={i} className="text-sm font-bold text-slate-800 mt-3 mb-1">{line.slice(2)}</h2>
-          if (line.startsWith('## ')) return <h3 key={i} className="text-xs font-bold text-slate-700 mt-2 mb-1">{line.slice(3)}</h3>
-          if (line.startsWith('- ')) return <li key={i} className="ml-4 list-disc">{line.slice(2)}</li>
-          return <p key={i} className="mb-0.5">{line}</p>
-        }
-        
-        const content = segments.map((s, j) =>
-          s.severity ? (
-            <mark
-              key={j}
-              className={`px-0.5 rounded cursor-pointer hover:opacity-80 ${highlightBgColor[s.severity]}`}
-              onClick={() => {
-                if (!s.severity) return
-                const hl = highlights.find(h => h.text === s.text)
-                if (hl) setSelectedHighlight({ text: s.text, severity: s.severity, reason: hl.reason, lineIdx: i })
-              }}
-              title={`Click to see why this was flagged`}
-            >{s.text}</mark>
-          ) : (
-            <span key={j}>{s.text}</span>
-          )
-        )
-        
-        if (line.trim() === '') return <div key={i} />
-        if (line.startsWith('# ')) return <h2 key={i} className="text-sm font-bold text-slate-800 mt-3 mb-1">{content}</h2>
-        if (line.startsWith('## ')) return <h3 key={i} className="text-xs font-bold text-slate-700 mt-2 mb-1">{content}</h3>
-        if (line.startsWith('- ')) return <li key={i} className="ml-4 list-disc">{content}</li>
-        return <p key={i} className="mb-0.5">{content}</p>
-      })}
-      {/* Highlight detail panel */}
-      {selectedHighlight && (
-        <div className="mt-3 p-3 rounded-lg border-2 border-blue-200 bg-blue-50">
-          <div className="flex items-start gap-3">
-            <span className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${
-              selectedHighlight.severity === 'Critical' ? 'bg-red-500' :
-              selectedHighlight.severity === 'High' ? 'bg-orange-500' : 'bg-yellow-500'
-            }`} />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-bold uppercase text-slate-500">{selectedHighlight.severity}</span>
-                <span className="text-xs font-mono text-slate-400">Line {selectedHighlight.lineIdx + 1}</span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); setSelectedHighlight(null) }}
-                  className="ml-auto text-slate-400 hover:text-slate-600 text-xs"
-                >
-                  ✕
-                </button>
-              </div>
-              <p className="text-xs font-semibold text-slate-700 mb-1">
-                “<span className="italic">{selectedHighlight.text}</span>”
-              </p>
-              <p className="text-xs text-slate-600">{selectedHighlight.reason}</p>
-            </div>
-          </div>
-        </div>
-      )}
+      {lines.map((line, i) => renderLine(line, i))}
     </div>
   )
 }
-
+\n
 // ── Main App ─────────────────────────────────────────────────────────────────
 
 export default function App() {
