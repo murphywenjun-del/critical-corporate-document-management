@@ -323,7 +323,7 @@ function ContractTextPanel({
             <span key={j}>
               <mark
                 data-flag={hl?.text ?? ''}
-                className={`px-0.5 rounded cursor-pointer hover:opacity-80 ${highlightBgColor[sev!]} ${isSelected ? 'ring-1 ring-slate-400' : ''}`
+                className={highlightBgColor[sev!] + ' px-0.5 rounded cursor-pointer hover:opacity-80 ' + (isSelected ? 'ring-1 ring-slate-400' : '')}
                 onClick={() => {
                   if (!sev || !hl) return
                   setSelectedHighlight(prev => {
