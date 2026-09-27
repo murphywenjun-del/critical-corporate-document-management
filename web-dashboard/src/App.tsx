@@ -271,7 +271,7 @@ function ContractTextPanel({
       clearInterval(poll)
       // Scroll into view after React renders
       setTimeout(() => {
-        const marked = document.querySelector("mark[data-flag=" ' + selectedFlagHighlight + ' ]")
+        const marked = document.querySelector(`mark[data-flag="${selectedFlagHighlight}"]`)
         if (marked) marked.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }, 100)
     }, 50)
