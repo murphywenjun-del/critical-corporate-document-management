@@ -65,9 +65,9 @@ export const contracts: ContractDoc[] = [
     summary: "MOU with Executive Director & CMO signing (neither is VP). Mixed binding/non-binding language creates legal ambiguity.",
     filePath: "research/contracts/02_MOU_Missing_Second_Signature_2024.md",
     riskScore: 4.7, riskLevel: "Critical", flagsCount: 3, flags: [
-      { severity: "Critical", field: "signatories", flag_if: "Only 0 VP signatures found — signed by Executive Director & CMO" },
-      { severity: "High", field: "expiry_date", flag_if: "Contract expired 119 days ago (May 31, 2026)" },
-      { severity: "High", field: "binding_language", flag_if: "Both binding and non-binding language present — creates legal ambiguity" },
+      { severity: "Critical", field: "signatories", highlightField: "Robert Thompson", flag_if: "Only 0 VP signatures found — signed by Executive Director & CMO" },
+      { severity: "High", field: "expiry_date", highlightField: "ninety (90) days", flag_if: "Contract expired 119 days ago (May 31, 2026)" },
+      { severity: "High", field: "binding_language", highlightField: "not intended to create legally binding obligations", flag_if: "Both binding and non-binding language present — creates legal ambiguity" },
     ],
     textHighlights: [], // Clean NDA — no risk terms
     extractedFields: [
@@ -87,9 +87,9 @@ export const contracts: ContractDoc[] = [
     summary: "EHR vendor agreement with unlimited indemnity, auto-increasing fees without cap, and 90-day convenience termination.",
     filePath: "research/contracts/03_Procurement_HealthIT_Service_Agreement_2023.md",
     riskScore: 4.1, riskLevel: "Critical", flagsCount: 3, flags: [
-      { severity: "High", field: "expiry_date", flag_if: "Contract expired 270 days ago (Dec 31, 2025)" },
-      { severity: "High", field: "indemnity_cap", flag_if: "Indemnity clause has no monetary cap" },
-      { severity: "Medium", field: "termination_conv", flag_if: "Convenience termination notice period of 90 days is excessive (should be ≤60)" },
+      { severity: "High", field: "expiry_date", highlightField: "December 31, 2025", flag_if: "Contract expired 270 days ago (Dec 31, 2025)" },
+      { severity: "High", field: "indemnity_cap", highlightField: "not be subject to a monetary cap", flag_if: "Indemnity clause has no monetary cap" },
+      { severity: "Medium", field: "termination_conv", highlightField: "ninety (90) days", flag_if: "Convenience termination notice period of 90 days is excessive (should be ≤60)" },
     ],
     textHighlights: [
       { text: "Robert Thompson", severity: "Critical", reason: "Signatory is Executive Director, not an authorized VP — contract cannot legally bind Southlake" },
@@ -120,13 +120,13 @@ export const contracts: ContractDoc[] = [
     summary: "Data sharing with University Health Research Institute — zero PHIPA compliance mention, no breach notification, no VP signatories.",
     filePath: "research/contracts/04_DSA_Provider_Data_Sharing_2024.md",
     riskScore: 5.0, riskLevel: "Critical", flagsCount: 7, flags: [
-      { severity: "Critical", field: "signatories", flag_if: "Only 0 VP signatures found — Director & CRO signed" },
-      { severity: "Critical", field: "phia_compliance", flag_if: "Missing PHIPA compliance declaration entirely" },
-      { severity: "High", field: "purpose_limitation", flag_if: "Data use purpose too broad — allows publication and sharing with collaborators" },
-      { severity: "High", field: "breach_timeline", flag_if: "Missing breach notification timeline" },
+      { severity: "Critical", field: "signatories", highlightField: "Susan Park", flag_if: "Only 0 VP signatures found — Director & CRO signed" },
+      { severity: "Critical", field: "phia_compliance", highlightField: "Chief Research Officer", flag_if: "Missing PHIPA compliance declaration entirely" },
+      { severity: "High", field: "purpose_limitation", highlightField: "Publication in peer-reviewed journals", flag_if: "Data use purpose too broad — allows publication and sharing with collaborators" },
+      { severity: "High", field: "breach_timeline", highlightField: "Sharing with research collaborators", flag_if: "Missing breach notification timeline" },
       { severity: "High", field: "security_standards", flag_if: "Missing security standards or below NCSG" },
-      { severity: "Medium", field: "audit_rights", flag_if: "Missing audit rights clause" },
-      { severity: "Medium", field: "data_minimization", flag_if: "Missing data minimization principle" },
+      { severity: "Medium", field: "audit_rights", highlightField: "Director, Quality and Privacy", flag_if: "Missing audit rights clause" },
+      { severity: "Medium", field: "data_minimization", highlightField: "Dr. Richard Foster", flag_if: "Missing data minimization principle" },
     ],
     textHighlights: [
       { text: "December 31, 2025", severity: "High", reason: "Contract expired 270+ days ago — operating without valid agreement" },
@@ -154,10 +154,10 @@ export const contracts: ContractDoc[] = [
     summary: "NDA expired ~956 days ago with no renewal or termination. Also missing PHIPA compliance and return/destruction clauses.",
     filePath: "research/contracts/05_NDA_Old_Vendor_2022.md",
     riskScore: 4.6, riskLevel: "Critical", flagsCount: 4, flags: [
-      { severity: "High", field: "expiry_date", flag_if: "Contract expired 956 days ago (February 14, 2024)" },
-      { severity: "Critical", field: "phia_compliance", flag_if: "Involves health information but no PHIPA declaration" },
-      { severity: "High", field: "breach_notification", flag_if: "Missing breach notification requirement" },
-      { severity: "Medium", field: "return_destruction", flag_if: "Missing return or destruction clause" },
+      { severity: "High", field: "expiry_date", highlightField: "February 14, 2022", flag_if: "Contract expired 956 days ago (February 14, 2024)" },
+      { severity: "Critical", field: "phia_compliance", highlightField: "Vice President, Operations", flag_if: "Involves health information but no PHIPA declaration" },
+      { severity: "High", field: "breach_notification", highlightField: "Vice President, Procurement", flag_if: "Missing breach notification requirement" },
+      { severity: "Medium", field: "return_destruction", highlightField: "period of two", flag_if: "Missing return or destruction clause" },
     ],
     textHighlights: [
       { text: "Susan Park", severity: "Critical", reason: "Signatory is Director, Quality and Privacy — not an authorized VP under Southlake policy" },
@@ -185,8 +185,8 @@ export const contracts: ContractDoc[] = [
     summary: "Well-drafted security services agreement. Only alert: renewal within 90-day threshold.",
     filePath: "research/contracts/06_Procurement_Security_Services_2024.md",
     riskScore: 4.2, riskLevel: "Critical", flagsCount: 2, flags: [
-      { severity: "High", field: "expiry_date", flag_if: "Contract expired 545 days ago (March 31, 2025)" },
-      { severity: "High", field: "indemnity_clause", flag_if: "Missing indemnity clause entirely" },
+      { severity: "High", field: "expiry_date", highlightField: "March 31, 2025", flag_if: "Contract expired 545 days ago (March 31, 2025)" },
+      { severity: "High", field: "indemnity_clause", highlightField: "INSURANCE", flag_if: "Missing indemnity clause entirely" },
     ],
     textHighlights: [
       { text: "February 14, 2022", severity: "High", reason: "Effective date — contract has been expired for ~956 days with no renewal documented" },
@@ -214,11 +214,11 @@ export const contracts: ContractDoc[] = [
     summary: "Two versions of the same MOU with conflicting financial terms ($100K vs $150K), different signatories, and different binding language.",
     filePath: "research/contracts/07_MOU_Partnership_Duplicate_Versions.md",
     riskScore: 4.6, riskLevel: "Critical", flagsCount: 5, flags: [
-      { severity: "High", field: "expiry_date", flag_if: "Contract expired 423 days ago (July 31, 2025 for v1 / Oct 14, 2026 for v2)" },
-      { severity: "High", field: "binding_language", flag_if: "Version 1: non-binding · Version 2: partially binding — contradictory legal positions" },
+      { severity: "High", field: "expiry_date", highlightField: "VERSION 1", flag_if: "Contract expired 423 days ago (July 31, 2025 for v1 / Oct 14, 2026 for v2)" },
+      { severity: "High", field: "binding_language", highlightField: "not legally binding", flag_if: "Version 1: non-binding · Version 2: partially binding — contradictory legal positions" },
       { severity: "Medium", field: "termination_clause", flag_if: "No termination clause in either version" },
-      { severity: "High", field: "duplicate_version", flag_if: "Multiple versions detected — possible duplicate or conflict" },
-      { severity: "High", field: "conflicting_finance", flag_if: "Conflicting amounts for same financial tag: $100,000 vs $150,000" },
+      { severity: "High", field: "duplicate_version", highlightField: "VERSION 2", flag_if: "Multiple versions detected — possible duplicate or conflict" },
+      { severity: "High", field: "conflicting_finance", highlightField: "$100,000/year", flag_if: "Conflicting amounts for same financial tag: $100,000 vs $150,000" },
     ],
     textHighlights: [
       { text: "March 31, 2025", severity: "High", reason: "Contract expired 545+ days ago — security services currently operating under lapsed agreement" },
@@ -242,12 +242,12 @@ export const contracts: ContractDoc[] = [
     summary: "2019 IT license agreement — 150 DPI scan with stains, rotated pages, and faded text. Critical fields are illegible.",
     filePath: "research/contracts/08_Legacy_IT_Contract_2019_Scan.md",
     riskScore: 5.0, riskLevel: "Critical", flagsCount: 6, flags: [
-      { severity: "Critical", field: "signatories", flag_if: "Only 0 VP signatures found — names obscured by scan quality" },
-      { severity: "High", field: "effective_date", flag_if: "Missing effective date — only approximate 'March 2019' readable" },
-      { severity: "Medium", field: "expiry_date", flag_if: "Missing expiry date — cannot determine from scan" },
-      { severity: "High", field: "indemnity_cap", flag_if: "Indemnity clause has no monetary cap (partially visible but unverifiable)" },
-      { severity: "Medium", field: "ocr_quality", flag_if: "Low-quality scan — key fields illegible (150 DPI, stains, rotation)" },
-      { severity: "Critical", field: "missing_fields", flag_if: "Cannot verify key clauses due to scan quality" },
+      { severity: "Critical", field: "signatories", highlightField: "VERSION 1", flag_if: "Only 0 VP signatures found — names obscured by scan quality" },
+      { severity: "High", field: "effective_date", highlightField: "August 1, 2023", flag_if: "Missing effective date — only approximate 'March 2019' readable" },
+      { severity: "Medium", field: "expiry_date", highlightField: "July 31, 2025", flag_if: "Missing expiry date — cannot determine from scan" },
+      { severity: "High", field: "indemnity_cap", highlightField: "$100,000/year", flag_if: "Indemnity clause has no monetary cap (partially visible but unverifiable)" },
+      { severity: "Medium", field: "ocr_quality", highlightField: "VERSION 2", flag_if: "Low-quality scan — key fields illegible (150 DPI, stains, rotation)" },
+      { severity: "Critical", field: "missing_fields", highlightField: "not legally binding", flag_if: "Cannot verify key clauses due to scan quality" },
     ],
     textHighlights: [
       { text: "VERSION 1", severity: "High", reason: "First version of this agreement — conflicting terms exist between v1 and v2" },
