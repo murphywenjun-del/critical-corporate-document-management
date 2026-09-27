@@ -159,12 +159,12 @@ export const contracts: ContractDoc[] = [
       { severity: "Medium", field: "return_destruction", flag_if: "Missing return or destruction clause" },
     ],
     textHighlights: [
-      { text: "Susan Park", severity: "Critical" },
-      { text: "Director, Quality and Privacy", severity: "Critical" },
-      { text: "Dr. Richard Foster", severity: "Critical" },
-      { text: "Chief Research Officer", severity: "Critical" },
-      { text: "Publication in peer-reviewed journals", severity: "High" },
-      { text: "Sharing with research collaborators", severity: "High" },
+      { text: "Susan Park", severity: "Critical", reason: "Signatory is Director, Quality and Privacy — not an authorized VP under Southlake policy" },
+      { text: "Director, Quality and Privacy", severity: "Critical", reason: "Director-level signatory lacks authority to bind Southlake contractually" },
+      { text: "Dr. Richard Foster", severity: "Critical", reason: "Signatory is Chief Research Officer — not an authorized VP under Southlake policy" },
+      { text: "Chief Research Officer", severity: "Critical", reason: "CRO is not on the authorized signatory list; zero VP signatures on record" },
+      { text: "Publication in peer-reviewed journals", severity: "High", reason: "Data use purpose is too broad — allows publication which may expose patient-adjacent data" },
+      { text: "Sharing with research collaborators", severity: "High", reason: "No restriction on data sharing with third-party collaborators beyond the contracting parties" },
     ],
     extractedFields: [
       { label: "Parties", value: "Southlake Health, HealthTech Ventures Ltd.", status: "✓" },

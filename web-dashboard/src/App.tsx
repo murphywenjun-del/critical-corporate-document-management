@@ -286,6 +286,7 @@ function ContractTextPanel({
               key={j}
               className={`px-0.5 rounded cursor-pointer hover:opacity-80 ${highlightBgColor[s.severity]}`}
               onClick={() => {
+                if (!s.severity) return
                 const hl = highlights.find(h => h.text === s.text)
                 if (hl) setSelectedHighlight({ text: s.text, severity: s.severity, reason: hl.reason, lineIdx: i })
               }}
