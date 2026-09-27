@@ -84,44 +84,6 @@ function buildHighlightRanges(
   return merged
 }
 
-
-function buildHighlightSpansSimple(text: string, highlights: Array<{ text: string; severity: Severity }>): Array<{ text: string; severity: Severity | null }> {
-  if (highlights.length === 0) return [{ text, severity: null }]
-  const sorted = [...highlights].sort((a, b) => b.text.length - a.text.length)
-  const ranges: Array<{ start: number; end: number; severity: Severity }> = []
-  for (const h of sorted) {
-    const needleLower = h.text.toLowerCase()
-    let idx = 0
-    while (idx <= text.length - h.text.length) {
-      const pos = text.toLowerCase().indexOf(needleLower, idx)
-      if (pos === -1) break
-      ranges.push({ start: pos, end: pos + h.text.length, severity: h.severity })
-      idx = pos + h.text.length
-    }
-  }
-  ranges.sort((a, b) => a.start - b.start)
-  const merged: Array<{ start: number; end: number; severity: Severity }> = []
-  const sevOrder = { Critical: 3, High: 2, Medium: 1 }
-  for (const r of ranges) {
-    if (merged.length > 0 && r.start < merged[merged.length - 1].end) {
-      const last = merged[merged.length - 1]
-      if (sevOrder[r.severity] > sevOrder[last.severity]) last.severity = r.severity
-      last.end = Math.max(last.end, r.end)
-    } else {
-      merged.push(r)
-    }
-  }
-  const result: Array<{ text: string; severity: Severity | null }> = []
-  let pos = 0
-  for (const r of merged) {
-    if (r.start > pos) result.push({ text: text.slice(pos, r.start), severity: null })
-    result.push({ text: text.slice(r.start, r.end), severity: r.severity })
-    pos = r.end
-  }
-  if (pos < text.length) result.push({ text: text.slice(pos), severity: null })
-  return result
-}
-
 // Build per-line spans from full-text ranges (handles cross-line matches)
 
 function ContractCard({
