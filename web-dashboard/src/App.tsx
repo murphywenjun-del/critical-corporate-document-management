@@ -315,7 +315,10 @@ export default function App() {
     if (selected) {
       fetch(selected.filePath)
         .then((r) => r.text())
-        .then((t) => setContractText(t))
+        .then((t) => {
+        const match = t.match(/```([\s\S]*?)```/)
+        setContractText(match ? match[1].trim() : t)
+      })
         .catch(() => setContractText('(Could not load document)'))
     } else {
       setContractText('')
