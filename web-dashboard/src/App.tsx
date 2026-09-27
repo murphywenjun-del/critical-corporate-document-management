@@ -147,18 +147,26 @@ function ContractCard({
   )
 }
 
-function FlagRow({ flag }: { flag: (typeof contracts)[0]['flags'][0] }) {
+function FlagRow({ flag, onClick }: { flag: (typeof contracts)[0]['flags'][0]; onClick?: () => void }) {
   return (
-    <div className={`flex items-start gap-3 p-3 rounded-lg border ${severityColor[flag.severity]}`}>
+    <button
+      onClick={onClick}
+      className={`w-full text-left flex items-start gap-3 p-3 rounded-lg border transition-colors hover:shadow-sm ${
+        onClick ? 'cursor-pointer' : ''
+      } ${severityColor[flag.severity]}`}
+    >
       <span className={`w-2 h-2 rounded-full ${severityDot[flag.severity]} mt-1.5 shrink-0`} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
           <span className="text-xs font-bold uppercase tracking-wide opacity-70">{flag.severity}</span>
           <span className="text-xs font-mono opacity-60">[{flag.field}]</span>
+          {flag.highlightField && (
+            <span className="text-[10px] text-slate-400 ml-auto shrink-0">Click to locate</span>
+          )}
         </div>
         <p className="text-sm">{flag.flag_if}</p>
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -230,9 +238,11 @@ function PipelineDiagram() {
 function ContractTextPanel({
   text,
   highlights,
+  selectedFlagHighlight,
 }: {
   text: string
   highlights: Array<{ text: string; severity: Severity; reason: string }>
+  selectedFlagHighlight?: string
 }) {
   const [selectedHighlight, setSelectedHighlight] = useState<{ text: string; severity: Severity; reason: string; lineIdx: number } | null>(null)
   const ranges = buildHighlightRanges(text, highlights)
@@ -245,6 +255,17 @@ function ContractTextPanel({
     lineOffsets.push(off)
     off += l.length + 1
   }
+
+  // Auto-select and scroll to highlight when a flag is clicked
+  useEffect(() => {
+    if (!selectedFlagHighlight) return
+    const hl = highlights.find(h => h.text === selectedFlagHighlight)
+    if (!hl) return
+    const idx = text.toLowerCase().indexOf(hl.text.toLowerCase())
+    if (idx === -1) return
+    const lineNum = text.slice(0, idx).split('\n').length
+    setSelectedHighlight({ text: hl.text, severity: hl.severity, reason: hl.reason, lineIdx: lineNum - 1 })
+  }, [selectedFlagHighlight])
   
   return (
     <div className="text-xs text-slate-700 font-mono leading-relaxed max-h-96 overflow-y-auto bg-slate-50 rounded-lg p-4 border border-slate-200 whitespace-pre-wrap">
@@ -328,6 +349,7 @@ export default function App() {
   const [filterType, setFilterType] = useState<string>('All')
   const [filterRisk, setFilterRisk] = useState<string>('All')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [selectedFlagHighlight, setSelectedFlagHighlight] = useState<string | null>(null)
 
   const types = ['All', ...Array.from(new Set(contracts.map((c) => c.type)))]
   const risks = ['All', 'Low', 'Critical']
@@ -560,7 +582,13 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {selected.flags.map((f) => <FlagRow key={f.field} flag={f} />)}
+                      {selected.flags.map((f) => (
+                      <FlagRow
+                        key={f.field}
+                        flag={f}
+                        onClick={f.highlightField ? () => setSelectedFlagHighlight(selectedFlagHighlight === f.highlightField ? null : f.highlightField!) : undefined}
+                      />
+                    ))}
                     </div>
                   )}
                 </div>
@@ -606,7 +634,7 @@ export default function App() {
                     </span>
                   )}
                 </h3>
-                <ContractTextPanel text={contractText} highlights={selected.textHighlights} />
+                <ContractTextPanel text={contractText} highlights={selected.textHighlights} selectedFlagHighlight={selectedFlagHighlight || undefined} />
               </div>
             </div>
           )}

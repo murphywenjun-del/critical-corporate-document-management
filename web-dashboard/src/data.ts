@@ -3,6 +3,7 @@
 interface Flag {
   severity: 'Critical' | 'High' | 'Medium'
   field: string
+  highlightField?: string
   flag_if: string
 }
 
