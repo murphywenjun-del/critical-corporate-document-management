@@ -271,7 +271,7 @@ function ContractTextPanel({
       clearInterval(poll)
       // Scroll into view after React renders
       setTimeout(() => {
-        const marked = document.querySelector('mark[title="Click to show/hide reason"]:not([style*="display: none"])')
+        const marked = document.querySelector("mark[data-flag=" ' + selectedFlagHighlight + ' ]")
         if (marked) marked.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }, 100)
     }, 50)
@@ -322,7 +322,8 @@ function ContractTextPanel({
           return (
             <span key={j}>
               <mark
-                className={`px-0.5 rounded cursor-pointer hover:opacity-80 ${highlightBgColor[sev!]} ${isSelected ? 'ring-1 ring-slate-400' : ''}`}
+                data-flag={hl?.text ?? ''}
+                className={`px-0.5 rounded cursor-pointer hover:opacity-80 ${highlightBgColor[sev!]} ${isSelected ? 'ring-1 ring-slate-400' : ''}}
                 onClick={() => {
                   if (!sev || !hl) return
                   setSelectedHighlight(prev => {
