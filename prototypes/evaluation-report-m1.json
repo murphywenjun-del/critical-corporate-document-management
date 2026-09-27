@@ -1,0 +1,424 @@
+{
+  "passed": 8,
+  "total": 8,
+  "results": [
+    {
+      "contract_name": "Contract_1_NDA",
+      "doc_type": "NDA",
+      "method": "agnes+rules",
+      "agnes_confidence": 0.95,
+      "agnes_ocr_quality": "Good",
+      "flags_count": 0,
+      "expected_flags": 0,
+      "risk_level": "Low",
+      "expected_risk": "Low",
+      "risk_score": 1.0,
+      "expected_score": 1.0,
+      "passed": true,
+      "flags": [],
+      "extracted_fields": {
+        "parties": [
+          "SOUTHLAKE HEALTH",
+          "COMMUNITY CARE PARTNERS INC."
+        ],
+        "effective": "2024-03-15 00:00:00",
+        "expiry": "2029-03-15 00:00:00",
+        "vp_count": 2,
+        "ocr": "Good"
+      }
+    },
+    {
+      "contract_name": "Contract_2_MOU",
+      "doc_type": "MOU",
+      "method": "agnes+rules",
+      "agnes_confidence": 0.88,
+      "agnes_ocr_quality": "Good",
+      "flags_count": 3,
+      "expected_flags": 3,
+      "risk_level": "Critical",
+      "expected_risk": "Critical",
+      "risk_score": 4.7,
+      "expected_score": 4.7,
+      "passed": true,
+      "flags": [
+        {
+          "field": "signatories",
+          "check": "至少两个VP签字",
+          "flag_if": "只有0个VP签字",
+          "risk_category": "Financial",
+          "severity": "Critical"
+        },
+        {
+          "field": "expiry_date",
+          "check": "合同未过期",
+          "flag_if": "合同已过期119天",
+          "risk_category": "Operational",
+          "severity": "High"
+        },
+        {
+          "field": "binding_language",
+          "check": "明确binding状态",
+          "flag_if": "同时存在binding和non-binding表述",
+          "risk_category": "Financial",
+          "severity": "High"
+        }
+      ],
+      "extracted_fields": {
+        "parties": [
+          "SOUTHLAKE HEALTH",
+          "YORK REGION COMMUNITY HEALTH NETWORK"
+        ],
+        "effective": "2024-06-01 00:00:00",
+        "expiry": "2026-05-31 00:00:00",
+        "vp_count": 0,
+        "ocr": "Good"
+      }
+    },
+    {
+      "contract_name": "Contract_3_Procurement",
+      "doc_type": "Procurement",
+      "method": "agnes+rules",
+      "agnes_confidence": 0.92,
+      "agnes_ocr_quality": "Good",
+      "flags_count": 3,
+      "expected_flags": 3,
+      "risk_level": "Critical",
+      "expected_risk": "Critical",
+      "risk_score": 4.1,
+      "expected_score": 4.1,
+      "passed": true,
+      "flags": [
+        {
+          "field": "expiry_date",
+          "check": "合同未过期",
+          "flag_if": "合同已过期270天",
+          "risk_category": "Operational",
+          "severity": "High"
+        },
+        {
+          "field": "indemnity_cap",
+          "check": "indemnity有金额上限",
+          "flag_if": "indemnity条款无金额上限",
+          "risk_category": "Financial",
+          "severity": "High"
+        },
+        {
+          "field": "termination_conv",
+          "check": "便利终止通知期合理",
+          "flag_if": "便利终止通知期90天过长",
+          "risk_category": "Operational",
+          "severity": "Medium"
+        }
+      ],
+      "extracted_fields": {
+        "parties": [
+          "VENDOR SERVICES AGREEMENT",
+          "SOUTHLAKE HEALTH",
+          "MEDSOFT SOLUTIONS INC.",
+          "1. SERVICES"
+        ],
+        "effective": "2023-01-01 00:00:00",
+        "expiry": "2025-12-31 00:00:00",
+        "vp_count": 2,
+        "ocr": "Good"
+      }
+    },
+    {
+      "contract_name": "Contract_4_DataSharing",
+      "doc_type": "Data_Sharing",
+      "method": "agnes+rules",
+      "agnes_confidence": 0.85,
+      "agnes_ocr_quality": "Good",
+      "flags_count": 7,
+      "expected_flags": 7,
+      "risk_level": "Critical",
+      "expected_risk": "Critical",
+      "risk_score": 5.0,
+      "expected_score": 5.0,
+      "passed": true,
+      "flags": [
+        {
+          "field": "signatories",
+          "check": "至少两个VP签字",
+          "flag_if": "只有0个VP签字",
+          "risk_category": "Financial",
+          "severity": "Critical"
+        },
+        {
+          "field": "phia_compliance",
+          "check": "明确PHIPA合规",
+          "flag_if": "缺少PHIPA compliance声明",
+          "risk_category": "Reputational",
+          "severity": "Critical"
+        },
+        {
+          "field": "purpose_limitation",
+          "check": "有目的限制条款",
+          "flag_if": "数据使用目的过于宽泛或无限制",
+          "risk_category": "Reputational",
+          "severity": "High"
+        },
+        {
+          "field": "breach_timeline",
+          "check": "有泄露通知时限",
+          "flag_if": "缺少泄露通知时限",
+          "risk_category": "Reputational",
+          "severity": "High"
+        },
+        {
+          "field": "security_standards",
+          "check": "有安全标准",
+          "flag_if": "缺少安全标准或低于NCSG",
+          "risk_category": "Reputational",
+          "severity": "High"
+        },
+        {
+          "field": "audit_rights",
+          "check": "有审计权条款",
+          "flag_if": "缺少审计权条款",
+          "risk_category": "Operational",
+          "severity": "Medium"
+        },
+        {
+          "field": "data_minimization",
+          "check": "有数据最小化原则",
+          "flag_if": "缺少数据最小化声明",
+          "risk_category": "Reputational",
+          "severity": "Medium"
+        }
+      ],
+      "extracted_fields": {
+        "parties": [
+          "SOUTHLAKE HEALTH",
+          "UNIVERSITY HEALTH RESEARCH INSTITUTE"
+        ],
+        "effective": "2024-09-01 00:00:00",
+        "expiry": "2027-09-01 00:00:00",
+        "vp_count": 0,
+        "ocr": "Good"
+      }
+    },
+    {
+      "contract_name": "Contract_5_NDA",
+      "doc_type": "NDA",
+      "method": "agnes+rules",
+      "agnes_confidence": 0.9,
+      "agnes_ocr_quality": "Good",
+      "flags_count": 4,
+      "expected_flags": 4,
+      "risk_level": "Critical",
+      "expected_risk": "Critical",
+      "risk_score": 4.6,
+      "expected_score": 4.6,
+      "passed": true,
+      "flags": [
+        {
+          "field": "expiry_date",
+          "check": "合同未过期",
+          "flag_if": "合同已过期956天",
+          "risk_category": "Operational",
+          "severity": "High"
+        },
+        {
+          "field": "phia_compliance",
+          "check": "包含PHIPA合规条款",
+          "flag_if": "涉及健康信息但无PHIPA声明",
+          "risk_category": "Reputational",
+          "severity": "Critical"
+        },
+        {
+          "field": "breach_notification",
+          "check": "有数据泄露通知条款",
+          "flag_if": "缺少泄露通知要求",
+          "risk_category": "Reputational",
+          "severity": "High"
+        },
+        {
+          "field": "return_destruction",
+          "check": "有信息归还/销毁条款",
+          "flag_if": "缺少归还或销毁条款",
+          "risk_category": "Operational",
+          "severity": "Medium"
+        }
+      ],
+      "extracted_fields": {
+        "parties": [
+          "SOUTHLAKE HEALTH",
+          "HEALTHTECH VENTURES LTD."
+        ],
+        "effective": "2022-02-14 00:00:00",
+        "expiry": "2024-02-14 00:00:00",
+        "vp_count": 2,
+        "ocr": "Good"
+      }
+    },
+    {
+      "contract_name": "Contract_6_Procurement",
+      "doc_type": "Procurement",
+      "method": "agnes+rules",
+      "agnes_confidence": 0.93,
+      "agnes_ocr_quality": "Good",
+      "flags_count": 2,
+      "expected_flags": 2,
+      "risk_level": "Critical",
+      "expected_risk": "Critical",
+      "risk_score": 4.2,
+      "expected_score": 4.2,
+      "passed": true,
+      "flags": [
+        {
+          "field": "expiry_date",
+          "check": "合同未过期",
+          "flag_if": "合同已过期545天",
+          "risk_category": "Operational",
+          "severity": "High"
+        },
+        {
+          "field": "indemnity_clause",
+          "check": "有赔偿条款",
+          "flag_if": "缺少indemnity条款",
+          "risk_category": "Financial",
+          "severity": "High"
+        }
+      ],
+      "extracted_fields": {
+        "parties": [
+          "SECURITY SERVICES AGREEMENT",
+          "SOUTHLAKE HEALTH",
+          "SECUREPRO SERVICES INC.",
+          "1. SERVICES"
+        ],
+        "effective": "2024-04-01 00:00:00",
+        "expiry": "2025-03-31 00:00:00",
+        "vp_count": 2,
+        "ocr": "Good"
+      }
+    },
+    {
+      "contract_name": "Contract_7_MOU",
+      "doc_type": "MOU",
+      "method": "agnes+rules",
+      "agnes_confidence": 0.8,
+      "agnes_ocr_quality": "Good",
+      "flags_count": 5,
+      "expected_flags": 5,
+      "risk_level": "Critical",
+      "expected_risk": "Critical",
+      "risk_score": 4.6,
+      "expected_score": 4.6,
+      "passed": true,
+      "flags": [
+        {
+          "field": "expiry_date",
+          "check": "合同未过期",
+          "flag_if": "合同已过期423天",
+          "risk_category": "Operational",
+          "severity": "High"
+        },
+        {
+          "field": "binding_language",
+          "check": "明确binding状态",
+          "flag_if": "同时存在binding和non-binding表述",
+          "risk_category": "Financial",
+          "severity": "High"
+        },
+        {
+          "field": "termination_clause",
+          "check": "有终止条款",
+          "flag_if": "缺少终止条款",
+          "risk_category": "Operational",
+          "severity": "Medium"
+        },
+        {
+          "field": "duplicate_version",
+          "check": "无重复/冲突合同",
+          "flag_if": "检测到多个版本标记，可能存在重复或冲突",
+          "risk_category": "Financial",
+          "severity": "High"
+        },
+        {
+          "field": "conflicting_finance",
+          "check": "财务条款一致",
+          "flag_if": "同一财务标签检测到不同金额：150,000, 100,000",
+          "risk_category": "Financial",
+          "severity": "High"
+        }
+      ],
+      "extracted_fields": {
+        "parties": [
+          "SOUTHLAKE HEALTH",
+          "REGIONAL HEALTH ALLIANCE"
+        ],
+        "effective": "2023-08-01 00:00:00",
+        "expiry": "2025-07-31 00:00:00",
+        "vp_count": 5,
+        "ocr": "Good"
+      }
+    },
+    {
+      "contract_name": "Contract_8_Procurement",
+      "doc_type": "Procurement",
+      "method": "agnes+rules",
+      "agnes_confidence": 0.45,
+      "agnes_ocr_quality": "Poor",
+      "flags_count": 6,
+      "expected_flags": 6,
+      "risk_level": "Critical",
+      "expected_risk": "Critical",
+      "risk_score": 5.0,
+      "expected_score": 5.0,
+      "passed": true,
+      "flags": [
+        {
+          "field": "signatories",
+          "check": "至少两个VP签字",
+          "flag_if": "只有0个VP签字",
+          "risk_category": "Financial",
+          "severity": "Critical"
+        },
+        {
+          "field": "effective_date",
+          "check": "合同有生效日期",
+          "flag_if": "缺少生效日期",
+          "risk_category": "Operational",
+          "severity": "High"
+        },
+        {
+          "field": "expiry_date",
+          "check": "合同有到期日期",
+          "flag_if": "缺少到期日期",
+          "risk_category": "Operational",
+          "severity": "Medium"
+        },
+        {
+          "field": "indemnity_cap",
+          "check": "indemnity有金额上限",
+          "flag_if": "indemnity条款无金额上限",
+          "risk_category": "Financial",
+          "severity": "High"
+        },
+        {
+          "field": "ocr_quality",
+          "check": "文档质量可接受",
+          "flag_if": "低质量扫描—关键字段无法辨认",
+          "risk_category": "Operational",
+          "severity": "Medium"
+        },
+        {
+          "field": "missing_fields",
+          "check": "关键字段可提取",
+          "flag_if": "因扫描质量问题无法验证关键条款",
+          "risk_category": "Financial",
+          "severity": "Critical"
+        }
+      ],
+      "extracted_fields": {
+        "parties": [],
+        "effective": "None",
+        "expiry": "None",
+        "vp_count": 0,
+        "ocr": "Poor"
+      }
+    }
+  ]
+}

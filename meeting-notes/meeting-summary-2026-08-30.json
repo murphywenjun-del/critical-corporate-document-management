@@ -1,0 +1,126 @@
+{
+  "date": "2026-08-30",
+  "project_name": "Critical Corporate Document Management",
+  "client": "Southlake Health",
+  "stakeholders": {
+    "core_smes": [
+      {
+        "name": "Sam",
+        "title": "CIO",
+        "role": "Core SME"
+      },
+      {
+        "name": "Sonia",
+        "title": "Chief Privacy Officer",
+        "role": "Core SME"
+      },
+      {
+        "name": "Tonya",
+        "title": "Legal Counsel",
+        "role": "On vacation this week, will join later"
+      }
+    ],
+    "joining_later": [
+      {
+        "name": "Fico Wilson",
+        "title": "Enterprise Architecture Solutions Manager",
+        "note": "Will join after vacation"
+      }
+    ],
+    "primary_contact": {
+      "name": "Matt",
+      "title": "Executive Director of Population Health Management",
+      "role": "Main liaison for logistics"
+    },
+    "onboarding": {
+      "name": "Jenny Popo",
+      "role": "Onboarding Coordinator"
+    }
+  },
+  "timeline": {
+    "sow_deadline": "September 5",
+    "project_end": "end of November",
+    "sam_heavily_busy": "late September to early October",
+    "meeting_frequency": "weekly or biweekly (to be confirmed after SOW)"
+  },
+  "core_objectives": [
+    "Document Repository Framework: Develop a standardized taxonomy to map scattered legal contract locations, types, and storage formats",
+    "Compliance Assessment Criteria: Define gold standard rules for signing authority, document retention schedules, and non-conformance tracking",
+    "AI Risk Assessment Workflow: Propose feasible AI-powered workflows to automatically identify contract gaps against internal policy"
+  ],
+  "constraints": {
+    "confidentiality": "HIGHLY CONFIDENTIAL - no external sharing, FOI risk",
+    "legal_privilege": "Must coordinate with Tonya post-vacation to confirm legal privilege protections",
+    "source_documents": "Original source documents stay in existing locations; only copies may be used",
+    "ai_model_hosting": "NO US-HOSTED CLOUD AI MODELS PERMITTED",
+    "ai_policy": "Full logic explainability + active bias mitigation required",
+    "ecosystem_preference": "Microsoft ecosystem (keep data within organization's secure tenant)"
+  },
+  "document_situation": {
+    "current_state": "Scattered across network drives, OneDrive (coming soon), outsourced (MMC)",
+    "tax_types": [
+      "Board level contracts",
+      "Department level contracts",
+      "NDAs",
+      "MOUs",
+      "Procurement contracts",
+      "Policy documents"
+    ],
+    "digital_coverage": "Mostly electronic but NOT 100% digital; many agreements only as physical hard copies on staff desks",
+    "quality_issues": "Legacy IT contracts are low-quality scans",
+    "total_estimate": "Similar to past 6500-document policy sorting work"
+  },
+  "risk_focus": {
+    "primary_concern": "Contract signing authority compliance",
+    "specific_issue": "Past cases where unauthorized directors signed contracts that cannot legally bind the corporation",
+    "policy": "Any document legally binding the corporation requires two authorized VPs to sign off",
+    "metric": "Count non-conformance cases - how many contracts lack the required two VP signatures"
+  },
+  "phased_approach": {
+    "phase_1": "Document inventory and taxonomy (environmental scan)",
+    "phase_2": "Define compliance criteria and repository framework",
+    "phase_3": "AI risk assessment using de-identified sample templates",
+    "phase_4": "Final recommendations by late November"
+  },
+  "key_quotes": [
+    {
+      "quote": "Getting it right is more important to us than getting it done quickly.",
+      "context": "Core priority - quality over speed"
+    },
+    {
+      "quote": "Anything that touches the US will not be tolerated. As of right now, that's not getting any friendlier.",
+      "context": "Hard constraint on AI model hosting"
+    },
+    {
+      "quote": "Until the team gets into this, we won't have a solid sense of it and expect some twists and turns along the way because. Welcome to our world.",
+      "context": "Setting expectations for exploratory nature"
+    }
+  ],
+  "deliverables": {
+    "phase_1_output": "Document taxonomy and repository criteria",
+    "phase_2_output": "Compliance assessment framework",
+    "phase_3_output": "AI risk assessment proposal (using de-identified templates)",
+    "final_output": "Full recommendations with cost estimates, FTE requirements, and maintainability analysis",
+    "quality_requirement": "Full replicability - all tools, prompts, workflows fully documented"
+  },
+  "next_steps": {
+    "southlake_will": [
+      "Share pre-developed project summary document",
+      "Share internal AI usage policy document",
+      "Provide standardized de-identified contract and agreement templates for testing"
+    ],
+    "student_team_will": [
+      "Submit first draft of SOW by September 5",
+      "Define document taxonomy and repository criteria",
+      "Propose AI-based risk assessment approach"
+    ]
+  },
+  "important_corrections": [
+    "NOT just general corporate docs - specifically LEGAL CONTRACTS are the core focus",
+    "NO access to real confidential documents in initial phase - use de-identified samples only",
+    "NO US cloud AI - must use on-premise or Canadian-hosted models",
+    "PREFERRED: Microsoft ecosystem tools",
+    "TIMELINE: Flexible - quality over speed, not rushed to November deadline",
+    "COST: Must include full build cost, FTE staffing, and operational overhead in deliverables"
+  ]
+}

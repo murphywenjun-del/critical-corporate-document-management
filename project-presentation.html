@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Project Presentation — Critical Corporate Document Management</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #0f172a; color: #e2e8f0; }
+  .slide { display: none; width: 100vw; height: 100vh; padding: 50px 70px; flex-direction: column; justify-content: center; }
+  .slide.active { display: flex; }
+  .slide h1 { font-size: 2.2em; margin-bottom: 16px; color: #f1f5f9; }
+  .slide h2 { font-size: 1.7em; margin-bottom: 14px; color: #93c5fd; }
+  .slide h3 { font-size: 1.1em; margin-bottom: 8px; color: #bfdbfe; }
+  .slide p, .slide li { font-size: 1.05em; line-height: 1.65; color: #cbd5e1; }
+  .slide ul { padding-left: 22px; }
+  .slide li { margin-bottom: 6px; }
+  .accent { color: #60a5fa; font-weight: bold; }
+  .highlight-box { background: rgba(59,130,246,0.12); border-left: 4px solid #60a5fa; padding: 14px 20px; margin: 14px 0; border-radius: 0 8px 8px 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 16px; }
+  .col { background: rgba(255,255,255,0.05); padding: 20px; border-radius: 10px; }
+  .nav { position: fixed; bottom: 24px; right: 36px; display: flex; gap: 10px; z-index: 100; }
+  .nav button { background: rgba(96,165,250,0.25); border: 1px solid rgba(96,165,250,0.45); color: #fff; padding: 7px 18px; border-radius: 6px; cursor: pointer; font-size: 0.85em; }
+  .nav button:hover { background: rgba(96,165,250,0.45); }
+  .slide-num { position: fixed; bottom: 24px; left: 36px; color: #64748b; font-size: 0.85em; }
+  .tag { display: inline-block; background: rgba(96,165,250,0.18); color: #93c5fd; padding: 3px 10px; border-radius: 20px; font-size: 0.75em; margin-right: 6px; margin-bottom: 6px; }
+  .constraint { background: rgba(239,68,68,0.08); border-left: 4px solid #ef4444; padding: 10px 18px; margin: 6px 0; border-radius: 0 8px 8px 0; font-size: 0.9em; }
+  .deliverable-item { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 14px 18px; margin-bottom: 10px; display: flex; gap: 16px; align-items: flex-start; }
+  .deliverable-item .num { min-width: 36px; height: 36px; background: rgba(96,165,250,0.25); border: 1px solid rgba(96,165,250,0.5); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.95em; font-weight: bold; color: #93c5fd; flex-shrink: 0; }
+  .deliverable-item.core .num { background: rgba(96,165,250,0.35); }
+  .deliverable-item.stretch .num { background: rgba(168,85,247,0.25); border-color: rgba(168,85,247,0.5); color: #c4b5fd; }
+  .deliverable-item .info h4 { font-size: 1em; color: #f1f5f9; margin-bottom: 3px; }
+  .deliverable-item .info p { font-size: 0.85em; color: #94a3b8; line-height: 1.4; }
+  .type-badge { font-size: 0.7em; padding: 2px 8px; border-radius: 10px; margin-left: 8px; vertical-align: middle; }
+  .type-badge.core { background: rgba(96,165,250,0.2); color: #93c5fd; }
+  .type-badge.stretch { background: rgba(168,85,247,0.2); color: #c4b5fd; }
+  .progress-bar-wrap { margin: 12px 0; }
+  .progress-bar { height: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; overflow: hidden; }
+  .progress-bar .fill { height: 100%; border-radius: 5px; transition: width 0.3s; }
+  .phase-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-top: 16px; }
+  .phase-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 16px; text-align: center; }
+  .phase-card.done { border-color: #22c55e; background: rgba(34,197,94,0.08); }
+  .phase-card.active { border-color: #f59e0b; background: rgba(245,158,11,0.08); }
+  .phase-card.upcoming { border-color: rgba(255,255,255,0.15); }
+  .phase-card h4 { font-size: 0.95em; margin-bottom: 6px; }
+  .phase-card.done h4 { color: #22c55e; }
+  .phase-card.active h4 { color: #f59e0b; }
+  .phase-card.upcoming h4 { color: #94a3b8; }
+  .phase-card p { font-size: 0.8em; color: #94a3b8; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9em; }
+  th { text-align: left; padding: 10px 12px; background: rgba(96,165,250,0.15); color: #93c5fd; font-size: 0.85em; }
+  td { padding: 9px 12px; border-bottom: 1px solid rgba(255,255,255,0.07); color: #cbd5e1; }
+  tr:hover td { background: rgba(255,255,255,0.03); }
+  .status-green { color: #22c55e; }
+  .status-yellow { color: #f59e0b; }
+  .status-red { color: #ef4444; }
+  .script-note { background: rgba(251,191,36,0.1); border-left: 4px solid #fbbf24; padding: 10px 18px; margin: 12px 0; border-radius: 0 8px 8px 0; font-size: 0.85em; color: #fde68a; }
+  .team-row { display: flex; gap: 14px; margin-top: 18px; justify-content: center; }
+  .team-member { background: rgba(96,165,250,0.12); padding: 12px 18px; border-radius: 8px; text-align: center; }
+  .team-member .name { font-size: 0.95em; font-weight: bold; color: #93c5fd; }
+  .team-member .role { font-size: 0.75em; color: #94a3b8; margin-top: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Slide 1: Title -->
+<div class="slide active" id="slide-1">
+  <div style="text-align:center; margin-top:20px;">
+    <div style="font-size:0.85em; color:#64748b; letter-spacing:3px; text-transform:uppercase; margin-bottom:16px;">Ivey MSc Advanced Field Project</div>
+    <h1 style="font-size:2.6em; line-height:1.25;">Critical Corporate<br>Document Management</h1>
+    <p style="color:#94a3b8; font-size:1.1em; margin-top:16px;">Southlake Health &nbsp;·&nbsp; Reducing Legal &amp; Contractual Risk through AI-Assisted Compliance</p>
+    <div class="team-row">
+      <div class="team-member"><div class="name">Celia Huang</div><div class="role">Project Lead</div></div>
+      <div class="team-member"><div class="name">Nicole Qian</div><div class="role">Research &amp; Compliance</div></div>
+      <div class="team-member"><div class="name">Susu Li</div><div class="role">AI &amp; Technology</div></div>
+      <div class="team-member"><div class="name">Yehan (Evie) Xiong</div><div class="role">Risk Assessment</div></div>
+      <div class="team-member"><div class="name">Wenjun Teng</div><div class="role">Implementation &amp; Delivery</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Slide 2: The Problem -->
+<div class="slide" id="slide-2">
+  <h2>The Problem: Fragmented Documents, Real Risk</h2>
+  <div class="two-col">
+    <div class="col">
+      <h3>Where Are the Documents?</h3>
+      <ul>
+        <li>Scattered across network drives, OneDrive, and third-party vendors</li>
+        <li>Many agreements exist only as paper copies on staff desks</li>
+        <li>Legacy IT contracts are low-quality scans</li>
+        <li>No unified taxonomy or tracking system</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>What's at Stake?</h3>
+      <div class="highlight-box">
+        <p><strong>Contracts signed by unauthorized directors</strong> — rendering them legally unenforceable</p>
+      </div>
+      <ul>
+        <li>Policy requires <span class="accent">two VP signatures</span> for binding documents</li>
+        <li>No automated way to verify signing authority</li>
+        <li>No systematic tracking of compliance gaps</li>
+      </ul>
+    </div>
+  </div>
+  <div class="script-note">🎙️ "We heard from the CIO that past contracts were signed by people without authority — meaning the organization couldn't legally enforce them. That's the core risk we're solving for."</div>
+</div>
+
+<!-- Slide 3: Approach -->
+<div class="slide" id="slide-3">
+  <h2>Our Three-Phase Approach</h2>
+  <div class="phase-grid">
+    <div class="phase-card done">
+      <h4>Phase 1: Map &amp; Classify</h4>
+      <p>Weeks 1–4<br>Document taxonomy, inventory &amp; classification framework</p>
+    </div>
+    <div class="phase-card active">
+      <h4>Phase 2: Assess &amp; Evaluate</h4>
+      <p>Weeks 5–8<br>Compliance criteria, risk classification (4 categories)</p>
+    </div>
+    <div class="phase-card upcoming">
+      <h4>Phase 3: Build &amp; Recommend</h4>
+      <p>Weeks 9–12<br>AI prototype, cost analysis &amp; final recommendations</p>
+    </div>
+  </div>
+  <div class="highlight-box" style="margin-top:20px;">
+    <p>12 weeks total &nbsp;·&nbsp; 400 team hours &nbsp;·&nbsp; Bi-weekly status reports &nbsp;·&nbsp; Final synchronous presentation</p>
+  </div>
+  <div class="script-note">🎙️ "Three phases over 12 weeks: first we map what you have, then we define what's compliant, and finally we prototype how AI can help you catch risks automatically."</div>
+</div>
+
+<!-- Slide 4: 8 Deliverables Overview -->
+<div class="slide" id="slide-4">
+  <h2>8 Deliverables</h2>
+  <p style="color:#94a3b8; font-size:0.9em; margin-bottom:12px;">4 Core Deliverables + 2 Stretch Deliverables + 2 Administrative Requirements</p>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px 30px; margin-top:10px;">
+    <div class="deliverable-item core">
+      <div class="num">1</div>
+      <div class="info"><h4>Document Taxonomy &amp; Framework <span class="type-badge core">Core</span></h4><p>Standardized classification for all contracts, agreements &amp; policies</p></div>
+    </div>
+    <div class="deliverable-item core">
+      <div class="num">2</div>
+      <div class="info"><h4>Risk Exposure Assessment <span class="type-badge core">Core</span></h4><p>Framework for identifying missing, expired, non-compliant documents</p></div>
+    </div>
+    <div class="deliverable-item core">
+      <div class="num">3</div>
+      <div class="info"><h4>Risk Category Exploration <span class="type-badge core">Core</span></h4><p>Operational, financial, reputational &amp; continuity/succession risks</p></div>
+    </div>
+    <div class="deliverable-item core">
+      <div class="num">4</div>
+      <div class="info"><h4>Risk Reduction Recommendations <span class="type-badge core">Core</span></h4><p>Actionable recommendations with cost estimates &amp; FTE analysis</p></div>
+    </div>
+    <div class="deliverable-item stretch">
+      <div class="num">5</div>
+      <div class="info"><h4>AI Review Prototype <span class="type-badge stretch">Stretch</span></h4><p>"Tickler" system flagging expiry dates, missing fields, obligation deadlines</p></div>
+    </div>
+    <div class="deliverable-item stretch">
+      <div class="num">6</div>
+      <div class="info"><h4>Governance Policy Recommendation <span class="type-badge stretch">Stretch</span></h4><p>Intake process &amp; governance policy to prevent future fragmentation</p></div>
+    </div>
+    <div class="deliverable-item">
+      <div class="num">7</div>
+      <div class="info"><h4>Bi-Weekly Status Reports <span class="type-badge" style="background:rgba(148,163,184,0.2);color:#94a3b8;">Admin</span></h4><p>Progress, risks/issues, earned value graphics, next steps</p></div>
+    </div>
+    <div class="deliverable-item">
+      <div class="num">8</div>
+      <div class="info"><h4>Final Synchronous Presentation <span class="type-badge" style="background:rgba(148,163,184,0.2);color:#94a3b8;">Admin</span></h4><p>Formal presentation to all stakeholders via MS Teams or in-person</p></div>
+    </div>
+  </div>
+  <div class="script-note">🎙️ "Eight deliverables total — four core, two stretch, and two administrative. Let me walk you through each one in detail."</div>
+</div>
+
+<!-- Slide 5: Deliverables 1-4 Detail -->
+<div class="slide" id="slide-5">
+  <h2>Core Deliverables 1–4</h2>
+  <div class="two-col">
+    <div>
+      <div class="deliverable-item core">
+        <div class="num">1</div>
+        <div class="info"><h4>Document Taxonomy &amp; Framework</h4><p>Standardized metadata schema covering NDAs, MOUs, procurement contracts, policies, board-level agreements. Designed for SharePoint/OneDrive integration.</p></div>
+      </div>
+      <div class="deliverable-item core">
+        <div class="num">2</div>
+        <div class="info"><h4>Risk Exposure Assessment</h4><p>Framework to identify documents that are: missing, expired, not executed per policy, held by individuals instead of the org, or with inadequate indemnities.</p></div>
+      </div>
+    </div>
+    <div>
+      <div class="deliverable-item core">
+        <div class="num">3</div>
+        <div class="info"><h4>Risk Category Exploration</h4><p>Classify risk across four dimensions with SMEs: Operational, Financial, Reputational, and Continuity/Succession — each with specific indicators.</p></div>
+      </div>
+      <div class="deliverable-item core">
+        <div class="num">4</div>
+        <div class="info"><h4>Risk Reduction Recommendations</h4><p>Full cost analysis: system build cost, FTE staffing requirements, operational overhead, and a prioritized roadmap for implementation.</p></div>
+      </div>
+    </div>
+  </div>
+  <div class="script-note">🎙️ "Deliverables 1 and 2 are the foundation — without a clear taxonomy and risk framework, nothing else works. Deliverable 4 is what makes this actionable: we don't just identify problems, we give you the cost and staffing picture to solve them."</div>
+</div>
+
+<!-- Slide 6: Deliverables 5-8 Detail -->
+<div class="slide" id="slide-6">
+  <h2>Stretch &amp; Administrative Deliverables 5–8</h2>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:10px;">
+    <div class="deliverable-item stretch">
+      <div class="num">5</div>
+      <div class="info"><h4>AI Review Prototype <span class="type-badge stretch">Stretch</span></h4><p>"Tickler" system using de-identified templates to flag: missing fields, expiry dates, renewal triggers, obligation/milestone deadlines, variable financial terms, retention violations, duplicates, and conflicting versions.</p></div>
+    </div>
+    <div class="deliverable-item stretch">
+      <div class="num">6</div>
+      <div class="info"><h4>Governance Policy <span class="type-badge stretch">Stretch</span></h4><p>Recommended document governance policy and intake process to prevent future fragmentation — ensuring new documents follow the same standards from day one.</p></div>
+    </div>
+    <div class="deliverable-item">
+      <div class="num">7</div>
+      <div class="info"><h4>Bi-Weekly Status Reports <span class="type-badge" style="background:rgba(148,163,184,0.2);color:#94a3b8;">Admin</span></h4><p>Written reports every two weeks covering progress, risks/issues with mitigation, planned activities, earned value graphic, and required client decisions.</p></div>
+    </div>
+    <div class="deliverable-item">
+      <div class="num">8</div>
+      <div class="info"><h4>Final Presentation <span class="type-badge" style="background:rgba(148,163,184,0.2);color:#94a3b8;">Admin</span></h4><p>30–45 minute synchronous presentation to all stakeholders via MS Teams, followed by Q&amp;A and collection of the Client Acceptance Report.</p></div>
+    </div>
+  </div>
+  <div class="highlight-box">
+    <p>📌 All AI development complies with Southlake's AI governance framework: Microsoft ecosystem, Canadian-hosted models only, DHLC review required, no US cloud infrastructure.</p>
+  </div>
+  <div class="script-note">🎙️ "The AI prototype is the most exciting piece — it's essentially a smart tickler system that catches compliance gaps before they become problems. And everything we build follows your AI policy: no US cloud, explainable logic, and full documentation so your team can replicate it."</div>
+</div>
+
+<!-- Slide 7: Progress -->
+<div class="slide" id="slide-7">
+  <h2>Current Progress &amp; Next Steps</h2>
+  <table>
+    <thead>
+      <tr><th>Milestone</th><th>Status</th><th>Details</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Kickoff Meeting</td><td class="status-green">✓ Complete</td><td>Aug 30 — aligned on scope, constraints, and approach with Sam, Sonia, Matt</td></tr>
+      <tr><td>SOW Signed</td><td class="status-green">✓ Complete</td><td>Both parties signed Sep 6</td></tr>
+      <tr><td>AI Policy Review</td><td class="status-green">✓ Complete</td><td>Analyzed Southlake Use of AI Policy — identified DHLC process &amp; constraints</td></tr>
+      <tr><td>Document Taxonomy Draft</td><td class="status-yellow">In Progress</td><td>Preliminary taxonomy built from project overview + kickoff insights</td></tr>
+      <tr><td>De-identified Templates</td><td class="status-yellow">Pending</td><td>Awaiting from Southlake — needed for AI prototype development</td></tr>
+      <tr><td>Legal Privilege Confirmation</td><td class="status-yellow">Pending</td><td>Waiting for Tonya (Legal Counsel) to return from vacation</td></tr>
+    </tbody>
+  </table>
+  <div class="highlight-box" style="margin-top:14px;">
+    <p><strong>Immediate Next Steps:</strong> Receive de-identified contract templates &nbsp;·&nbsp; Begin Phase 2 risk classification with Sonia &amp; Sam &nbsp;·&nbsp; First status report due ~Sep 19</p>
+  </div>
+  <div class="script-note">🎙️ "We've completed the kickoff and SOW signing. Right now we're waiting on the de-identified templates and Tonya's return to confirm legal privilege — once those arrive, we move into Phase 2 risk classification immediately."</div>
+</div>
+
+<!-- Slide 8: Status Report Template -->
+<div class="slide" id="slide-8">
+  <h2>Status Report Format</h2>
+  <p style="color:#94a3b8; font-size:0.9em; margin-bottom:12px;">Submitted every two weeks to the client liaison and copied to all core stakeholders</p>
+  <table>
+    <thead>
+      <tr><th>Section</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Project Status</td><td>🟢 Green / 🟡 Yellow / 🔴 Red with brief explanation</td></tr>
+      <tr><td>Activities Completed</td><td>Bullet list of work done during this reporting period</td></tr>
+      <tr><td>Activities Planned</td><td>Bullet list of upcoming work for next period</td></tr>
+      <tr><td>Earned Value Graphic</td><td>Cumulative actual vs. planned effort curve</td></tr>
+      <tr><td>Risks &amp; Issues Log</td><td>R = potential problem, I = identified problem — with impact &amp; mitigation</td></tr>
+      <tr><td>Required Decisions</td><td>Any actions or approvals needed from the client</td></tr>
+    </tbody>
+  </table>
+  <div class="script-note">🎙️ "We'll be sending status reports every two weeks. You'll always know where we stand at a glance — green means on track, yellow means we have concerns but a plan, red means we need your help immediately."</div>
+</div>
+
+<!-- Slide 9: Closing -->
+<div class="slide" id="slide-9">
+  <h2>Why This Project Matters</h2>
+  <div class="two-col">
+    <div class="col">
+      <h3>For Southlake</h3>
+      <ul>
+        <li>Reduce exposure to unenforceable contracts</li>
+        <li>Build a repeatable compliance framework</li>
+        <li>Prove AI can work safely in healthcare settings</li>
+        <li>Get a clear roadmap with real costs &amp; staffing</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>For Our Team</h3>
+      <ul>
+        <li>Real-world AI + compliance application</li>
+        <li>Cross-functional consulting experience</li>
+        <li>Working within actual healthcare policy constraints</li>
+        <li>Delivering something that will be used</li>
+      </ul>
+    </div>
+  </div>
+  <div class="highlight-box" style="margin-top:20px; text-align:center;">
+    <p style="font-size:1.2em; color:#e2e8f0;">"Getting it right is more important than getting it done quickly."</p>
+    <p style="color:#94a3b8; margin-top:6px;">— Southlake CIO, Kickoff Meeting</p>
+  </div>
+  <p style="text-align:center; margin-top:24px; color:#64748b; font-size:0.95em;">Thank you &nbsp;·&nbsp; We look forward to working with you.</p>
+  <div class="script-note">🎙️ "What excites me about this project is that it's not theoretical. The risk is real, your stakeholders are engaged, and the output will actually be used. That's rare in academic projects — and it's what makes this worth doing well."</div>
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <button onclick="prevSlide()">← Prev</button>
+  <button onclick="nextSlide()">Next →</button>
+</div>
+<div class="sidebar" id="sidebar" style="position:fixed;top:20px;left:36px;z-index:100;background:rgba(15,23,42,0.9);padding:12px 16px;border-radius:8px;border:1px solid rgba(96,165,250,0.3);font-size:0.8em;color:#94a3b8;display:none;" id="toc">
+  <div style="color:#93c5fd;font-weight:bold;margin-bottom:6px;">Slides</div>
+  <div onclick="showSlide(1)" style="cursor:pointer;padding:2px 0;">1. Title</div>
+  <div onclick="showSlide(2)" style="cursor:pointer;padding:2px 0;">2. Problem</div>
+  <div onclick="showSlide(3)" style="cursor:pointer;padding:2px 0;">3. Approach</div>
+  <div onclick="showSlide(4)" style="cursor:pointer;padding:2px 0;">4. 8 Deliverables</div>
+  <div onclick="showSlide(5)" style="cursor:pointer;padding:2px 0;">5. Core 1-4</div>
+  <div onclick="showSlide(6)" style="cursor:pointer;padding:2px 0;">6. Stretch 5-8</div>
+  <div onclick="showSlide(7)" style="cursor:pointer;padding:2px 0;">7. Progress</div>
+  <div onclick="showSlide(8)" style="cursor:pointer;padding:2px 0;">8. Status Report</div>
+  <div onclick="showSlide(9)" style="cursor:pointer;padding:2px 0;">9. Closing</div>
+</div>
+<div class="slide-num" id="slide-num">1 / 9</div>
+
+<script>
+let current = 1;
+const total = 9;
+function showSlide(n) {
+  document.querySelectorAll('.slide').forEach(s => s.classList.remove('active'));
+  document.getElementById('slide-' + n).classList.add('active');
+  document.getElementById('slide-num').textContent = n + ' / ' + total;
+  current = n;
+}
+function nextSlide() { if (current < total) showSlide(current + 1); }
+function prevSlide() { if (current > 1) showSlide(current - 1); }
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') nextSlide();
+  if (e.key === 'ArrowLeft') prevSlide();
+  if (e.key === 't' || e.key === 'T') {
+    const sb = document.getElementById('sidebar');
+    sb.style.display = sb.style.display === 'none' ? 'block' : 'none';
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Project Introduction — Wenjun Teng (2 min)</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #0f172a; color: #e2e8f0; }
+  .slide { display: none; width: 100vw; height: 100vh; padding: 50px 70px; flex-direction: column; justify-content: center; }
+  .slide.active { display: flex; }
+  .slide h1 { font-size: 2.2em; margin-bottom: 16px; color: #f1f5f9; }
+  .slide h2 { font-size: 1.7em; margin-bottom: 14px; color: #93c5fd; }
+  .slide h3 { font-size: 1.1em; margin-bottom: 8px; color: #bfdbfe; }
+  .slide p, .slide li { font-size: 1.05em; line-height: 1.65; color: #cbd5e1; }
+  .slide ul { padding-left: 22px; }
+  .slide li { margin-bottom: 6px; }
+  .accent { color: #60a5fa; font-weight: bold; }
+  .highlight-box { background: rgba(59,130,246,0.12); border-left: 4px solid #60a5fa; padding: 14px 20px; margin: 14px 0; border-radius: 0 8px 8px 0; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 16px; }
+  .col { background: rgba(255,255,255,0.05); padding: 20px; border-radius: 10px; }
+  .nav { position: fixed; bottom: 24px; right: 36px; display: flex; gap: 10px; z-index: 100; }
+  .nav button { background: rgba(96,165,250,0.25); border: 1px solid rgba(96,165,250,0.45); color: #fff; padding: 7px 18px; border-radius: 6px; cursor: pointer; font-size: 0.85em; }
+  .nav button:hover { background: rgba(96,165,250,0.45); }
+  .slide-num { position: fixed; bottom: 24px; left: 36px; color: #64748b; font-size: 0.85em; }
+  .constraint { background: rgba(239,68,68,0.08); border-left: 4px solid #ef4444; padding: 10px 18px; margin: 6px 0; border-radius: 0 8px 8px 0; font-size: 0.9em; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9em; }
+  th { text-align: left; padding: 10px 12px; background: rgba(96,165,250,0.15); color: #93c5fd; font-size: 0.85em; }
+  td { padding: 9px 12px; border-bottom: 1px solid rgba(255,255,255,0.07); color: #cbd5e1; }
+  tr:hover td { background: rgba(255,255,255,0.03); }
+  .status-green { color: #22c55e; }
+  .status-yellow { color: #f59e0b; }
+  .phase-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-top: 16px; }
+  .phase-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 16px; text-align: center; }
+  .phase-card.done { border-color: #22c55e; background: rgba(34,197,94,0.08); }
+  .phase-card.active { border-color: #f59e0b; background: rgba(245,158,11,0.08); }
+  .phase-card.upcoming { border-color: rgba(255,255,255,0.15); }
+  .phase-card h4 { font-size: 0.95em; margin-bottom: 6px; }
+  .phase-card.done h4 { color: #22c55e; }
+  .phase-card.active h4 { color: #f59e0b; }
+  .phase-card.upcoming h4 { color: #94a3b8; }
+  .phase-card p { font-size: 0.8em; color: #94a3b8; }
+  .script-note { background: rgba(251,191,36,0.1); border-left: 4px solid #fbbf24; padding: 10px 18px; margin: 12px 0; border-radius: 0 8px 8px 0; font-size: 0.85em; color: #fde68a; }
+  .team-row { display: flex; gap: 14px; margin-top: 18px; justify-content: center; }
+  .team-member { background: rgba(96,165,250,0.12); padding: 12px 18px; border-radius: 8px; text-align: center; }
+  .team-member .name { font-size: 0.95em; font-weight: bold; color: #93c5fd; }
+  .team-member .role { font-size: 0.75em; color: #94a3b8; margin-top: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Slide 1: Title -->
+<div class="slide active" id="slide-1">
+  <div style="text-align:center; margin-top:20px;">
+    <div style="font-size:0.85em; color:#64748b; letter-spacing:3px; text-transform:uppercase; margin-bottom:16px;">Ivey MSc Advanced Field Project</div>
+    <h1 style="font-size:2.6em; line-height:1.25;">Critical Corporate<br>Document Management</h1>
+    <p style="color:#94a3b8; font-size:1.1em; margin-top:16px;">Southlake Health &nbsp;·&nbsp; Reducing Legal &amp; Contractual Risk through AI-Assisted Compliance</p>
+    <div class="team-row">
+      <div class="team-member"><div class="name">Celia Huang</div><div class="role">Project Lead</div></div>
+      <div class="team-member"><div class="name">Nicole Qian</div><div class="role">Research &amp; Compliance</div></div>
+      <div class="team-member"><div class="name">Susu Li</div><div class="role">AI &amp; Technology</div></div>
+      <div class="team-member"><div class="name">Yehan (Evie) Xiong</div><div class="role">Risk Assessment</div></div>
+      <div class="team-member"><div class="name">Wenjun Teng</div><div class="role">Implementation &amp; Delivery</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Slide 2: The Problem -->
+<div class="slide" id="slide-2">
+  <h2>The Problem: Fragmented Documents, Real Risk</h2>
+  <div class="two-col">
+    <div class="col">
+      <h3>Where Are the Documents?</h3>
+      <ul>
+        <li>Scattered across network drives, OneDrive, and third-party vendors</li>
+        <li>Many agreements exist only as paper copies on staff desks</li>
+        <li>Legacy IT contracts are low-quality scans</li>
+        <li>No unified taxonomy or tracking system</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3>What's at Stake?</h3>
+      <div class="highlight-box">
+        <p><strong>Contracts signed by unauthorized directors</strong> — rendering them legally unenforceable</p>
+      </div>
+      <ul>
+        <li>Policy requires <span class="accent">two VP signatures</span> for binding documents</li>
+        <li>No automated way to verify signing authority</li>
+        <li>No systematic tracking of compliance gaps</li>
+      </ul>
+    </div>
+  </div>
+  <div class="script-note">🎙️ "We heard from the CIO that past contracts were signed by people without authority — meaning the organization couldn't legally enforce them. That's the core risk we're solving for."</div>
+</div>
+
+<!-- Slide 3: Approach -->
+<div class="slide" id="slide-3">
+  <h2>Our Three-Phase Approach</h2>
+  <div class="phase-grid">
+    <div class="phase-card done">
+      <h4>Phase 1: Map &amp; Classify</h4>
+      <p>Weeks 1–4<br>Document taxonomy, inventory &amp; classification framework</p>
+    </div>
+    <div class="phase-card active">
+      <h4>Phase 2: Assess &amp; Evaluate</h4>
+      <p>Weeks 5–8<br>Compliance criteria, risk classification (4 categories)</p>
+    </div>
+    <div class="phase-card upcoming">
+      <h4>Phase 3: Build &amp; Recommend</h4>
+      <p>Weeks 9–12<br>AI prototype, cost analysis &amp; final recommendations</p>
+    </div>
+  </div>
+  <div class="highlight-box" style="margin-top:20px;">
+    <p>12 weeks total &nbsp;·&nbsp; 400 team hours &nbsp;·&nbsp; Bi-weekly status reports &nbsp;·&nbsp; Final synchronous presentation</p>
+  </div>
+  <div class="script-note">🎙️ "Three phases over 12 weeks: first we map what you have, then we define what's compliant, and finally we prototype how AI can help you catch risks automatically."</div>
+</div>
+
+<!-- Slide 7: Progress & Next Steps -->
+<div class="slide" id="slide-7">
+  <h2>Current Progress &amp; Next Steps</h2>
+  <table>
+    <thead>
+      <tr><th>Milestone</th><th>Status</th><th>Details</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Kickoff Meeting</td><td class="status-green">✓ Complete</td><td>Aug 30 — aligned on scope, constraints, and approach with Sam, Sonia, Matt</td></tr>
+      <tr><td>SOW Signed</td><td class="status-green">✓ Complete</td><td>Both parties signed Sep 6</td></tr>
+      <tr><td>AI Policy Review</td><td class="status-green">✓ Complete</td><td>Analyzed Southlake Use of AI Policy — identified DHLC process &amp; constraints</td></tr>
+      <tr><td>Document Taxonomy Draft</td><td class="status-yellow">In Progress</td><td>Preliminary taxonomy built from project overview + kickoff insights</td></tr>
+      <tr><td>De-identified Templates</td><td class="status-yellow">Pending</td><td>Awaiting from Southlake — needed for AI prototype development</td></tr>
+      <tr><td>Legal Privilege Confirmation</td><td class="status-yellow">Pending</td><td>Waiting for Tonya (Legal Counsel) to return from vacation</td></tr>
+    </tbody>
+  </table>
+  <div class="highlight-box" style="margin-top:14px;">
+    <p><strong>Immediate Next Steps:</strong> Receive de-identified contract templates &nbsp;·&nbsp; Begin Phase 2 risk classification with Sonia &amp; Sam &nbsp;·&nbsp; First status report due ~Sep 19</p>
+  </div>
+  <div class="script-note">🎙️ "We've completed the kickoff and SOW signing. Right now we're waiting on the de-identified templates and Tonya's return to confirm legal privilege — once those arrive, we move into Phase 2 risk classification immediately."</div>
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <button onclick="prevSlide()">← Prev</button>
+  <button onclick="nextSlide()">Next →</button>
+</div>
+<div class="slide-num" id="slide-num">1 / 4</div>
+
+<script>
+let current = 1;
+const total = 4;
+function showSlide(n) {
+  document.querySelectorAll('.slide').forEach(s => s.classList.remove('active'));
+  document.getElementById('slide-' + n).classList.add('active');
+  document.getElementById('slide-num').textContent = n + ' / ' + total;
+  current = n;
+}
+function nextSlide() { if (current < total) showSlide(current + 1); }
+function prevSlide() { if (current > 1) showSlide(current - 1); }
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') nextSlide();
+  if (e.key === 'ArrowLeft') prevSlide();
+});
+</script>
+</body>
+</html>
