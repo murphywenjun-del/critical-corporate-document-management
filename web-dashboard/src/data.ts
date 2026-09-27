@@ -1,10 +1,14 @@
-
 // ── Types ───────────────────────────────────────────────────────────────────
 
 interface Flag {
   severity: 'Critical' | 'High' | 'Medium'
   field: string
   flag_if: string
+}
+
+interface TextHighlight {
+  text: string
+  severity: 'Critical' | 'High' | 'Medium'
 }
 
 interface ContractDoc {
@@ -20,6 +24,7 @@ interface ContractDoc {
   flags: Flag[]
   extractedFields: Array<{ label: string; value: string; status: '✓' | '✗' | '?' }>
   jev: JevData
+  textHighlights: TextHighlight[]
 }
 
 interface JevData {
@@ -39,6 +44,7 @@ export const contracts: ContractDoc[] = [
     summary: "Clean mutual NDA with full PHIPA compliance, 2 VP signatures, 5-year term, well-defined confidential scope.",
     filePath: "research/contracts/01_NDA_Standard_Compliant_2024.md",
     riskScore: 1.0, riskLevel: "Low", flagsCount: 0, flags: [],
+    textHighlights: [],
     extractedFields: [
       { label: "Parties", value: "Southlake Health, Community Care Partners Inc.", status: "✓" },
       { label: "Effective Date", value: "March 15, 2024", status: "✓" },
@@ -61,6 +67,15 @@ export const contracts: ContractDoc[] = [
       { severity: "High", field: "expiry_date", flag_if: "Contract expired 119 days ago (May 31, 2026)" },
       { severity: "High", field: "binding_language", flag_if: "Both binding and non-binding language present — creates legal ambiguity" },
     ],
+    textHighlights: [
+      { text: "Robert Thompson", severity: "Critical" },
+      { text: "Executive Director", severity: "Critical" },
+      { text: "Dr. Amanda Lee", severity: "Critical" },
+      { text: "Chief Medical Officer", severity: "Critical" },
+      { text: "not intended to create legally binding obligations", severity: "High" },
+      { text: "shall be binding", severity: "High" },
+      { text: "ninety (90) days", severity: "Medium" },
+    ],
     extractedFields: [
       { label: "Parties", value: "Southlake Health, York Region Community Health Network", status: "✓" },
       { label: "Effective Date", value: "June 1, 2024", status: "✓" },
@@ -81,6 +96,12 @@ export const contracts: ContractDoc[] = [
       { severity: "High", field: "expiry_date", flag_if: "Contract expired 270 days ago (Dec 31, 2025)" },
       { severity: "High", field: "indemnity_cap", flag_if: "Indemnity clause has no monetary cap" },
       { severity: "Medium", field: "termination_conv", flag_if: "Convenience termination notice period of 90 days is excessive (should be ≤60)" },
+    ],
+    textHighlights: [
+      { text: "December 31, 2025", severity: "High" },
+      { text: "not be subject to a monetary cap", severity: "High" },
+      { text: "ninety (90) days", severity: "Medium" },
+      { text: "five percent (5%)", severity: "Medium" },
     ],
     extractedFields: [
       { label: "Parties", value: "Southlake Health, MedSoft Solutions Inc.", status: "✓" },
@@ -110,6 +131,14 @@ export const contracts: ContractDoc[] = [
       { severity: "Medium", field: "audit_rights", flag_if: "Missing audit rights clause" },
       { severity: "Medium", field: "data_minimization", flag_if: "Missing data minimization principle" },
     ],
+    textHighlights: [
+      { text: "Susan Park", severity: "Critical" },
+      { text: "Director, Quality and Privacy", severity: "Critical" },
+      { text: "Dr. Richard Foster", severity: "Critical" },
+      { text: "Chief Research Officer", severity: "Critical" },
+      { text: "Publication in peer-reviewed journals", severity: "High" },
+      { text: "Sharing with research collaborators", severity: "High" },
+    ],
     extractedFields: [
       { label: "Parties", value: "Southlake Health, University Health Research Institute", status: "✓" },
       { label: "Effective Date", value: "September 1, 2024", status: "✓" },
@@ -135,6 +164,13 @@ export const contracts: ContractDoc[] = [
       { severity: "High", field: "breach_notification", flag_if: "Missing breach notification requirement" },
       { severity: "Medium", field: "return_destruction", flag_if: "Missing return or destruction clause" },
     ],
+    textHighlights: [
+      { text: "February 14, 2022", severity: "High" },
+      { text: "February 14, 2024", severity: "High" },
+      { text: "two (2) years", severity: "High" },
+      { text: "Vice President, Operations", severity: "Medium" },
+      { text: "Vice President, Procurement", severity: "Medium" },
+    ],
     extractedFields: [
       { label: "Parties", value: "Southlake Health, HealthTech Ventures Ltd.", status: "✓" },
       { label: "Effective Date", value: "February 14, 2022", status: "✓" },
@@ -155,6 +191,12 @@ export const contracts: ContractDoc[] = [
     riskScore: 4.2, riskLevel: "Critical", flagsCount: 2, flags: [
       { severity: "High", field: "expiry_date", flag_if: "Contract expired 545 days ago (March 31, 2025)" },
       { severity: "High", field: "indemnity_clause", flag_if: "Missing indemnity clause entirely" },
+    ],
+    textHighlights: [
+      { text: "March 31, 2025", severity: "High" },
+      { text: "April 1, 2024", severity: "Medium" },
+      { text: "INSURANCE", severity: "Medium" },
+      { text: "$2,000,000 per occurrence", severity: "Medium" },
     ],
     extractedFields: [
       { label: "Parties", value: "Southlake Health, SecurePro Services Inc.", status: "✓" },
@@ -182,6 +224,19 @@ export const contracts: ContractDoc[] = [
       { severity: "High", field: "duplicate_version", flag_if: "Multiple versions detected — possible duplicate or conflict" },
       { severity: "High", field: "conflicting_finance", flag_if: "Conflicting amounts for same financial tag: $100,000 vs $150,000" },
     ],
+    textHighlights: [
+      { text: "VERSION 1", severity: "High" },
+      { text: "VERSION 2", severity: "High" },
+      { text: "$100,000/year", severity: "High" },
+      { text: "$150,000/year", severity: "High" },
+      { text: "not legally binding", severity: "High" },
+      { text: "supersedes all prior understandings", severity: "High" },
+      { text: "legally binding agreement", severity: "High" },
+      { text: "August 1, 2023", severity: "Medium" },
+      { text: "October 15, 2023", severity: "Medium" },
+      { text: "July 31, 2025", severity: "Medium" },
+      { text: "October 14, 2026", severity: "Medium" },
+    ],
     extractedFields: [
       { label: "Version 1", value: "Effective Aug 1, 2023 · $100K/year · 2-year term · VP+VP signed · Non-binding", status: "✓" },
       { label: "Version 2", value: "Effective Oct 15, 2023 · $150K/year · 3-year term · VP+CEO signed · Partially binding", status: "✓" },
@@ -204,6 +259,19 @@ export const contracts: ContractDoc[] = [
       { severity: "High", field: "indemnity_cap", flag_if: "Indemnity clause has no monetary cap (partially visible but unverifiable)" },
       { severity: "Medium", field: "ocr_quality", flag_if: "Low-quality scan — key fields illegible (150 DPI, stains, rotation)" },
       { severity: "Critical", field: "missing_fields", flag_if: "Cannot verify key clauses due to scan quality" },
+    ],
+    textHighlights: [
+      { text: "VERSION 1", severity: "High" },
+      { text: "VERSION 2", severity: "High" },
+      { text: "$100,000/year", severity: "High" },
+      { text: "$150,000/year", severity: "High" },
+      { text: "not legally binding", severity: "High" },
+      { text: "supersedes all prior understandings", severity: "High" },
+      { text: "legally binding agreement", severity: "High" },
+      { text: "August 1, 2023", severity: "Medium" },
+      { text: "October 15, 2023", severity: "Medium" },
+      { text: "July 31, 2025", severity: "Medium" },
+      { text: "October 14, 2026", severity: "Medium" },
     ],
     extractedFields: [
       { label: "Parties", value: "Southlake Health (confirmed), vendor name obscured", status: "?" },

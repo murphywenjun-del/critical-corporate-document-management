@@ -5,11 +5,6 @@ import './App.css'
 type Severity = 'Critical' | 'High' | 'Medium'
 type RiskLevel = 'Low' | 'Critical'
 
-interface SelectedContract {
-  contract: typeof contracts[0]
-  text: string
-}
-
 // ── Color helpers ────────────────────────────────────────────────────────────
 
 const severityColor: Record<Severity, string> = {
@@ -29,6 +24,12 @@ const severityDot: Record<Severity, string> = {
   Medium: 'bg-yellow-500',
 }
 
+const highlightBgColor: Record<Severity, string> = {
+  Critical: 'bg-red-200 border-b border-red-300',
+  High: 'bg-orange-200 border-b border-orange-300',
+  Medium: 'bg-yellow-200 border-b border-yellow-300',
+}
+
 function fieldStatusColor(status: '✓' | '✗' | '?'): string {
   if (status === '✓') return 'text-emerald-600'
   if (status === '✗') return 'text-red-500'
@@ -39,6 +40,93 @@ function jevMeter(value: number): { label: string; color: string; bg: string } {
   if (value >= 0.7) return { label: 'High', color: 'text-red-600', bg: 'bg-red-500' }
   if (value >= 0.4) return { label: 'Medium', color: 'text-orange-600', bg: 'bg-orange-500' }
   return { label: 'Low', color: 'text-emerald-600', bg: 'bg-emerald-500' }
+}
+
+// ── Highlighted text rendering ───────────────────────────────────────────────
+
+interface HighlightSpan {
+  text: string
+  severity: Severity | null
+}
+
+function buildHighlightSpans(text: string, highlights: Array<{ text: string; severity: Severity }>): HighlightSpan[] {
+  if (highlights.length === 0) return [{ text, severity: null }]
+
+  // Sort by length descending so longer matches take priority
+  const sorted = [...highlights].sort((a, b) => b.text.length - a.text.length)
+
+  const ranges: Array<{ start: number; end: number; severity: Severity }> = []
+
+  let searchPos = 0
+  for (const h of sorted) {
+    const needleLower = h.text.toLowerCase()
+    let idx = searchPos
+    while (idx <= text.length - h.text.length) {
+      const pos = text.toLowerCase().indexOf(needleLower, idx)
+      if (pos === -1) break
+      ranges.push({ start: pos, end: pos + h.text.length, severity: h.severity })
+      idx = pos + h.text.length
+    }
+    // Move search position past this match to avoid double-counting
+    const firstMatch = text.toLowerCase().indexOf(needleLower, searchPos)
+    if (firstMatch !== -1) {
+      searchPos = firstMatch + h.text.length
+    }
+  }
+
+  // Sort ranges by start position and merge overlaps
+  ranges.sort((a, b) => a.start - b.start)
+  const merged: Array<{ start: number; end: number; severity: Severity }> = []
+  const sevOrder = { Critical: 3, High: 2, Medium: 1 }
+  for (const r of ranges) {
+    if (merged.length > 0 && r.start < merged[merged.length - 1].end) {
+      const last = merged[merged.length - 1]
+      if (sevOrder[r.severity] > sevOrder[last.severity]) {
+        last.severity = r.severity
+      }
+      last.end = Math.max(last.end, r.end)
+    } else {
+      merged.push(r)
+    }
+  }
+
+  // Build span list
+  const result: HighlightSpan[] = []
+  let pos = 0
+  for (const r of merged) {
+    if (r.start > pos) {
+      result.push({ text: text.slice(pos, r.start), severity: null })
+    }
+    result.push({ text: text.slice(r.start, r.end), severity: r.severity })
+    pos = r.end
+  }
+  if (pos < text.length) {
+    result.push({ text: text.slice(pos), severity: null })
+  }
+
+  return result
+}
+
+function HighlightedText({ text, highlights }: { text: string; highlights: Array<{ text: string; severity: Severity }> }) {
+  const spans = buildHighlightSpans(text, highlights)
+
+  return (
+    <span>
+      {spans.map((span, i) =>
+        span.severity ? (
+          <mark
+            key={i}
+            className={`px-0.5 rounded ${highlightBgColor[span.severity]}`}
+            title={`${span.severity} risk`}
+          >
+            {span.text}
+          </mark>
+        ) : (
+          <span key={i}>{span.text}</span>
+        )
+      )}
+    </span>
+  )
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -184,16 +272,22 @@ function PipelineDiagram() {
   )
 }
 
-function ContractTextPanel({ text }: { text: string }) {
+function ContractTextPanel({
+  text,
+  highlights,
+}: {
+  text: string
+  highlights: Array<{ text: string; severity: Severity }>
+}) {
   const lines = text.split('\n')
   return (
-    <div className="text-xs text-slate-600 font-mono leading-relaxed max-h-96 overflow-y-auto bg-slate-50 rounded-lg p-4 border border-slate-200">
+    <div className="text-xs text-slate-700 font-mono leading-relaxed max-h-96 overflow-y-auto bg-slate-50 rounded-lg p-4 border border-slate-200 whitespace-pre-wrap">
       {lines.map((line, i) => {
-        if (line.startsWith('# ')) return <h2 key={i} className="text-sm font-bold text-slate-800 mt-3 mb-1">{line.slice(2)}</h2>
-        if (line.startsWith('## ')) return <h3 key={i} className="text-xs font-bold text-slate-700 mt-2 mb-1">{line.slice(3)}</h3>
-        if (line.startsWith('- ')) return <li key={i} className="ml-4 list-disc">{line.slice(2)}</li>
+        if (line.startsWith('# ')) return <h2 key={i} className="text-sm font-bold text-slate-800 mt-3 mb-1"><HighlightedText text={line.slice(2)} highlights={highlights} /></h2>
+        if (line.startsWith('## ')) return <h3 key={i} className="text-xs font-bold text-slate-700 mt-2 mb-1"><HighlightedText text={line.slice(3)} highlights={highlights} /></h3>
+        if (line.startsWith('- ')) return <li key={i} className="ml-4 list-disc"><HighlightedText text={line.slice(2)} highlights={highlights} /></li>
         if (line.trim() === '') return <div key={i} />
-        return <p key={i} className="mb-0.5">{line}</p>
+        return <p key={i} className="mb-0.5"><HighlightedText text={line} highlights={highlights} /></p>
       })}
     </div>
   )
@@ -294,6 +388,16 @@ export default function App() {
         </div>
       </div>
 
+      {/* Highlight legend */}
+      <div className="bg-white border-b border-slate-200 px-4 py-2 sm:px-6">
+        <div className="max-w-screen-2xl mx-auto flex items-center gap-4 text-xs text-slate-500 flex-wrap">
+          <span className="font-semibold">Legend:</span>
+          <span className="flex items-center gap-1"><mark className="px-1 rounded bg-red-200 border-b border-red-300 text-xs">Critical</mark> Unauthorized signatory / missing compliance</span>
+          <span className="flex items-center gap-1"><mark className="px-1 rounded bg-orange-200 border-b border-orange-300 text-xs">High</mark> Expired / uncapped / conflicting terms</span>
+          <span className="flex items-center gap-1"><mark className="px-1 rounded bg-yellow-200 border-b border-yellow-300 text-xs">Medium</mark> Warning / attention needed</span>
+        </div>
+      </div>
+
       <div className="max-w-screen-2xl mx-auto flex">
         {/* Left: Contract List — desktop sidebar / mobile overlay */}
         <aside
@@ -388,7 +492,7 @@ export default function App() {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Contract header — responsive: stacks on mobile */}
+              {/* Contract header */}
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
@@ -409,10 +513,9 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Divider */}
               <div className="h-px bg-slate-200" />
 
-              {/* Three-column layout — stacks on mobile */}
+              {/* Three-column layout */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 {/* Flags */}
                 <div>
@@ -463,12 +566,17 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Contract Text */}
+              {/* Contract Text with highlights */}
               <div>
                 <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
                   Contract Document
+                  {selected.textHighlights.length > 0 && (
+                    <span className="ml-2 text-slate-400 font-normal normal-case">
+                      ({selected.textHighlights.length} risk terms highlighted)
+                    </span>
+                  )}
                 </h3>
-                <ContractTextPanel text={contractText} />
+                <ContractTextPanel text={contractText} highlights={selected.textHighlights} />
               </div>
             </div>
           )}
