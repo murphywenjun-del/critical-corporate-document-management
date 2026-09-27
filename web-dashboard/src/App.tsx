@@ -333,11 +333,11 @@ function ContractTextPanel({
                 title="Click to show/hide reason"
               >{s.text}</mark>
               {isSelected && hl && (
-                <span className="ml-1 text-[10px] text-slate-500 border-l border-slate-300 pl-1.5 align-middle" style={{ whiteSpace: 'nowrap' }}>
-                  <span className={`font-semibold ${
-                    s.severity === 'Critical' ? 'text-red-600' : s.severity === 'High' ? 'text-orange-600' : 'text-yellow-700'
+                <span className="ml-1 text-xs px-2 py-1 rounded border-l-2 bg-white/80 inline-block mt-0.5 max-w-md">
+                  <span className={`font-semibold mr-2 ${
+                    s.severity === 'Critical' ? 'text-red-600 border-red-400' : s.severity === 'High' ? 'text-orange-600 border-orange-400' : 'text-yellow-700 border-yellow-400'
                   }`}>{s.severity}</span>
-                  {' '}{hl.reason}
+                  <span className="text-slate-700">{hl.reason}</span>
                 </span>
               )}
             </span>
