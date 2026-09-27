@@ -234,56 +234,52 @@ function ContractTextPanel({
   text: string
   highlights: Array<{ text: string; severity: Severity }>
 }) {
-  // Full-text search with cross-line awareness
   const ranges = buildHighlightRanges(text, highlights)
   const lines = text.split('\n')
   
-  // Compute cumulative offsets for each line
-  const offsets: number[] = []
-  let offset = 0
+  // Compute line start offsets in the full text
+  const lineOffsets: number[] = []
+  let off = 0
   for (const l of lines) {
-    offsets.push(offset)
-    offset += l.length + 1
+    lineOffsets.push(off)
+    off += l.length + 1
   }
   
-  // Render each line with appropriate highlighting
   return (
     <div className="text-xs text-slate-700 font-mono leading-relaxed max-h-96 overflow-y-auto bg-slate-50 rounded-lg p-4 border border-slate-200 whitespace-pre-wrap">
       {lines.map((line, i) => {
-        const lineStart = offsets[i]
-        const lineEnd = lineStart + line.length
+        const ls = lineOffsets[i]
+        const le = ls + line.length
         
-        // Collect segments for this line
         const segments: Array<{ text: string; severity: Severity | null }> = []
-        let cursor = lineStart
-        
-        // Add header prefix if needed
-        if (line.startsWith('# ')) {
-          segments.push({ text: '# ', severity: null })
-        } else if (line.startsWith('## ')) {
-          segments.push({ text: '## ', severity: null })
-        } else if (line.startsWith('- ')) {
-          segments.push({ text: '- ', severity: null })
-        }
-        
-        const contentStart = line.startsWith('# ') ? 2 : line.startsWith('## ') ? 3 : line.startsWith('- ') ? 2 : 0
+        let pos = ls
         
         for (const r of ranges) {
-          if (r.end <= lineStart || r.start >= lineEnd) continue
-          const segStart = Math.max(r.start, lineStart) - contentStart
-          const segEnd = Math.min(r.end, lineEnd) - contentStart
-          if (segStart > cursor - lineStart) {
-            segments.push({ text: line.slice(cursor - lineStart, segStart), severity: null })
+          if (r.end <= ls || r.start >= le) continue
+          // Text before this range (within this line)
+          if (r.start > pos) {
+            segments.push({ text: line.slice(pos - ls, r.start - ls), severity: null })
           }
-          segments.push({ text: line.slice(segStart, segEnd), severity: r.severity })
-          cursor = r.end
+          // Range portion within this line
+          const segS = Math.max(r.start, ls) - ls
+          const segE = Math.min(r.end, le) - ls
+          segments.push({ text: line.slice(segS, segE), severity: r.severity })
+          pos = Math.max(pos, r.end)
         }
         
-        if (cursor < lineEnd) {
-          segments.push({ text: line.slice(cursor - lineStart), severity: null })
+        if (pos < le) {
+          segments.push({ text: line.slice(pos - ls), severity: null })
         }
         
-        const content = segments.map((s, j) => 
+        if (segments.length === 0 || (segments.length === 1 && !segments[0].severity && segments[0].text === line)) {
+          if (line.trim() === '') return <div key={i} />
+          if (line.startsWith('# ')) return <h2 key={i} className="text-sm font-bold text-slate-800 mt-3 mb-1">{line.slice(2)}</h2>
+          if (line.startsWith('## ')) return <h3 key={i} className="text-xs font-bold text-slate-700 mt-2 mb-1">{line.slice(3)}</h3>
+          if (line.startsWith('- ')) return <li key={i} className="ml-4 list-disc">{line.slice(2)}</li>
+          return <p key={i} className="mb-0.5">{line}</p>
+        }
+        
+        const content = segments.map((s, j) =>
           s.severity ? (
             <mark key={j} className={`px-0.5 rounded ${highlightBgColor[s.severity]}`} title={`${s.severity} risk`}>{s.text}</mark>
           ) : (
