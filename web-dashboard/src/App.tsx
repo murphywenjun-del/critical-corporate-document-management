@@ -84,22 +84,6 @@ function buildHighlightRanges(
   return merged
 }
 
-function HighlightedText({ text, highlights }: { text: string; highlights: Array<{ text: string; severity: Severity }> }) {
-  const spans = buildHighlightSpansSimple(text, highlights)
-  return (
-    <span>
-      {spans.map((span, i) =>
-        span.severity ? (
-          <mark key={i} className={`px-0.5 rounded ${highlightBgColor[span.severity]}`} title={`${span.severity} risk`}>
-            {span.text}
-          </mark>
-        ) : (
-          <span key={i}>{span.text}</span>
-        )
-      )}
-    </span>
-  )
-}
 
 function buildHighlightSpansSimple(text: string, highlights: Array<{ text: string; severity: Severity }>): Array<{ text: string; severity: Severity | null }> {
   if (highlights.length === 0) return [{ text, severity: null }]
@@ -139,51 +123,6 @@ function buildHighlightSpansSimple(text: string, highlights: Array<{ text: strin
 }
 
 // Build per-line spans from full-text ranges (handles cross-line matches)
-function buildLineSpans(
-  lines: string[],
-  ranges: Array<{ start: number; end: number; severity: Severity }>
-): Array<Array<{ text: string; severity: Severity | null }>> {
-  if (ranges.length === 0) return lines.map((l) => [{ text: l, severity: null }])
-
-  // Compute cumulative character offset for each line start
-  const offsets: number[] = []
-  let offset = 0
-  for (const l of lines) {
-    offsets.push(offset)
-    offset += l.length + 1 // +1 for the newline
-  }
-
-  return lines.map((line, i) => {
-    const lineStart = offsets[i]
-    const lineEnd = lineStart + line.length
-    const result: Array<{ text: string; severity: Severity | null }> = []
-    let cursor = lineStart
-
-    for (const r of ranges) {
-      // Range starts before this line ends and ends after this line starts
-      if (r.end <= lineStart || r.start >= lineEnd) continue
-
-      // Text before this range
-      if (r.start > cursor) {
-        result.push({ text: lines[i].slice(cursor - lineStart, r.start - lineStart), severity: null })
-      }
-      // The range portion within this line
-      const segStart = Math.max(r.start, lineStart) - lineStart
-      const segEnd = Math.min(r.end, lineEnd) - lineStart
-      result.push({ text: lines[i].slice(segStart, segEnd), severity: r.severity })
-      cursor = r.end
-    }
-
-    // Remaining text after last range
-    if (cursor < lineEnd) {
-      result.push({ text: lines[i].slice(cursor - lineStart), severity: null })
-    }
-
-    return result.length > 0 ? result : [{ text: line, severity: null }]
-  })
-}
-
-// ── Sub-components ───────────────────────────────────────────────────────────
 
 function ContractCard({
   c,
