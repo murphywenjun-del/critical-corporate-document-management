@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { contracts, pipelineStages } from './data'
 import './App.css'
 
@@ -364,6 +364,12 @@ export default function App() {
   const [filterRisk, setFilterRisk] = useState<string>('All')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [selectedFlagHighlight, setSelectedFlagHighlight] = useState<string | null>(null)
+  const [uploadedContracts, setUploadedContracts] = useState<any[]>([])
+  const [isDragging, setIsDragging] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [useAgnes, setUseAgnes] = useState(true)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const types = ['All', ...Array.from(new Set(contracts.map((c) => c.type)))]
   const risks = ['All', 'Low', 'Critical']
@@ -373,6 +379,15 @@ export default function App() {
     if (filterRisk !== 'All' && c.riskLevel !== filterRisk) return false
     return true
   })
+
+  useEffect(() => {
+    fetch('/api/results')
+      .then(r => r.json())
+      .then(data => {
+        if (Array.isArray(data)) setUploadedContracts(data);
+      })
+      .catch(() => {});
+  }, [])
 
   useEffect(() => {
     if (selected) {
@@ -387,6 +402,38 @@ export default function App() {
       setContractText('')
     }
   }, [selected])
+
+  const handleFileUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    setUploadError(null);
+    const formData = new FormData();
+    for (let i = 0; i < files.length; i++) formData.append('files', files[i]);
+    try {
+      const resp = await fetch('/api/batch-upload?use_agnes=' + useAgnes, { method: 'POST', body: formData });
+      const data = await resp.json();
+      if (data.results) {
+        setUploadedContracts(prev => [...data.results, ...prev]);
+      }
+    } catch (e) {
+      setUploadError('Upload failed. Make sure the API server is running on port 8000.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    handleFileUpload(e.dataTransfer.files);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => setIsDragging(false);
 
   const totalFlags = contracts.reduce((s, c) => s + c.flagsCount, 0)
   const criticalCount = contracts.filter((c) => c.riskLevel === 'Critical').length
@@ -487,6 +534,76 @@ export default function App() {
             </button>
           )}
 
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Uploaded Contracts</p>
+            <button
+              onClick={() => { setMobileMenuOpen(false); fetch('/api/results').then(r=>r.json()).then(d=>setUploadedContracts(Array.isArray(d)?d:[])) }}
+              className="text-xs text-blue-500 hover:text-blue-700"
+            >
+              Refresh
+            </button>
+          </div>
+          {uploadedContracts.length > 0 && (
+            <div className="space-y-2 mb-2">
+              {uploadedContracts.slice(0, 5).map((uc: any, idx: number) => (
+                <button
+                  key={'up_' + uc.filename + '_' + idx}
+                  onClick={() => {
+                    setSelected({
+                      num: 1000 + idx,
+                      displayName: (uc.filename || 'Unknown').replace(/\.[^.]+$/, ''),
+                      summary: (uc.risk_level || 'Unknown') + ' risk · ' + (uc.flags_count || 0) + ' flags',
+                      type: uc.document_type || 'Other',
+                      riskScore: uc.risk_score || 0,
+                      riskLevel: uc.risk_level || 'Critical',
+                      flagsCount: uc.flags_count || 0,
+                      flags: (uc.flags || []).map((f: any) => ({severity: f.severity, field: f.field, highlightField: f.highlightField, flag_if: f.flag_if})),
+                      textHighlights: [],
+                      extractedFields: [],
+                      jev: uc.jev_result?.answers ? {
+                        riskSeverity: {choice: uc.jev_result.answers.risk_severity?.choice || 'unknown', confidence: uc.jev_result.answers.risk_severity?.confidence || 0.5},
+                        needsHumanReview: uc.jev_result.answers.needs_human_review?.noul || 0.5,
+                        isComplianceRelated: uc.jev_result.answers.is_compliance_related?.noul || 0.5,
+                        shouldAlert: uc.jev_result.answers.should_alert?.noul || 0.5,
+                        decisionConfidence: uc.jev_result.answers.decision_confidence?.score || 0,
+                      } : {riskSeverity: {choice: (uc.risk_level||'').toLowerCase(), confidence: (uc.risk_score||0)/5}, needsHumanReview: 0.5, isComplianceRelated: 0.5, shouldAlert: 0.5, decisionConfidence: 0},
+                      filePath: '',
+                    } as any);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`w-full text-left rounded-lg border-2 p-3 transition-all duration-150 ${
+                    'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="text-[10px] font-medium text-slate-400 bg-slate-100 rounded px-1 py-0.5">UP</span>
+                        <span className="text-xs font-medium text-slate-500 bg-slate-100 rounded px-1 py-0.5 uppercase">{uc.document_type || 'Other'}</span>
+                      </div>
+                      <p className="font-semibold text-slate-800 text-xs truncate">{uc.filename?.replace(/\.[^.]+$/, '')}</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">{uc.processed_at || uc.timestamp || ''}</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${(uc.risk_level==='Critical'||uc.risk_level==='High') ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                        {uc.risk_level || 'N/A'}
+                      </span>
+                      {uc.flags_count > 0 && <span className="text-[10px] text-red-500 font-medium">{uc.flags_count} flags</span>}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-1">
+                    {(uc.flags || []).slice(0, 3).map((f: any, fi: number) => (
+                      <span key={fi} className={`w-1.5 h-1.5 rounded-full ${f.severity==='Critical'?'bg-red-500':f.severity==='High'?'bg-orange-500':'bg-yellow-500'}`} />
+                    ))}
+                  </div>
+                </button>
+              ))}
+              {uploadedContracts.length > 5 && (
+                <p className="text-xs text-slate-400 text-center">+{uploadedContracts.length - 5} more uploaded</p>
+              )}
+            </div>
+          )}
+
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Filter by Type</p>
             <div className="flex flex-wrap gap-1.5">
@@ -523,6 +640,33 @@ export default function App() {
               ))}
             </div>
           </div>
+          {/* Upload Section */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Upload New Contract</p>
+            <div
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onClick={() => fileInputRef.current?.click()}
+              className={`relative border-2 border-dashed rounded-lg p-3 text-center cursor-pointer transition-colors ${
+                isDragging ? 'border-blue-400 bg-blue-50' : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50'
+              }`}
+            >
+              <input ref={fileInputRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif,.docx,.doc,.txt" className="hidden" onChange={e => handleFileUpload(e.target.files)} />
+              <svg className="w-6 h-6 mx-auto text-slate-400 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+              <p className="text-xs text-slate-500">{isDragging ? 'Drop files here' : 'Click or drag PDF/image/DOCX'}</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Supports: PDF, PNG, JPG, TIFF, DOCX, TXT</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                <input type="checkbox" checked={useAgnes} onChange={e => setUseAgnes(e.target.checked)} className="rounded border-slate-300" />
+                Use Agnes OCR
+              </label>
+              {uploading && <span className="text-xs text-blue-500 animate-pulse">Processing...</span>}
+            </div>
+            {uploadError && <p className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded">{uploadError}</p>}
+          </div>
+
           <div className="flex-1 space-y-2 min-h-0">
             {filtered.map((c) => (
               <ContractCard
