@@ -44,37 +44,29 @@ function jevMeter(value: number): { label: string; color: string; bg: string } {
 
 // ── Highlighted text rendering ───────────────────────────────────────────────
 
-interface HighlightSpan {
-  text: string
-  severity: Severity | null
-}
-
-function buildHighlightSpans(text: string, highlights: Array<{ text: string; severity: Severity }>): HighlightSpan[] {
-  if (highlights.length === 0) return [{ text, severity: null }]
+// Search the FULL text for highlight terms, returning character-level ranges
+function buildHighlightRanges(
+  fullText: string,
+  highlights: Array<{ text: string; severity: Severity }>
+): Array<{ start: number; end: number; severity: Severity }> {
+  if (highlights.length === 0) return []
 
   // Sort by length descending so longer matches take priority
   const sorted = [...highlights].sort((a, b) => b.text.length - a.text.length)
-
   const ranges: Array<{ start: number; end: number; severity: Severity }> = []
 
-  let searchPos = 0
   for (const h of sorted) {
     const needleLower = h.text.toLowerCase()
-    let idx = searchPos
-    while (idx <= text.length - h.text.length) {
-      const pos = text.toLowerCase().indexOf(needleLower, idx)
+    let idx = 0
+    while (idx <= fullText.length - h.text.length) {
+      const pos = fullText.toLowerCase().indexOf(needleLower, idx)
       if (pos === -1) break
       ranges.push({ start: pos, end: pos + h.text.length, severity: h.severity })
       idx = pos + h.text.length
     }
-    // Move search position past this match to avoid double-counting
-    const firstMatch = text.toLowerCase().indexOf(needleLower, searchPos)
-    if (firstMatch !== -1) {
-      searchPos = firstMatch + h.text.length
-    }
   }
 
-  // Sort ranges by start position and merge overlaps
+  // Sort by start position and merge overlapping ranges
   ranges.sort((a, b) => a.start - b.start)
   const merged: Array<{ start: number; end: number; severity: Severity }> = []
   const sevOrder = { Critical: 3, High: 2, Medium: 1 }
@@ -89,36 +81,16 @@ function buildHighlightSpans(text: string, highlights: Array<{ text: string; sev
       merged.push(r)
     }
   }
-
-  // Build span list
-  const result: HighlightSpan[] = []
-  let pos = 0
-  for (const r of merged) {
-    if (r.start > pos) {
-      result.push({ text: text.slice(pos, r.start), severity: null })
-    }
-    result.push({ text: text.slice(r.start, r.end), severity: r.severity })
-    pos = r.end
-  }
-  if (pos < text.length) {
-    result.push({ text: text.slice(pos), severity: null })
-  }
-
-  return result
+  return merged
 }
 
 function HighlightedText({ text, highlights }: { text: string; highlights: Array<{ text: string; severity: Severity }> }) {
-  const spans = buildHighlightSpans(text, highlights)
-
+  const spans = buildHighlightSpansSimple(text, highlights)
   return (
     <span>
       {spans.map((span, i) =>
         span.severity ? (
-          <mark
-            key={i}
-            className={`px-0.5 rounded ${highlightBgColor[span.severity]}`}
-            title={`${span.severity} risk`}
-          >
+          <mark key={i} className={`px-0.5 rounded ${highlightBgColor[span.severity]}`} title={`${span.severity} risk`}>
             {span.text}
           </mark>
         ) : (
@@ -127,6 +99,88 @@ function HighlightedText({ text, highlights }: { text: string; highlights: Array
       )}
     </span>
   )
+}
+
+function buildHighlightSpansSimple(text: string, highlights: Array<{ text: string; severity: Severity }>): Array<{ text: string; severity: Severity | null }> {
+  if (highlights.length === 0) return [{ text, severity: null }]
+  const sorted = [...highlights].sort((a, b) => b.text.length - a.text.length)
+  const ranges: Array<{ start: number; end: number; severity: Severity }> = []
+  for (const h of sorted) {
+    const needleLower = h.text.toLowerCase()
+    let idx = 0
+    while (idx <= text.length - h.text.length) {
+      const pos = text.toLowerCase().indexOf(needleLower, idx)
+      if (pos === -1) break
+      ranges.push({ start: pos, end: pos + h.text.length, severity: h.severity })
+      idx = pos + h.text.length
+    }
+  }
+  ranges.sort((a, b) => a.start - b.start)
+  const merged: Array<{ start: number; end: number; severity: Severity }> = []
+  const sevOrder = { Critical: 3, High: 2, Medium: 1 }
+  for (const r of ranges) {
+    if (merged.length > 0 && r.start < merged[merged.length - 1].end) {
+      const last = merged[merged.length - 1]
+      if (sevOrder[r.severity] > sevOrder[last.severity]) last.severity = r.severity
+      last.end = Math.max(last.end, r.end)
+    } else {
+      merged.push(r)
+    }
+  }
+  const result: Array<{ text: string; severity: Severity | null }> = []
+  let pos = 0
+  for (const r of merged) {
+    if (r.start > pos) result.push({ text: text.slice(pos, r.start), severity: null })
+    result.push({ text: text.slice(r.start, r.end), severity: r.severity })
+    pos = r.end
+  }
+  if (pos < text.length) result.push({ text: text.slice(pos), severity: null })
+  return result
+}
+
+// Build per-line spans from full-text ranges (handles cross-line matches)
+function buildLineSpans(
+  lines: string[],
+  ranges: Array<{ start: number; end: number; severity: Severity }>
+): Array<Array<{ text: string; severity: Severity | null }>> {
+  if (ranges.length === 0) return lines.map((l) => [{ text: l, severity: null }])
+
+  // Compute cumulative character offset for each line start
+  const offsets: number[] = []
+  let offset = 0
+  for (const l of lines) {
+    offsets.push(offset)
+    offset += l.length + 1 // +1 for the newline
+  }
+
+  return lines.map((line, i) => {
+    const lineStart = offsets[i]
+    const lineEnd = lineStart + line.length
+    const result: Array<{ text: string; severity: Severity | null }> = []
+    let cursor = lineStart
+
+    for (const r of ranges) {
+      // Range starts before this line ends and ends after this line starts
+      if (r.end <= lineStart || r.start >= lineEnd) continue
+
+      // Text before this range
+      if (r.start > cursor) {
+        result.push({ text: lines[i].slice(cursor - lineStart, r.start - lineStart), severity: null })
+      }
+      // The range portion within this line
+      const segStart = Math.max(r.start, lineStart) - lineStart
+      const segEnd = Math.min(r.end, lineEnd) - lineStart
+      result.push({ text: lines[i].slice(segStart, segEnd), severity: r.severity })
+      cursor = r.end
+    }
+
+    // Remaining text after last range
+    if (cursor < lineEnd) {
+      result.push({ text: lines[i].slice(cursor - lineStart), severity: null })
+    }
+
+    return result.length > 0 ? result : [{ text: line, severity: null }]
+  })
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -279,15 +333,68 @@ function ContractTextPanel({
   text: string
   highlights: Array<{ text: string; severity: Severity }>
 }) {
+  // Full-text search with cross-line awareness
+  const ranges = buildHighlightRanges(text, highlights)
   const lines = text.split('\n')
+  
+  // Compute cumulative offsets for each line
+  const offsets: number[] = []
+  let offset = 0
+  for (const l of lines) {
+    offsets.push(offset)
+    offset += l.length + 1
+  }
+  
+  // Render each line with appropriate highlighting
   return (
     <div className="text-xs text-slate-700 font-mono leading-relaxed max-h-96 overflow-y-auto bg-slate-50 rounded-lg p-4 border border-slate-200 whitespace-pre-wrap">
       {lines.map((line, i) => {
-        if (line.startsWith('# ')) return <h2 key={i} className="text-sm font-bold text-slate-800 mt-3 mb-1"><HighlightedText text={line.slice(2)} highlights={highlights} /></h2>
-        if (line.startsWith('## ')) return <h3 key={i} className="text-xs font-bold text-slate-700 mt-2 mb-1"><HighlightedText text={line.slice(3)} highlights={highlights} /></h3>
-        if (line.startsWith('- ')) return <li key={i} className="ml-4 list-disc"><HighlightedText text={line.slice(2)} highlights={highlights} /></li>
+        const lineStart = offsets[i]
+        const lineEnd = lineStart + line.length
+        
+        // Collect segments for this line
+        const segments: Array<{ text: string; severity: Severity | null }> = []
+        let cursor = lineStart
+        
+        // Add header prefix if needed
+        if (line.startsWith('# ')) {
+          segments.push({ text: '# ', severity: null })
+        } else if (line.startsWith('## ')) {
+          segments.push({ text: '## ', severity: null })
+        } else if (line.startsWith('- ')) {
+          segments.push({ text: '- ', severity: null })
+        }
+        
+        const contentStart = line.startsWith('# ') ? 2 : line.startsWith('## ') ? 3 : line.startsWith('- ') ? 2 : 0
+        
+        for (const r of ranges) {
+          if (r.end <= lineStart || r.start >= lineEnd) continue
+          const segStart = Math.max(r.start, lineStart) - contentStart
+          const segEnd = Math.min(r.end, lineEnd) - contentStart
+          if (segStart > cursor - lineStart) {
+            segments.push({ text: line.slice(cursor - lineStart, segStart), severity: null })
+          }
+          segments.push({ text: line.slice(segStart, segEnd), severity: r.severity })
+          cursor = r.end
+        }
+        
+        if (cursor < lineEnd) {
+          segments.push({ text: line.slice(cursor - lineStart), severity: null })
+        }
+        
+        const content = segments.map((s, j) => 
+          s.severity ? (
+            <mark key={j} className={`px-0.5 rounded ${highlightBgColor[s.severity]}`} title={`${s.severity} risk`}>{s.text}</mark>
+          ) : (
+            <span key={j}>{s.text}</span>
+          )
+        )
+        
         if (line.trim() === '') return <div key={i} />
-        return <p key={i} className="mb-0.5"><HighlightedText text={line} highlights={highlights} /></p>
+        if (line.startsWith('# ')) return <h2 key={i} className="text-sm font-bold text-slate-800 mt-3 mb-1">{content}</h2>
+        if (line.startsWith('## ')) return <h3 key={i} className="text-xs font-bold text-slate-700 mt-2 mb-1">{content}</h3>
+        if (line.startsWith('- ')) return <li key={i} className="ml-4 list-disc">{content}</li>
+        return <p key={i} className="mb-0.5">{content}</p>
       })}
     </div>
   )

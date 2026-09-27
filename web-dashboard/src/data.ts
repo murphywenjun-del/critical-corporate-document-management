@@ -188,8 +188,7 @@ export const contracts: ContractDoc[] = [
     ],
     textHighlights: [
       { text: "February 14, 2022", severity: "High" },
-      { text: "February 14, 2024", severity: "High" },
-      { text: "two (2) years", severity: "High" },
+      { text: "period of two", severity: "High" },
       { text: "Vice President, Operations", severity: "Medium" },
       { text: "Vice President, Procurement", severity: "Medium" },
     ],
