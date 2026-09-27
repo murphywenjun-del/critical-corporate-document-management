@@ -281,7 +281,15 @@ function ContractTextPanel({
         
         const content = segments.map((s, j) =>
           s.severity ? (
-            <mark key={j} className={`px-0.5 rounded ${highlightBgColor[s.severity]}`} title={`${s.severity} risk`}>{s.text}</mark>
+            <mark
+              key={j}
+              className={`px-0.5 rounded cursor-pointer hover:opacity-80 ${highlightBgColor[s.severity]}`}
+              onClick={() => {
+                const hl = highlights.find(h => h.text === s.text)
+                if (hl) setSelectedHighlight({ text: s.text, severity: s.severity, reason: hl.reason, lineIdx: i })
+              }}
+              title={`Click to see why this was flagged`}
+            >{s.text}</mark>
           ) : (
             <span key={j}>{s.text}</span>
           )
@@ -293,6 +301,33 @@ function ContractTextPanel({
         if (line.startsWith('- ')) return <li key={i} className="ml-4 list-disc">{content}</li>
         return <p key={i} className="mb-0.5">{content}</p>
       })}
+      {/* Highlight detail panel */}
+      {selectedHighlight && (
+        <div className="mt-3 p-3 rounded-lg border-2 border-blue-200 bg-blue-50">
+          <div className="flex items-start gap-3">
+            <span className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${
+              selectedHighlight.severity === 'Critical' ? 'bg-red-500' :
+              selectedHighlight.severity === 'High' ? 'bg-orange-500' : 'bg-yellow-500'
+            }`} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-bold uppercase text-slate-500">{selectedHighlight.severity}</span>
+                <span className="text-xs font-mono text-slate-400">Line {selectedHighlight.lineIdx + 1}</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setSelectedHighlight(null) }}
+                  className="ml-auto text-slate-400 hover:text-slate-600 text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+              <p className="text-xs font-semibold text-slate-700 mb-1">
+                “<span className="italic">{selectedHighlight.text}</span>”
+              </p>
+              <p className="text-xs text-slate-600">{selectedHighlight.reason}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -305,6 +340,7 @@ export default function App() {
   const [filterType, setFilterType] = useState<string>('All')
   const [filterRisk, setFilterRisk] = useState<string>('All')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [selectedHighlight, setSelectedHighlight] = useState<{ text: string; severity: Severity; reason: string; lineIdx: number } | null>(null)
 
   const types = ['All', ...Array.from(new Set(contracts.map((c) => c.type)))]
   const risks = ['All', 'Low', 'Critical']

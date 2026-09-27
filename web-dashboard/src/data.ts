@@ -9,6 +9,7 @@ interface Flag {
 interface TextHighlight {
   text: string
   severity: 'Critical' | 'High' | 'Medium'
+  reason: string
 }
 
 interface ContractDoc {
@@ -90,13 +91,13 @@ export const contracts: ContractDoc[] = [
       { severity: "Medium", field: "termination_conv", flag_if: "Convenience termination notice period of 90 days is excessive (should be ≤60)" },
     ],
     textHighlights: [
-      { text: "Robert Thompson", severity: "Critical" },
-      { text: "Executive Director", severity: "Critical" },
-      { text: "Dr. Amanda Lee", severity: "Critical" },
-      { text: "Chief Medical Officer", severity: "Critical" },
-      { text: "not intended to create legally binding obligations", severity: "High" },
-      { text: "shall be binding", severity: "High" },
-      { text: "ninety (90) days", severity: "Medium" },
+      { text: "Robert Thompson", severity: "Critical", reason: "Signatory is Executive Director, not an authorized VP — contract cannot legally bind Southlake" },
+      { text: "Executive Director", severity: "Critical", reason: "Only VPs are authorized to sign binding documents per Southlake policy" },
+      { text: "Dr. Amanda Lee", severity: "Critical", reason: "Signatory is Chief Medical Officer, not an authorized VP — missing required second VP signature" },
+      { text: "Chief Medical Officer", severity: "Critical", reason: "CMO is not on the authorized signatory list for corporate contracts" },
+      { text: "not intended to create legally binding obligations", severity: "High", reason: "Non-binding language creates legal ambiguity about enforceability" },
+      { text: "shall be binding", severity: "High", reason: "Conflicting binding language — same document claims both binding and non-binding" },
+      { text: "ninety (90) days", severity: "Medium", reason: "Termination notice period of 90 days is excessive; standard is ≤60 days" },
     ],
     extractedFields: [
       { label: "Parties", value: "Southlake Health, MedSoft Solutions Inc.", status: "✓" },
@@ -127,10 +128,10 @@ export const contracts: ContractDoc[] = [
       { severity: "Medium", field: "data_minimization", flag_if: "Missing data minimization principle" },
     ],
     textHighlights: [
-      { text: "December 31, 2025", severity: "High" },
-      { text: "not be subject to a monetary cap", severity: "High" },
-      { text: "ninety (90) days", severity: "Medium" },
-      { text: "five percent (5%)", severity: "Medium" },
+      { text: "December 31, 2025", severity: "High", reason: "Contract expired 270+ days ago — operating without valid agreement" },
+      { text: "not be subject to a monetary cap", severity: "High", reason: "Uncapped indemnity creates unlimited financial liability for Southlake" },
+      { text: "ninety (90) days", severity: "Medium", reason: "Convenience termination notice period of 90 days is excessive" },
+      { text: "five percent (5%)", severity: "Medium", reason: "Annual fee increase of 5% or CPI without an overall cap — costs escalate indefinitely" },
     ],
     extractedFields: [
       { label: "Parties", value: "Southlake Health, University Health Research Institute", status: "✓" },
@@ -187,10 +188,10 @@ export const contracts: ContractDoc[] = [
       { severity: "High", field: "indemnity_clause", flag_if: "Missing indemnity clause entirely" },
     ],
     textHighlights: [
-      { text: "February 14, 2022", severity: "High" },
-      { text: "period of two", severity: "High" },
-      { text: "Vice President, Operations", severity: "Medium" },
-      { text: "Vice President, Procurement", severity: "Medium" },
+      { text: "February 14, 2022", severity: "High", reason: "Effective date — contract has been expired for ~956 days with no renewal documented" },
+      { text: "period of two", severity: "High", reason: "Two-year term ended February 14, 2024 — agreement is lapsed" },
+      { text: "Vice President, Operations", severity: "Medium", reason: "VP Ops signed but no second VP signature on file for this agreement" },
+      { text: "Vice President, Procurement", severity: "Medium", reason: "VP Procurement signed but procurement authorization is separate from VP signing authority" },
     ],
     extractedFields: [
       { label: "Parties", value: "Southlake Health, SecurePro Services Inc.", status: "✓" },
@@ -219,10 +220,10 @@ export const contracts: ContractDoc[] = [
       { severity: "High", field: "conflicting_finance", flag_if: "Conflicting amounts for same financial tag: $100,000 vs $150,000" },
     ],
     textHighlights: [
-      { text: "March 31, 2025", severity: "High" },
-      { text: "April 1, 2024", severity: "Medium" },
-      { text: "INSURANCE", severity: "Medium" },
-      { text: "$2,000,000 per occurrence", severity: "Medium" },
+      { text: "March 31, 2025", severity: "High", reason: "Contract expired 545+ days ago — security services currently operating under lapsed agreement" },
+      { text: "April 1, 2024", severity: "Medium", reason: "Original effective date — over a year since inception with no formal renewal" },
+      { text: "INSURANCE", severity: "Medium", reason: "Insurance requirement present but no indemnification clause exists in this agreement" },
+      { text: "$2,000,000 per occurrence", severity: "Medium", reason: "Insurance coverage is specified but there is no reciprocal indemnity protection" },
     ],
     extractedFields: [
       { label: "Version 1", value: "Effective Aug 1, 2023 · $100K/year · 2-year term · VP+VP signed · Non-binding", status: "✓" },
@@ -248,17 +249,17 @@ export const contracts: ContractDoc[] = [
       { severity: "Critical", field: "missing_fields", flag_if: "Cannot verify key clauses due to scan quality" },
     ],
     textHighlights: [
-      { text: "VERSION 1", severity: "High" },
-      { text: "VERSION 2", severity: "High" },
-      { text: "$100,000/year", severity: "High" },
-      { text: "$150,000/year", severity: "High" },
-      { text: "not legally binding", severity: "High" },
-      { text: "supersedes all prior understandings", severity: "High" },
-      { text: "legally binding agreement", severity: "High" },
-      { text: "August 1, 2023", severity: "Medium" },
-      { text: "October 15, 2023", severity: "Medium" },
-      { text: "July 31, 2025", severity: "Medium" },
-      { text: "October 14, 2026", severity: "Medium" },
+      { text: "VERSION 1", severity: "High", reason: "First version of this agreement — conflicting terms exist between v1 and v2" },
+      { text: "VERSION 2", severity: "High", reason: "Second version supersedes v1 but both remain in circulation creating legal ambiguity" },
+      { text: "$100,000/year", severity: "High", reason: "Version 1 financial commitment — conflicts with Version 2 amount of $150,000/year" },
+      { text: "$150,000/year", severity: "High", reason: "Version 2 financial commitment — $50K/year increase over Version 1 creates billing ambiguity" },
+      { text: "not legally binding", severity: "High", reason: "Version 1 states non-binding — creates uncertainty about enforceability of obligations" },
+      { text: "supersedes all prior understandings", severity: "High", reason: "Version 2 claims supersession but both versions remain active in the document repository" },
+      { text: "legally binding agreement", severity: "High", reason: "Version 2 is partially binding — contradicts Version 1 which is non-binding" },
+      { text: "August 1, 2023", severity: "Medium", reason: "Version 1 effective date — over 2 years ago with no clear resolution of conflicting versions" },
+      { text: "October 15, 2023", severity: "Medium", reason: "Version 2 effective date — only 2.5 months after v1, suggesting rushed replacement" },
+      { text: "July 31, 2025", severity: "Medium", reason: "Version 1 expiry — contract has been operating in a legal limbo since expiration" },
+      { text: "October 14, 2026", severity: "Medium", reason: "Version 2 expiry — approaching; dual-version uncertainty remains unresolved" },
     ],
     extractedFields: [
       { label: "Parties", value: "Southlake Health (confirmed), vendor name obscured", status: "?" },
