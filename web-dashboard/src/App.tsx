@@ -206,6 +206,7 @@ export default function App() {
   const [contractText, setContractText] = useState('')
   const [filterType, setFilterType] = useState<string>('All')
   const [filterRisk, setFilterRisk] = useState<string>('All')
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const types = ['All', ...Array.from(new Set(contracts.map((c) => c.type)))]
   const risks = ['All', 'Low', 'Critical']
@@ -233,39 +234,89 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="max-w-screen-2xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-slate-800">Southlake Health — Document Risk Dashboard</h1>
-            <p className="text-xs text-slate-500 mt-0.5">AI-assisted contract compliance &amp; risk assessment prototype</p>
+      <header className="bg-white border-b border-slate-200 px-4 py-3 sm:px-6 sm:py-4">
+        <div className="max-w-screen-2xl mx-auto flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-lg font-bold text-slate-800 truncate">Southlake Health — Document Risk Dashboard</h1>
+            <p className="text-xs text-slate-500 mt-0.5 hidden sm:block">AI-assisted contract compliance &amp; risk assessment prototype</p>
           </div>
-          <div className="flex items-center gap-6 text-xs">
+          {/* Mobile menu button */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="lg:hidden p-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+            aria-label="Toggle menu"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              {mobileMenuOpen
+                ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              }
+            </svg>
+          </button>
+          {/* Desktop stats */}
+          <div className="hidden sm:flex items-center gap-6 text-xs">
             <div className="text-center">
               <div className="text-2xl font-bold text-slate-800">{contracts.length}</div>
-              <div className="text-slate-500">Contracts Reviewed</div>
+              <div className="text-slate-500">Contracts</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-red-500">{criticalCount}</div>
-              <div className="text-slate-500">Critical Risk</div>
+              <div className="text-slate-500">Critical</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-bold text-orange-500">{totalFlags}</div>
-              <div className="text-slate-500">Flags Raised</div>
+              <div className="text-slate-500">Flags</div>
             </div>
           </div>
         </div>
       </header>
 
+      {/* Mobile stats bar */}
+      <div className="sm:hidden bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-around text-xs">
+        <div className="text-center">
+          <div className="text-lg font-bold text-slate-800">{contracts.length}</div>
+          <div className="text-slate-500">Contracts</div>
+        </div>
+        <div className="text-center">
+          <div className="text-lg font-bold text-red-500">{criticalCount}</div>
+          <div className="text-slate-500">Critical</div>
+        </div>
+        <div className="text-center">
+          <div className="text-lg font-bold text-orange-500">{totalFlags}</div>
+          <div className="text-slate-500">Flags</div>
+        </div>
+      </div>
+
       {/* Pipeline */}
-      <div className="bg-white border-b border-slate-200 px-6 py-3">
+      <div className="bg-white border-b border-slate-200 px-4 py-3 sm:px-6 sm:py-3">
         <div className="max-w-screen-2xl mx-auto">
           <PipelineDiagram />
         </div>
       </div>
 
-      <div className="max-w-screen-2xl mx-auto flex gap-0">
-        {/* Left: Contract List */}
-        <aside className="w-80 shrink-0 bg-white border-r border-slate-200 p-4 flex flex-col gap-4 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 140px)' }}>
+      <div className="max-w-screen-2xl mx-auto flex">
+        {/* Left: Contract List — desktop sidebar / mobile overlay */}
+        <aside
+          className={`
+            fixed inset-y-0 left-0 z-40 w-80 bg-white border-r border-slate-200 flex flex-col gap-4 p-4 overflow-y-auto
+            transform transition-transform duration-200 ease-in-out
+            lg:relative lg:transform-none lg:w-80 lg:flex lg:visible
+            ${mobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'}
+          `}
+          style={{ top: '112px', maxHeight: 'calc(100vh - 112px)' }}
+        >
+          {/* Overlay backdrop for mobile */}
+          {mobileMenuOpen && (
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className="lg:hidden absolute top-3 right-3 p-1 rounded text-slate-400 hover:text-slate-600"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+
           <div>
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Filter by Type</p>
             <div className="flex flex-wrap gap-1.5">
@@ -308,7 +359,7 @@ export default function App() {
                 key={c.num}
                 c={c}
                 selected={selected?.num === c.num}
-                onClick={() => setSelected(c)}
+                onClick={() => { setSelected(c); setMobileMenuOpen(false) }}
               />
             ))}
           </div>
@@ -317,10 +368,18 @@ export default function App() {
           </p>
         </aside>
 
+        {/* Overlay backdrop for mobile sidebar */}
+        {mobileMenuOpen && (
+          <div
+            className="fixed inset-0 z-30 bg-black/20 lg:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        )}
+
         {/* Right: Detail Panel */}
-        <main className="flex-1 overflow-y-auto p-6" style={{ maxHeight: 'calc(100vh - 140px)' }}>
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6">
           {!selected ? (
-            <div className="flex flex-col items-center justify-center h-full text-center text-slate-400 gap-3">
+            <div className="flex flex-col items-center justify-center h-96 text-center text-slate-400 gap-3">
               <svg className="w-16 h-16 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
@@ -329,19 +388,19 @@ export default function App() {
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Contract header */}
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
+              {/* Contract header — responsive: stacks on mobile */}
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="text-xs text-slate-400">Contract #{selected.num}</span>
                     <span className="text-xs font-medium text-slate-500 bg-slate-100 rounded px-1.5 py-0.5">{selected.type}</span>
                   </div>
-                  <h2 className="text-xl font-bold text-slate-800">{selected.displayName}</h2>
-                  <p className="text-sm text-slate-500 mt-1 max-w-2xl">{selected.summary}</p>
+                  <h2 className="text-lg sm:text-xl font-bold text-slate-800">{selected.displayName}</h2>
+                  <p className="text-sm text-slate-500 mt-1">{selected.summary}</p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right">
-                    <div className="text-3xl font-bold text-slate-800">{selected.riskScore.toFixed(1)}</div>
+                    <div className="text-2xl sm:text-3xl font-bold text-slate-800">{selected.riskScore.toFixed(1)}</div>
                     <div className="text-xs text-slate-500">Risk Score</div>
                   </div>
                   <span className={`text-sm font-bold px-3 py-1.5 rounded-full ${riskLevelColor[selected.riskLevel as RiskLevel]}`}>
@@ -353,8 +412,8 @@ export default function App() {
               {/* Divider */}
               <div className="h-px bg-slate-200" />
 
-              {/* Three-column layout */}
-              <div className="grid grid-cols-3 gap-6">
+              {/* Three-column layout — stacks on mobile */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 {/* Flags */}
                 <div>
                   <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 flex items-center gap-2">
