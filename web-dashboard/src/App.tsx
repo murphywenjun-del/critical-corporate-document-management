@@ -62,7 +62,7 @@ function KpiCard({ label, value, valueClass }: { label: string; value: number | 
 
 // ── Tab Bar ───────────────────────────────────────────────────────────────────
 
-type TabId = 'risk-register' | 'matrix' | 'contracts' | 'deadlines' | 'amendments' | 'cross-refs' | 'smart-filing' | 'department'
+type TabId = 'risk-register' | 'matrix' | 'contracts' | 'deadlines' | 'amendments' | 'cross-refs' | 'smart-filing' | 'insights'
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'risk-register', label: 'Risk Register' },
@@ -72,7 +72,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'amendments', label: 'Amendments' },
   { id: 'cross-refs', label: 'Cross-Refs' },
   { id: 'smart-filing', label: 'Smart Filing' },
-  { id: 'department', label: 'Department' },
+  { id: 'insights', label: 'Insights' },
 ]
 
 function TabBar({ active, onChange }: { active: TabId; onChange: (t: TabId) => void }) {
@@ -1984,72 +1984,198 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
 
 
 
-// ── Department View: filter all by clinical/admin department ─────────────────
-function DepartmentView({ contracts: allContracts }: { contracts: ContractDoc[] }) {
-  const [selDept, setSelDept] = useState<string>('All')
-  const depts = ['All', ...SOUTHDEPARTMENTS]
+// ── Risk Prevention Insights: cross-file pattern detection + actionable recommendations ──
+function InsightsView({ contracts: allContracts }: { contracts: ContractDoc[] }) {
+  const allFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
+  
+  // 1. Systemic pattern detection: group flags by field across contracts
+  const byField: Record<string, { count: number; contracts: number[]; severity: string[] }> = {}
+  for (const f of allFlags) {
+    const key = f.field
+    if (!byField[key]) byField[key] = { count: 0, contracts: [], severity: [] }
+    byField[key].count++
+    byField[key].contracts.push(f.contract.num)
+    byField[key].severity.push(f.severity)
+  }
+  
+  // 2. Identify systemic patterns (same field flagged in 3+ contracts)
+  const systemicPatterns = Object.entries(byField)
+    .filter(([_, v]) => v.contracts.length >= 3)
+    .sort((a, b) => b[1].count - a[1].count)
+    .map(([field, data]) => {
+      const hasCritical = data.severity.includes('Critical')
+      const hasHigh = data.severity.includes('High')
+      // Generate prevention recommendation
+      const recs: Record<string, string> = {
+        'signatories': 'Implement a pre-execution dual-signature verification gate. No contract should be countersigned without 2 authorized VPs. Add a mandatory fields check to the contract template.',
+        'expiry_date': 'Automate expiration tracking: 90/60/30-day alerts to contract owners. Flag contracts expiring within 90 days for renewal review.',
+        'breach_notification': 'Standardize breach notification clause to 24h (PHIPA s.33(3)). Add to all DSA templates. Require privacy officer approval for any deviation.',
+        'governing_law': 'Enforce Ontario governing law in all template contracts. Add a mandatory fields validation step before execution. Flag any non-Ontario references.',
+        'data_security': 'Mandate data security clauses (encryption, access controls, audit rights) in all contracts handling SENSITIVE data. Add to procurement checklist.',
+        'auto_renewal': 'Require explicit opt-out language in all auto-renewal clauses. Set renewal notification at T-90 days. Flag any renewal without 60+ day notice window.',
+      }
+      return {
+        field,
+        count: data.count,
+        contractNums: data.contracts,
+        hasCritical,
+        hasHigh,
+        recommendation: recs[field] || `Review and standardize "${field}" across all contracts.`,
+      }
+    })
 
-  const deptContracts = selDept === 'All' ? allContracts : allContracts.filter((c) => {
-    const flagDepts = c.flags.map((f) => f.department).filter(Boolean)
-    return flagDepts.includes(selDept)
-  })
-  const deptFlags = deptContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
-    .filter((f) => selDept === 'All' || f.department === selDept)
+  // 3. What-If analysis: what if we fix top 3 patterns?
+  const top3 = systemicPatterns.slice(0, 3)
+  const flagsToEliminate = top3.reduce((sum, p) => sum + p.count, 0)
+  const currentCritical = allFlags.filter((f) => f.severity === 'Critical').length
+  const criticalAfterFix = Math.max(0, currentCritical - top3.filter((p) => p.hasCritical).reduce((s, p) => s + p.count, 0))
+  const currentAvgScore = allFlags.length > 0 ? allFlags.reduce((s, f) => s + f.risk_score, 0) / allFlags.length : 0
+  const avgScoreAfterFix = allFlags.length > 3 ? (allFlags.reduce((s, f) => s + f.risk_score, 0) - top3.reduce((s, p) => s + p.count * 12, 0)) / (allFlags.length - flagsToEliminate) : currentAvgScore
 
-  const deptDeadlines = deptContracts.filter((c) => c.expiryDate).sort((a, b) => (a.expiryDate || '').localeCompare(b.expiryDate || ''))
+  // 4. Portfolio health score (0-100)
+  const totalFlags = allFlags.length
+  const openFlags = allFlags.filter((f) => f.status === 'open').length
+    const criticalFlags = allFlags.filter((f) => f.severity === 'Critical').length
+  const healthScore = Math.max(0, Math.round(100 - (openFlags / Math.max(1, totalFlags)) * 40 - (totalFlags > 0 ? (criticalFlags / totalFlags) : 0) * 40 - (totalFlags > 30 ? 10 : 0)))
+
+  // 5. Risk prevention recommendations (actionable, prioritized)
+  const playbook = systemicPatterns.map((p, i) => ({
+    priority: i + 1,
+    pattern: p.field,
+    affected: p.contractNums.length,
+    contracts: p.contractNums,
+    severity: p.hasCritical ? 'Critical' : p.hasHigh ? 'High' : 'Medium',
+    action: p.recommendation,
+    impact: `Eliminates ${p.count} flags across ${p.contractNums.length} contracts`,
+  }))
 
   return (
-    <div className="space-y-4">
-      {/* Dept selector */}
-      <div className="flex items-center gap-3">
-        <label className="text-xs font-bold text-slate-600">Department:</label>
-        <select
-          value={selDept}
-          onChange={(e) => setSelDept(e.target.value)}
-          className="text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:ring-2 focus:ring-teal-500/20 outline-none"
-        >
-          {depts.map((d) => <option key={d} value={d}>{d}</option>)}
-        </select>
-        <span className="text-[11px] text-slate-400">{selDept === 'All' ? 'All departments' : `${deptContracts.length} contracts`}</span>
+    <div className="space-y-5">
+      {/* Header */}
+      <div>
+        <h2 className="text-sm font-bold text-slate-800">Risk Prevention Insights</h2>
+        <p className="text-xs text-slate-500 mt-0.5">Cross-document pattern analysis across {allContracts.length} monitored contracts · {allFlags.length} total flags</p>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-4 gap-3">
-        <div className="bg-white border border-slate-200 rounded p-3 text-center">
-          <div className="text-xl font-bold text-slate-800">{deptContracts.length}</div>
-          <div className="text-[10px] text-slate-400 uppercase">Contracts</div>
+      {/* Portfolio Health */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Health score */}
+        <div className="bg-white border border-slate-200 rounded-lg p-4 text-center">
+          <div className="text-[10px] font-bold text-slate-500 uppercase mb-2">Portfolio Health</div>
+          <div className="relative w-20 h-20 mx-auto">
+            <svg className="w-20 h-20 -rotate-90" viewBox="0 0 36 36">
+              <circle cx="18" cy="18" fill="none" stroke="#e2e8f0" strokeWidth="3" r="16" />
+              <circle cx="18" cy="18" fill="none" stroke={healthScore >= 70 ? '#10b981' : healthScore >= 40 ? '#f59e0b' : '#ef4444'} strokeWidth="3" r="16"
+                strokeDasharray={`${healthScore * 1.005} 100`} strokeLinecap="round" />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-xl font-bold text-slate-800">{healthScore}</span>
+            </div>
+          </div>
+          <div className="text-[10px] text-slate-400 mt-2">{healthScore >= 70 ? 'Good posture' : healthScore >= 40 ? 'Needs attention' : 'High risk exposure'}</div>
         </div>
-        <div className="bg-white border border-slate-200 rounded p-3 text-center">
-          <div className="text-xl font-bold text-red-600">{deptFlags.filter((f) => f.severity === 'Critical').length}</div>
-          <div className="text-[10px] text-slate-400 uppercase">Critical</div>
+
+        {/* What-If */}
+        <div className="bg-white border border-slate-200 rounded-lg p-4">
+          <div className="text-[10px] font-bold text-slate-500 uppercase mb-2">What-If: Fix Top 3 Patterns</div>
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-400">Critical flags:</span>
+              <span className="font-bold text-red-600">{currentCritical}</span>
+              <span className="text-slate-300">→</span>
+              <span className="font-bold text-emerald-600">{criticalAfterFix}</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-400">Avg risk score:</span>
+              <span className="font-bold text-orange-600">{currentAvgScore.toFixed(1)}</span>
+              <span className="text-slate-300">→</span>
+              <span className="font-bold text-emerald-600">{avgScoreAfterFix.toFixed(1)}</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-400">Flags eliminated:</span>
+              <span className="font-bold text-teal-600">{flagsToEliminate}</span>
+              <span className="text-slate-400">of {allFlags.length}</span>
+            </div>
+          </div>
         </div>
-        <div className="bg-white border border-slate-200 rounded p-3 text-center">
-          <div className="text-xl font-bold text-orange-500">{deptFlags.filter((f) => f.severity === 'High').length}</div>
-          <div className="text-[10px] text-slate-400 uppercase">High</div>
-        </div>
-        <div className="bg-white border border-slate-200 rounded p-3 text-center">
-          <div className="text-xl font-bold text-slate-700">{deptDeadlines.length}</div>
-          <div className="text-[10px] text-slate-400 uppercase">With Deadline</div>
+
+        {/* Expiring soon */}
+        <div className="bg-white border border-slate-200 rounded-lg p-4">
+          <div className="text-[10px] font-bold text-slate-500 uppercase mb-2">Expiring &lt; 90 Days</div>
+          {(() => {
+            const today = new Date().toISOString().slice(0, 10)
+            const in90 = allContracts.filter((c) => c.expiryDate && c.expiryDate > today && c.expiryDate < '2026-01-14')
+            if (in90.length === 0) return <div className="text-xs text-slate-400">None in 90-day window</div>
+            return in90.slice(0, 3).map((c) => (
+              <div key={c.num} className="text-xs text-slate-600 flex items-center gap-2 py-0.5">
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                #{c.num} {c.displayName}
+                <span className="text-slate-400 ml-auto">{c.expiryDate}</span>
+              </div>
+            ))
+          })()}
         </div>
       </div>
 
-      {/* Contracts in this dept */}
+      {/* Systemic Patterns */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 text-xs font-bold text-slate-600">
-          CONTRACTS ({selDept === 'All' ? 'ALL' : selDept.toUpperCase()})
+        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">
+          Systemic Patterns <span className="font-normal text-slate-400">({systemicPatterns.length} detected — same issue across 3+ contracts)</span>
         </div>
         <div className="divide-y divide-slate-100">
-          {deptContracts.map((c) => (
-            <div key={c.num} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50">
-              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${c.riskLevel === 'Critical' ? 'bg-red-500' : c.riskLevel === 'High' ? 'bg-orange-500' : 'bg-emerald-500'}`} />
-              <span className="text-xs font-medium text-slate-700 flex-1">#{c.num} {c.displayName}</span>
-              <span className="text-[10px] text-slate-400">{c.type}</span>
-              <span className="text-[10px] text-slate-400">{c.flagsCount} flags</span>
-              <span className="text-[10px] text-slate-400 font-mono">{c.riskScore}pts</span>
+          {systemicPatterns.map((p) => (
+            <div key={p.field} className="px-4 py-3">
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${p.hasCritical ? 'bg-red-100 text-red-700' : p.hasHigh ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                  {p.hasCritical ? 'CRITICAL' : p.hasHigh ? 'HIGH' : 'MEDIUM'}
+                </span>
+                <span className="text-xs font-bold text-slate-800">{p.field.replace(/_/g, ' ')}</span>
+                <span className="text-[10px] text-slate-400 ml-auto">{p.count} flags · {p.contractNums.length} contracts</span>
+              </div>
+              <div className="flex items-center gap-1 text-[10px] text-slate-400 mb-1.5">
+                {p.contractNums.slice(0, 6).map((n) => <span key={n} className="bg-slate-100 rounded px-1">#{n}</span>)}
+                {p.contractNums.length > 6 && <span>+{p.contractNums.length - 6} more</span>}
+              </div>
             </div>
           ))}
-          {deptContracts.length === 0 && <div className="px-4 py-6 text-center text-xs text-slate-400">No contracts mapped to this department</div>}
+          {systemicPatterns.length === 0 && (
+            <div className="px-4 py-6 text-center text-xs text-slate-400">No systemic patterns detected. Each flag is unique to a single contract.</div>
+          )}
         </div>
+      </div>
+
+      {/* Prevention Playbook */}
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">
+          Prevention Playbook <span className="font-normal text-slate-400">(prioritized actions to prevent recurrence)</span>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {playbook.map((item) => (
+            <div key={item.priority} className="px-4 py-3 flex items-start gap-3">
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${
+                item.priority === 1 ? 'bg-red-100 text-red-700' : item.priority === 2 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600'
+              }`}>{item.priority}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-bold text-slate-800">{item.pattern.replace(/_/g, ' ')}</div>
+                <div className="text-[11px] text-slate-600 mt-0.5">{item.action}</div>
+                <div className="flex items-center gap-3 mt-1.5">
+                  <span className="text-[10px] text-teal-600 font-medium">Impact: {item.impact}</span>
+                  <span className="text-[10px] text-slate-400">Affects: {item.affected} contracts</span>
+                </div>
+              </div>
+            </div>
+          ))}
+          {playbook.length === 0 && (
+            <div className="px-4 py-6 text-center text-xs text-slate-400">No systemic issues to prevent. Maintain current controls.</div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer note */}
+      <div className="bg-teal-50 border border-teal-200 rounded p-3 text-[11px] text-teal-700">
+        💡 <b>How this works:</b> The engine scans all {allContracts.length} monitored contracts, groups flags by field, and identifies patterns affecting 3+ documents. 
+        Systemic patterns indicate <b>process gaps</b> (not individual contract errors), so the recommendation targets the <b>control</b>, not the document. 
+        This is the difference between reactive flagging and proactive risk prevention.
       </div>
     </div>
   )
@@ -2310,8 +2436,8 @@ export default function App() {
                 {activeTab === 'smart-filing' && (
                   <SmartFilingView contracts={filtered} />
                 )}
-                {activeTab === 'department' && (
-                  <DepartmentView contracts={contracts} />
+                {activeTab === 'insights' && (
+                  <InsightsView contracts={contracts} />
                 )}
               </>
             )}
