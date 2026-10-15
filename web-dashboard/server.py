@@ -280,7 +280,7 @@ def get_results():
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...), use_agnes: bool = True):
     """Upload a contract file (PDF, image, DOCX) and run risk analysis."""
-    ext = Path(file.filename).suffix.lower()
+    ext = Path(file.filename or "unknown").suffix.lower()
     allowed = {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".docx", ".doc", ".txt"}
     if ext not in allowed:
         raise HTTPException(400, f"Unsupported file type: {ext}. Allowed: {', '.join(sorted(allowed))}")
@@ -302,7 +302,7 @@ async def batch_upload(files: List[UploadFile] = File(...)):
     results = []
     for file in files:
         try:
-            ext = Path(file.filename).suffix.lower()
+            ext = Path(file.filename or "unknown").suffix.lower()
             if ext not in {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".docx", ".doc", ".txt"}:
                 results.append({"filename": file.filename, "error": f"Unsupported type: {ext}"})
                 continue
@@ -331,6 +331,113 @@ def get_config():
         "total_results": len(list(RESULTS_DIR.glob("*.json"))),
         "supported_formats": [".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".docx", ".txt"],
     }
+
+# ── Smart Filing: folder tree + auto-file ───────────────────────────────────
+ARCHIVE_DIR = BASE_DIR / "web-dashboard" / "data" / "archive"
+
+@app.get("/api/folder-tree")
+def get_folder_tree():
+    """Return the real on-disk folder structure with files."""
+    tree = {}
+    if not ARCHIVE_DIR.exists():
+        return {"root": "data/archive", "categories": tree}
+    for cat_dir in sorted(ARCHIVE_DIR.iterdir()):
+        if not cat_dir.is_dir():
+            continue
+        cat_files = sorted([f.name for f in cat_dir.iterdir() if f.is_file()])
+        sub_dir = {}
+        for sub in sorted(cat_dir.iterdir()):
+            if sub.is_dir():
+                sub_files = sorted([f.name for f in sub.iterdir() if f.is_file()])
+                sub_dir[sub.name] = sub_files
+        tree[cat_dir.name] = {"files": cat_files, "subcategories": sub_dir}
+    return {"root": "data/archive", "categories": tree}
+
+@app.post("/api/file-doc")
+def file_doc(filename: str, category: str, subcategory: str = "General"):
+    """Move an uploaded file into the correct archive folder on disk."""
+    # Find the file in uploads/
+    safe_name = re.sub(r'[^\w\-.]', '_', filename)
+    # Search in uploads dir
+    found = None
+    for f in (BASE_DIR / "web-dashboard" / "uploads").glob(f"*{safe_name}*"):
+        found = f
+        break
+    if not found:
+        # Also check if already in archive
+        for f in ARCHIVE_DIR.rglob(safe_name):
+            return {"status": "already_filed", "path": str(f.relative_to(BASE_DIR))}
+    if not found:
+        return {"error": f"File not found: {filename}"}
+
+    # Build target path
+    target_dir = ARCHIVE_DIR / category / subcategory
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / found.name
+
+    # Move the file
+    import shutil
+    shutil.move(str(found), str(target_path))
+
+    return {
+        "status": "filed",
+        "filename": found.name,
+        "category": category,
+        "subcategory": subcategory,
+        "path": f"data/archive/{category}/{subcategory}/{found.name}",
+    }
+
+@app.post("/api/classify-and-file")
+async def classify_and_file(files: List[UploadFile] = File(...)):
+    """Upload files, run AI classification, and auto-file into the correct folder."""
+    results = []
+    for file in files:
+        try:
+            ext = Path(file.filename or "unknown").suffix.lower()
+            if ext not in {".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".docx", ".doc", ".txt", ".md"}:
+                results.append({"filename": file.filename, "error": f"Unsupported: {ext}"})
+                continue
+
+            # Save temporarily
+            save_path = UPLOADS_DIR / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{file.filename}"
+            content = await file.read()
+            with open(save_path, "wb") as f:
+                f.write(content)
+
+            # Process (OCR + rules)
+            result = process_file(str(save_path))
+            if "error" in result:
+                results.append({"filename": file.filename, "error": result["error"]})
+                continue
+
+            # Determine folder from top-severity flag
+            flags = result.get("flags", [])
+            if flags:
+                top_flag = flags[0]  # already sorted by severity in engine
+                category = top_flag.get("risk_category", "Uncategorized")
+                subcategory = top_flag.get("subcategory", "General")
+            else:
+                category = "Clean"
+                subcategory = "Clean"
+
+            # Normalize category (must be one of the 4 HEROC + Clean)
+            valid_cats = {"Operational", "Financial", "Reputational", "Continuity", "Clean"}
+            if category not in valid_cats:
+                category = "Operational"  # default
+
+            # File it
+            target_dir = ARCHIVE_DIR / category / subcategory
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target_path = target_dir / save_path.name
+            import shutil
+            shutil.move(str(save_path), str(target_path))
+
+            result["filed_to"] = f"data/archive/{category}/{subcategory}/{save_path.name}"
+            results.append(result)
+        except Exception as e:
+            results.append({"filename": file.filename, "error": str(e)})
+
+    return JSONResponse({"uploaded": len(results), "results": results})
 
 if __name__ == "__main__":
     import uvicorn

@@ -1501,6 +1501,7 @@ function PipelineStrip() {
 
 // ── Smart Filing View (AI Upload + Auto-Classification + Folder Archive) ─────────
 interface UploadedDoc {
+  filed_to?: string
   filename: string
   document_type: string
   risk_score: number
@@ -1529,7 +1530,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
     try {
       const formData = new FormData()
       fileArr.forEach((f) => formData.append('files', f))
-      const resp = await fetch('/api/batch-upload?use_agnes=true', { method: 'POST', body: formData })
+      const resp = await fetch('/api/classify-and-file', { method: 'POST', body: formData })
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
       const data = await resp.json()
       // API returns { uploaded: N, results: [...] }
@@ -1543,6 +1544,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         flags: r.flags || [],
         text_preview: r.text_preview || '',
         processed_at: r.processed_at || new Date().toISOString(),
+        filed_to: r.filed_to || undefined,
       }))
       setUploaded((prev) => [...prev, ...results])
     } catch (e: any) {
@@ -1631,6 +1633,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
                   <span className="text-slate-400">{u.document_type}</span>
                   <span className="text-slate-400">{u.flags_count} flags</span>
                   <span className={`text-[10px] font-bold ${u.risk_level === 'Critical' ? 'text-red-600' : u.risk_level === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>{u.risk_level}</span>
+                  {u.filed_to && <span className="text-[9px] text-teal-600 font-mono">→ {u.filed_to}</span>}
                 </div>
               ))}
             </div>
@@ -1652,17 +1655,11 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         {classified && (
           <div className="text-[11px] text-emerald-600 space-y-0.5">
             <div>✓ {uploaded.length + allContracts.length} docs classified</div>
-            {uploaded.map((u, i) => {
-              const flags = u.flags || []
-              const topFlag = flags[0]
-              const cat = topFlag?.risk_category || u.document_type || 'Uncategorized'
-              const sub = topFlag?.subcategory || 'General'
-              return (
-                <div key={i} className="text-slate-500 ml-3">
-                  📎 {u.filename} → <b className="text-slate-700">{cat} / {sub}</b>
-                </div>
-              )
-            })}
+            {uploaded.map((u, i) => (
+              <div key={i} className="text-slate-500 ml-3">
+                📎 {u.filename} → <b className="text-teal-700">{u.filed_to || 'pending'}</b>
+              </div>
+            ))}
           </div>
         )}
       </div>
