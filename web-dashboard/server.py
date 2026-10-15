@@ -194,18 +194,34 @@ def process_file(file_path: str, use_agnes: bool = True) -> Dict:
     print(f"Processing: {filename}")
     
     # Step 1: OCR / text extraction
-    try:
-        text = agnes_ocr(file_path) if use_agnes else ""
-        if not text or len(text.strip()) < 50:
-            # Fallback: try plain text read
+    text = ""
+    ext = Path(file_path).suffix.lower()
+    if ext in {".txt", ".md", ".csv", ".json"}:
+        # Plain text: read directly, no OCR needed
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                text = f.read()
+        except:
+            pass
+    else:
+        try:
+            text = agnes_ocr(file_path) if use_agnes else ""
+            if not text or len(text.strip()) < 50:
+                # Fallback: try plain text read
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        text = f.read()
+                except:
+                    pass
+        except Exception as e:
+            print(f"  OCR error: {e}")
+            text = ""
+            # Final fallback for any readable file
             try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     text = f.read()
             except:
                 pass
-    except Exception as e:
-        print(f"  OCR error: {e}")
-        text = ""
     
     if not text or len(text.strip()) < 50:
         return {"error": "Could not extract text from document", "filename": filename}
