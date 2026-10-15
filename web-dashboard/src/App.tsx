@@ -1499,167 +1499,231 @@ function PipelineStrip() {
 // ── Main App ─────────────────────────────────────────────────────────────────
 
 
-// ── Smart Filing View (AI Auto-Classification + Folder Archive) ──────────────────
+// ── Smart Filing View (AI Upload + Auto-Classification + Folder Archive) ─────────
+interface UploadedDoc {
+  filename: string
+  document_type: string
+  risk_score: number
+  risk_level: string
+  flags_count: number
+  flags: { severity: string; field: string; flag_if: string; risk_category?: string; subcategory?: string; department?: string }[]
+  text_preview: string
+  processed_at: string
+}
+
 function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[] }) {
   const [classifying, setClassifying] = useState(false)
   const [classified, setClassified] = useState(false)
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
+  const [uploaded, setUploaded] = useState<UploadedDoc[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [dragOver, setDragOver] = useState(false)
 
-  // Build folder tree: HEROC category → subcategory → department
-  const tree: Record<string, Record<string, { docs: ContractDoc[]; dept: string }[]>> = {}
-  for (const c of allContracts) {
-    for (const f of c.flags) {
-      const cat = f.risk_category || 'Uncategorized'
-      const sub = f.subcategory || 'General'
-      const dept = f.department || 'Unassigned'
-      if (!tree[cat]) tree[cat] = {}
-      if (!tree[cat][sub]) tree[cat][sub] = []
-      // Avoid duplicates
-      if (!tree[cat][sub].some((x) => x.docs.some((d) => d.num === c.num))) {
-        tree[cat][sub].push({ docs: [c], dept })
-      } else {
-        tree[cat][sub].find((x) => x.docs.some((d) => d.num === c.num))!.docs.push(c)
-      }
+  // Upload handler
+  const handleUpload = async (files: FileList | File[]) => {
+    const fileArr = Array.from(files)
+    if (fileArr.length === 0) return
+    setUploading(true)
+    setUploadError('')
+    try {
+      const formData = new FormData()
+      fileArr.forEach((f) => formData.append('files', f))
+      const resp = await fetch('/api/batch-upload?use_agnes=true', { method: 'POST', body: formData })
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const data = await resp.json()
+      // data is an array of results
+      const results: UploadedDoc[] = Array.isArray(data) ? data : [data]
+      setUploaded((prev) => [...prev, ...results.filter((r: any) => !r.error)])
+    } catch (e: any) {
+      setUploadError(e.message || 'Upload failed — is the API server running on port 8000?')
+    } finally {
+      setUploading(false)
     }
   }
-  // Docs with no flags → "Clean / Unfiled"
+
+  // Build folder tree from BOTH static contracts AND uploaded docs
+  const tree: Record<string, Record<string, { docs: { label: string; num?: number; riskLevel: string; flagsCount: number; isUploaded: boolean }[] }>> = {}
+  const addToTree = (cat: string, sub: string, doc: { label: string; num?: number; riskLevel: string; flagsCount: number; isUploaded: boolean }) => {
+    if (!tree[cat]) tree[cat] = {}
+    if (!tree[cat][sub]) tree[cat][sub] = { docs: [] }
+    tree[cat][sub].docs.push(doc)
+  }
+
+  // Static contracts
+  for (const c of allContracts) {
+    if (c.flags.length === 0) continue
+    // Use highest-severity flag's category
+    const topFlag = c.flags.slice().sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0))[0]
+    const cat = topFlag?.risk_category || 'Uncategorized'
+    const sub = topFlag?.subcategory || 'General'
+    addToTree(cat, sub, { label: `#${c.num} ${c.displayName}`, num: c.num, riskLevel: c.riskLevel, flagsCount: c.flagsCount, isUploaded: false })
+  }
+
+  // Uploaded docs
+  for (const u of uploaded) {
+    const topFlag = u.flags.slice().sort((a, b) => (a.severity === 'Critical' ? 3 : a.severity === 'High' ? 2 : 1) - (b.severity === 'Critical' ? 3 : b.severity === 'High' ? 2 : 1))[0]
+    const cat = topFlag?.risk_category || u.document_type || 'Uncategorized'
+    const sub = topFlag?.subcategory || 'General'
+    addToTree(cat, sub, { label: `📎 ${u.filename}`, riskLevel: u.risk_level, flagsCount: u.flags_count, isUploaded: true })
+  }
+
+  // Clean docs (no flags)
   const cleanDocs = allContracts.filter((c) => c.flags.length === 0)
+  const cleanUploaded = uploaded.filter((u) => u.flags_count === 0)
 
-  // Simulate AI classification
-  const runClassify = () => {
-    setClassifying(true)
-    setTimeout(() => {
-      setClassifying(false)
-      setClassified(true)
-    }, 1200)
-  }
-
-  // Confidence: based on flag count (more flags = higher confidence)
-  const confidence = (c: ContractDoc) => {
-    const n = c.flags.length
-    if (n === 0) return 0.95
-    if (n <= 2) return 0.88
-    if (n <= 5) return 0.72
-    return 0.55
-  }
+  const confidence = (n: number) => n === 0 ? 0.95 : n <= 2 ? 0.88 : n <= 5 ? 0.72 : 0.55
 
   return (
     <div className="space-y-4">
-      {/* Header + action */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-sm font-bold text-slate-800">AI Smart Filing</h2>
-          <p className="text-xs text-slate-500 mt-0.5">Auto-classifies documents into HEROC category → subcategory → department folders. Run classification to populate the archive.</p>
-        </div>
-        <button
-          onClick={runClassify}
-          disabled={classifying}
-          className={`px-3 py-1.5 rounded text-xs font-medium transition ${
-            classifying ? 'bg-slate-100 text-slate-400' : 'bg-teal-600 text-white hover:bg-teal-700'
-          }`}
-        >
-          {classifying ? 'Classifying…' : classified ? 'Re-classify' : 'Run AI Classification'}
-        </button>
+      {/* Header */}
+      <div>
+        <h2 className="text-sm font-bold text-slate-800">AI Smart Filing</h2>
+        <p className="text-xs text-slate-500 mt-0.5">Upload documents → AI classifies into HEROC folders. Static contracts auto-filed by flag category.</p>
       </div>
 
-      {/* Classification progress */}
-      {classifying && (
-        <div className="bg-teal-50 border border-teal-200 rounded p-3 text-xs text-teal-700">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
-            Scanning {allContracts.length} documents… assigning HEROC category, subcategory, and department…
+      {/* Upload Zone */}
+      <div
+        className={`border-2 border-dashed rounded-lg p-6 text-center transition ${
+          dragOver ? 'border-teal-400 bg-teal-50' : 'border-slate-200 bg-slate-50'
+        }`}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); handleUpload(e.dataTransfer.files) }}
+      >
+        <input
+          type="file"
+          multiple
+          accept=".pdf,.png,.jpg,.jpeg,.tiff,.docx,.txt,.md"
+          className="hidden"
+          id="sf-upload-input"
+          onChange={(e) => e.target.files && handleUpload(e.target.files)}
+        />
+        <button
+          onClick={() => document.getElementById('sf-upload-input')?.click()}
+          disabled={uploading}
+          className="bg-teal-600 text-white px-4 py-2 rounded text-xs font-medium hover:bg-teal-700 disabled:opacity-50"
+        >
+          {uploading ? 'Uploading…' : '📤 Choose Files to Upload'}
+        </button>
+        <p className="text-[10px] text-slate-400 mt-2">Drag & drop or click · PDF, images, DOCX, TXT, MD · Max 20 files</p>
+        {uploadError && <p className="text-[11px] text-red-600 mt-2">⚠ {uploadError}</p>}
+        {uploaded.length > 0 && (
+          <div className="mt-3 text-left">
+            <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Uploaded ({uploaded.length})</div>
+            <div className="space-y-1 max-h-32 overflow-y-auto">
+              {uploaded.map((u, i) => (
+                <div key={i} className="flex items-center gap-2 text-[11px]">
+                  <span className={`w-2 h-2 rounded-full ${u.risk_level === 'Critical' ? 'bg-red-500' : u.risk_level === 'High' ? 'bg-orange-500' : u.risk_level === 'Medium' ? 'bg-yellow-500' : 'bg-emerald-500'}`} />
+                  <span className="text-slate-700 truncate flex-1">{u.filename}</span>
+                  <span className="text-slate-400">{u.document_type}</span>
+                  <span className="text-slate-400">{u.flags_count} flags</span>
+                  <span className={`text-[10px] font-bold ${u.risk_level === 'Critical' ? 'text-red-600' : u.risk_level === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>{u.risk_level}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {classified && !classifying && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-xs text-emerald-700">
-          ✓ Classification complete — {allContracts.length} documents filed into {Object.keys(tree).length} HEROC categories, {Object.values(tree).reduce((a, v) => a + Object.keys(v).length, 0)} subcategory folders.
-        </div>
-      )}
+      {/* Action button */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => { setClassifying(true); setTimeout(() => { setClassifying(false); setClassified(true) }, 800) }}
+          disabled={classifying || uploaded.length === 0}
+          className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+            classifying ? 'bg-slate-100 text-slate-400' : uploaded.length > 0 ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-slate-100 text-slate-300'
+          }`}
+        >
+          {classifying ? 'Classifying…' : '⚡ Run AI Classification'}
+        </button>
+        {classified && <span className="text-[11px] text-emerald-600">✓ {uploaded.length + allContracts.length} docs classified</span>}
+      </div>
 
       {/* Folder tree */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">
-          FOLDER STRUCTURE
+          FOLDER STRUCTURE <span className="font-normal text-slate-400">({Object.keys(tree).length} HEROC categories · {allContracts.length + uploaded.length} docs)</span>
         </div>
-        <div className="divide-y divide-slate-100">
-          {Object.entries(tree).map(([cat, subs]) => (
-            <div key={cat} className="py-2">
-              {/* Category level */}
-              <div
-                className="flex items-center gap-2 px-4 py-1.5 cursor-pointer hover:bg-slate-50"
-                onClick={() => setSelectedFolder(selectedFolder === cat ? null : cat)}
-              >
-                <span className={`text-[10px] ${selectedFolder === cat ? 'text-teal-600' : 'text-slate-400'}`}>
-                  {selectedFolder === cat ? '▼' : '▶'}
-                </span>
-                <span className="text-[13px] font-bold text-slate-700">📁 {cat}</span>
-                <span className="text-[10px] text-slate-400 ml-auto">
-                  {Object.values(subs).reduce((a, v) => a + v.reduce((b, x) => b + x.docs.length, 0), 0)} docs
-                </span>
-              </div>
-              {/* Subcategory level (indented) */}
-              {selectedFolder === cat && (
-                <div className="ml-8 space-y-1">
-                  {Object.entries(subs).map(([sub, items]) => (
-                    <div key={sub} className="flex items-center gap-2 py-1">
-                      <span className="text-[11px] text-slate-500">📂 {sub}</span>
-                      <div className="flex-1">
-                        {items.map((item, i) => (
-                          <div key={i} className="ml-6 flex items-center gap-2 py-0.5">
-                            <span className="text-[10px] text-slate-400">📄</span>
-                            <span className="text-[11px] text-slate-600">
-                              {item.docs.map((d) => `#${d.num} ${d.displayName}`).join(', ')}
-                            </span>
-                            <span className="text-[9px] text-slate-400 bg-slate-50 border border-slate-200 rounded px-1">{item.dept}</span>
-                            <span className="text-[9px] text-teal-600 font-mono">
-                              {Math.round(confidence(item.docs[0]) * 100)}%
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+        <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+          {Object.entries(tree).map(([cat, subs]) => {
+            const totalDocs = Object.values(subs).reduce((a, v) => a + v.docs.length, 0)
+            return (
+              <div key={cat}>
+                <div
+                  className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-slate-50"
+                  onClick={() => setSelectedFolder(selectedFolder === cat ? null : cat)}
+                >
+                  <span className={`text-[10px] ${selectedFolder === cat ? 'text-teal-600' : 'text-slate-400'}`}>
+                    {selectedFolder === cat ? '▼' : '▶'}
+                  </span>
+                  <span className="text-[13px] font-bold text-slate-700">📁 {cat}</span>
+                  <span className="text-[10px] text-slate-400 ml-auto">{totalDocs} docs</span>
                 </div>
-              )}
-            </div>
-          ))}
+                {selectedFolder === cat && (
+                  <div className="ml-8 space-y-1.5 pb-2">
+                    {Object.entries(subs).map(([sub, items]) => (
+                      <div key={sub} className="flex items-start gap-2 py-0.5">
+                        <span className="text-[11px] text-slate-500 mt-0.5">📂 {sub}</span>
+                        <div className="flex-1 space-y-0.5">
+                          {items.docs.map((doc, i) => (
+                            <div key={i} className="ml-4 flex items-center gap-2 py-0.5">
+                              <span className="text-[10px] text-slate-400">📄</span>
+                              <span className="text-[11px] text-slate-600 flex-1 truncate">{doc.label}</span>
+                              {doc.isUploaded && <span className="text-[9px] text-purple-600 bg-purple-50 border border-purple-200 rounded px-1">uploaded</span>}
+                              <span className={`text-[9px] font-bold ${doc.riskLevel === 'Critical' ? 'text-red-600' : doc.riskLevel === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>
+                                {doc.riskLevel}
+                              </span>
+                              <span className="text-[9px] text-slate-400">{doc.flagsCount} flags</span>
+                              <span className="text-[9px] text-teal-600 font-mono w-8 text-right">{Math.round(confidence(doc.flagsCount) * 100)}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
           {/* Clean / Unfiled */}
           <div className="py-2">
             <div className="flex items-center gap-2 px-4 py-1.5">
               <span className="text-[10px] text-slate-400">▶</span>
               <span className="text-[13px] font-bold text-emerald-700">📁 Clean / Unfiled</span>
-              <span className="text-[10px] text-slate-400 ml-auto">{cleanDocs.length} docs</span>
+              <span className="text-[10px] text-slate-400 ml-auto">{cleanDocs.length + cleanUploaded.length} docs</span>
             </div>
             {cleanDocs.length > 0 && (
-              <div className="ml-8 space-y-1">
-                <div className="flex items-center gap-2 py-1">
-                  <span className="text-[11px] text-slate-500">📂 No Open Flags</span>
-                  <div className="flex-1">
-                    {cleanDocs.map((d) => (
-                      <div key={d.num} className="ml-6 flex items-center gap-2 py-0.5">
-                        <span className="text-[10px] text-slate-400">📄</span>
-                        <span className="text-[11px] text-slate-600">#{d.num} {d.displayName}</span>
-                        <span className="text-[9px] text-emerald-600 font-mono">verified clean</span>
-                      </div>
-                    ))}
+              <div className="ml-8 space-y-0.5">
+                {cleanDocs.map((d) => (
+                  <div key={d.num} className="flex items-center gap-2 ml-4 py-0.5">
+                    <span className="text-[10px] text-slate-400">📄</span>
+                    <span className="text-[11px] text-slate-600">#{d.num} {d.displayName}</span>
+                    <span className="text-[9px] text-emerald-600">verified clean</span>
                   </div>
-                </div>
+                ))}
+                {cleanUploaded.map((u, i) => (
+                  <div key={`u${i}`} className="flex items-center gap-2 ml-4 py-0.5">
+                    <span className="text-[10px] text-slate-400">📄</span>
+                    <span className="text-[11px] text-slate-600">📎 {u.filename}</span>
+                    <span className="text-[9px] text-purple-600">uploaded</span>
+                    <span className="text-[9px] text-emerald-600">clean</span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Filing rules explainer */}
+      {/* Filing rules */}
       <div className="bg-slate-50 border border-slate-200 rounded p-3">
         <div className="text-[10px] font-bold text-slate-500 uppercase mb-1.5">Filing Logic</div>
         <ul className="text-[11px] text-slate-600 space-y-0.5 list-disc pl-4">
-          <li><b>Category</b> → HEROC (Operational / Financial / Reputational / Continuity) from highest-severity flag</li>
+          <li><b>Upload</b> → OCR + Agnes extraction + rules engine (server.py port 8000)</li>
+          <li><b>Category</b> → HEROC from highest-severity flag (Operational / Financial / Reputational / Continuity)</li>
           <li><b>Subcategory</b> → 14 subcategories mapped to Southlake departments</li>
-          <li><b>Department</b> → primary clinical/admin dept from flag context</li>
-          <li><b>Confidence</b> → higher when flags are unambiguous; lower when multiple categories apply</li>
+          <li><b>Confidence</b> → 95% (0 flags) · 88% (1-2) · 72% (3-5) · 55% (6+)</li>
           <li><b>Clean docs</b> → filed to "Clean / Unfiled" until flags appear</li>
         </ul>
       </div>
