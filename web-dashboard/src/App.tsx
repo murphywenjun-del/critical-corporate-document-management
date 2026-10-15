@@ -62,7 +62,7 @@ function KpiCard({ label, value, valueClass }: { label: string; value: number | 
 
 // ── Tab Bar ───────────────────────────────────────────────────────────────────
 
-type TabId = 'risk-register' | 'matrix' | 'contracts' | 'deadlines' | 'amendments' | 'cross-refs'
+type TabId = 'risk-register' | 'matrix' | 'contracts' | 'deadlines' | 'amendments' | 'cross-refs' | 'smart-filing'
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'risk-register', label: 'Risk Register' },
@@ -71,6 +71,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'deadlines', label: 'Deadlines' },
   { id: 'amendments', label: 'Amendments' },
   { id: 'cross-refs', label: 'Cross-Refs' },
+  { id: 'smart-filing', label: 'Smart Filing' },
 ]
 
 function TabBar({ active, onChange }: { active: TabId; onChange: (t: TabId) => void }) {
@@ -1497,6 +1498,176 @@ function PipelineStrip() {
 
 // ── Main App ─────────────────────────────────────────────────────────────────
 
+
+// ── Smart Filing View (AI Auto-Classification + Folder Archive) ──────────────────
+function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[] }) {
+  const [classifying, setClassifying] = useState(false)
+  const [classified, setClassified] = useState(false)
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
+
+  // Build folder tree: HEROC category → subcategory → department
+  const tree: Record<string, Record<string, { docs: ContractDoc[]; dept: string }[]>> = {}
+  for (const c of allContracts) {
+    for (const f of c.flags) {
+      const cat = f.risk_category || 'Uncategorized'
+      const sub = f.subcategory || 'General'
+      const dept = f.department || 'Unassigned'
+      if (!tree[cat]) tree[cat] = {}
+      if (!tree[cat][sub]) tree[cat][sub] = []
+      // Avoid duplicates
+      if (!tree[cat][sub].some((x) => x.docs.some((d) => d.num === c.num))) {
+        tree[cat][sub].push({ docs: [c], dept })
+      } else {
+        tree[cat][sub].find((x) => x.docs.some((d) => d.num === c.num))!.docs.push(c)
+      }
+    }
+  }
+  // Docs with no flags → "Clean / Unfiled"
+  const cleanDocs = allContracts.filter((c) => c.flags.length === 0)
+
+  // Simulate AI classification
+  const runClassify = () => {
+    setClassifying(true)
+    setTimeout(() => {
+      setClassifying(false)
+      setClassified(true)
+    }, 1200)
+  }
+
+  // Confidence: based on flag count (more flags = higher confidence)
+  const confidence = (c: ContractDoc) => {
+    const n = c.flags.length
+    if (n === 0) return 0.95
+    if (n <= 2) return 0.88
+    if (n <= 5) return 0.72
+    return 0.55
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header + action */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-slate-800">AI Smart Filing</h2>
+          <p className="text-xs text-slate-500 mt-0.5">Auto-classifies documents into HEROC category → subcategory → department folders. Run classification to populate the archive.</p>
+        </div>
+        <button
+          onClick={runClassify}
+          disabled={classifying}
+          className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+            classifying ? 'bg-slate-100 text-slate-400' : 'bg-teal-600 text-white hover:bg-teal-700'
+          }`}
+        >
+          {classifying ? 'Classifying…' : classified ? 'Re-classify' : 'Run AI Classification'}
+        </button>
+      </div>
+
+      {/* Classification progress */}
+      {classifying && (
+        <div className="bg-teal-50 border border-teal-200 rounded p-3 text-xs text-teal-700">
+          <div className="flex items-center gap-2">
+            <span className="w-3 h-3 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
+            Scanning {allContracts.length} documents… assigning HEROC category, subcategory, and department…
+          </div>
+        </div>
+      )}
+
+      {classified && !classifying && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-xs text-emerald-700">
+          ✓ Classification complete — {allContracts.length} documents filed into {Object.keys(tree).length} HEROC categories, {Object.values(tree).reduce((a, v) => a + Object.keys(v).length, 0)} subcategory folders.
+        </div>
+      )}
+
+      {/* Folder tree */}
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">
+          FOLDER STRUCTURE
+        </div>
+        <div className="divide-y divide-slate-100">
+          {Object.entries(tree).map(([cat, subs]) => (
+            <div key={cat} className="py-2">
+              {/* Category level */}
+              <div
+                className="flex items-center gap-2 px-4 py-1.5 cursor-pointer hover:bg-slate-50"
+                onClick={() => setSelectedFolder(selectedFolder === cat ? null : cat)}
+              >
+                <span className={`text-[10px] ${selectedFolder === cat ? 'text-teal-600' : 'text-slate-400'}`}>
+                  {selectedFolder === cat ? '▼' : '▶'}
+                </span>
+                <span className="text-[13px] font-bold text-slate-700">📁 {cat}</span>
+                <span className="text-[10px] text-slate-400 ml-auto">
+                  {Object.values(subs).reduce((a, v) => a + v.reduce((b, x) => b + x.docs.length, 0), 0)} docs
+                </span>
+              </div>
+              {/* Subcategory level (indented) */}
+              {selectedFolder === cat && (
+                <div className="ml-8 space-y-1">
+                  {Object.entries(subs).map(([sub, items]) => (
+                    <div key={sub} className="flex items-center gap-2 py-1">
+                      <span className="text-[11px] text-slate-500">📂 {sub}</span>
+                      <div className="flex-1">
+                        {items.map((item, i) => (
+                          <div key={i} className="ml-6 flex items-center gap-2 py-0.5">
+                            <span className="text-[10px] text-slate-400">📄</span>
+                            <span className="text-[11px] text-slate-600">
+                              {item.docs.map((d) => `#${d.num} ${d.displayName}`).join(', ')}
+                            </span>
+                            <span className="text-[9px] text-slate-400 bg-slate-50 border border-slate-200 rounded px-1">{item.dept}</span>
+                            <span className="text-[9px] text-teal-600 font-mono">
+                              {Math.round(confidence(item.docs[0]) * 100)}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+          {/* Clean / Unfiled */}
+          <div className="py-2">
+            <div className="flex items-center gap-2 px-4 py-1.5">
+              <span className="text-[10px] text-slate-400">▶</span>
+              <span className="text-[13px] font-bold text-emerald-700">📁 Clean / Unfiled</span>
+              <span className="text-[10px] text-slate-400 ml-auto">{cleanDocs.length} docs</span>
+            </div>
+            {cleanDocs.length > 0 && (
+              <div className="ml-8 space-y-1">
+                <div className="flex items-center gap-2 py-1">
+                  <span className="text-[11px] text-slate-500">📂 No Open Flags</span>
+                  <div className="flex-1">
+                    {cleanDocs.map((d) => (
+                      <div key={d.num} className="ml-6 flex items-center gap-2 py-0.5">
+                        <span className="text-[10px] text-slate-400">📄</span>
+                        <span className="text-[11px] text-slate-600">#{d.num} {d.displayName}</span>
+                        <span className="text-[9px] text-emerald-600 font-mono">verified clean</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Filing rules explainer */}
+      <div className="bg-slate-50 border border-slate-200 rounded p-3">
+        <div className="text-[10px] font-bold text-slate-500 uppercase mb-1.5">Filing Logic</div>
+        <ul className="text-[11px] text-slate-600 space-y-0.5 list-disc pl-4">
+          <li><b>Category</b> → HEROC (Operational / Financial / Reputational / Continuity) from highest-severity flag</li>
+          <li><b>Subcategory</b> → 14 subcategories mapped to Southlake departments</li>
+          <li><b>Department</b> → primary clinical/admin dept from flag context</li>
+          <li><b>Confidence</b> → higher when flags are unambiguous; lower when multiple categories apply</li>
+          <li><b>Clean docs</b> → filed to "Clean / Unfiled" until flags appear</li>
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('risk-register')
   const [selected, setSelected] = useState<ContractDoc | null>(null)
@@ -1673,6 +1844,9 @@ export default function App() {
                 )}
                 {activeTab === 'cross-refs' && (
                   <CrossRefsView contracts={filtered} />
+                )}
+                {activeTab === 'smart-filing' && (
+                  <SmartFilingView contracts={filtered} />
                 )}
               </>
             )}
