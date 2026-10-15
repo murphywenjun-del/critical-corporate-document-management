@@ -1586,12 +1586,12 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
     addToTree(cat, sub, { label: `#${c.num} ${c.displayName}`, num: c.num, riskLevel: c.riskLevel, flagsCount: c.flagsCount || cFlags.length, isUploaded: false })
   }
 
-  // Uploaded docs
+  // Uploaded docs: HEROC category (from top flag) + document type (as sub-folder)
   for (const u of uploaded) {
     const flags = u.flags || []
     const topFlag = flags.slice().sort((a, b) => (a.severity === 'Critical' ? 3 : a.severity === 'High' ? 2 : 1) - (b.severity === 'Critical' ? 3 : b.severity === 'High' ? 2 : 1))[0]
-    const cat = topFlag?.risk_category || u.document_type || 'Uncategorized'
-    const sub = topFlag?.subcategory || 'General'
+    const cat = topFlag?.risk_category || (u.flags_count === 0 ? 'Clean' : 'Operational')
+    const sub = u.document_type || 'Other'
     addToTree(cat, sub, { label: `📎 ${u.filename}`, riskLevel: u.risk_level, flagsCount: u.flags_count || flags.length, isUploaded: true })
   }
 

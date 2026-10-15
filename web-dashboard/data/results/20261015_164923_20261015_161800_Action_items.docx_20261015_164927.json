@@ -1,0 +1,119 @@
+{
+  "filename": "20261015_164923_20261015_161800_Action items.docx",
+  "document_type": "Other",
+  "risk_score": 25.0,
+  "risk_level": "Critical",
+  "flags_count": 3,
+  "flags": [
+    {
+      "field": "signatories",
+      "check": "至少两个VP签字",
+      "flag_if": "只有0个VP签字",
+      "risk_category": "Financial",
+      "subcategory": "Liability",
+      "severity": "Critical",
+      "likelihood": 5,
+      "impact": 5,
+      "risk_score": 25,
+      "compliance_type": "hard"
+    },
+    {
+      "field": "effective_date",
+      "check": "合同有生效日期",
+      "flag_if": "缺少生效日期",
+      "risk_category": "Operational",
+      "subcategory": "Process",
+      "severity": "High",
+      "likelihood": 3,
+      "impact": 3,
+      "risk_score": 9,
+      "compliance_type": "hard"
+    },
+    {
+      "field": "expiry_date",
+      "check": "合同有到期日期",
+      "flag_if": "缺少到期日期",
+      "risk_category": "Operational",
+      "subcategory": "Service Disruption",
+      "severity": "Medium",
+      "likelihood": 3,
+      "impact": 3,
+      "risk_score": 9,
+      "compliance_type": "hard"
+    }
+  ],
+  "extracted_fields": {
+    "document_type": "Other",
+    "parties": [],
+    "effective_date": null,
+    "expiry_date": null,
+    "vp_signature_count": 0,
+    "has_phipa_clause": false,
+    "has_indemnity": false,
+    "indemnity_has_cap": null,
+    "has_sla": false,
+    "breach_notification_hours": null,
+    "termination_notice_days": null,
+    "auto_renewal": false,
+    "renewal_notice_days": null,
+    "has_data_security": false,
+    "has_audit_rights": false,
+    "has_return_destruction": false,
+    "ocr_quality": "Good",
+    "confidence": 0.3
+  },
+  "jev_result": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "risk_severity": {
+        "type": "choice",
+        "choice": "critical",
+        "confidence": 0.25,
+        "probabilities": {
+          "low": 0.1,
+          "medium": 0.07,
+          "high": 0.39,
+          "critical": 0.44
+        }
+      },
+      "needs_human_review": {
+        "type": "noul",
+        "noul": 0.14
+      },
+      "is_compliance_related": {
+        "type": "noul",
+        "noul": 0.5
+      },
+      "should_alert": {
+        "type": "noul",
+        "noul": 0.29
+      },
+      "decision_confidence": {
+        "type": "score",
+        "score": 1.91,
+        "confidence": 0.25,
+        "legend": {
+          "0": "Very uncertain",
+          "1": "Uncertain",
+          "2": "Moderate",
+          "3": "Confident",
+          "4": "Very confident"
+        },
+        "probabilities": {
+          "0": 0.15,
+          "1": 0.2,
+          "2": 0.31,
+          "3": 0.28,
+          "4": 0.06
+        }
+      }
+    },
+    "usage": {
+      "input_tokens": 1075,
+      "output_tokens": 121
+    }
+  },
+  "text_preview": "Action items：\n The Ivy team will coordinate with Matthew Meyer and Caitlin before contacting South Lake Health subject-matter contacts\n The Ivy team will define the hosting, infrastructure, and handover requirements for transferring the prototype\n The Ivy team will meet with the enterprise architecture manager to determine the preferred deployment environment\n The Ivy team will align the prototype’s risk categories with the HEROC risk taxonomy\n The Ivy team will incorporate likelihood-and-impact",
+  "timestamp": "2026-10-15T16:49:27.150899",
+  "processed_at": "2026-10-15 16:49:27"
+}

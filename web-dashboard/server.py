@@ -435,15 +435,18 @@ async def classify_and_file(files: List[UploadFile] = File(...)):
                 results.append({"filename": file.filename, "error": result["error"]})
                 continue
 
-            # Determine folder from top-severity flag
+            # Determine folder: HEROC category (from top flag) + document type (from extraction)
             flags = result.get("flags", [])
             if flags:
-                top_flag = flags[0]  # already sorted by severity in engine
-                category = top_flag.get("risk_category", "Uncategorized")
-                subcategory = top_flag.get("subcategory", "General")
+                top_flag = flags[0]
+                category = top_flag.get("risk_category", "Operational")
             else:
                 category = "Clean"
-                subcategory = "Clean"
+
+            # Subcategory = document type (what the AI detected)
+            doc_type = result.get("document_type", "Other")
+            # Sanitize for folder name
+            subcategory = re.sub(r'[^a-zA-Z0-9_]', '_', doc_type)
 
             # Normalize category (must be one of the 4 HEROC + Clean)
             valid_cats = {"Operational", "Financial", "Reputational", "Continuity", "Clean"}
