@@ -51,11 +51,14 @@ function Modal({ title, children, onConfirm, onCancel, confirmLabel = 'Confirm' 
 
 // ── KPI Card (flat, big number) ──────────────────────────────────────────────
 
-function KpiCard({ label, value, valueClass }: { label: string; value: number | string; valueClass?: string }) {
+function KpiCard({ label, value, valueClass, onClick }: { label: string; value: number | string; valueClass?: string; onClick?: () => void }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4">
-      <div className={`text-3xl font-bold leading-none ${valueClass || 'text-slate-900'}`}>{value}</div>
-      <div className="text-xs text-slate-500 mt-1.5">{label}</div>
+    <div
+      className={`bg-white border border-slate-200 rounded-lg p-4 ${onClick ? 'cursor-pointer hover:border-teal-300 hover:shadow-sm transition' : ''}`}
+      onClick={onClick}
+    >
+      <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">{label}</div>
+      <div className={`text-2xl font-bold mt-1 ${valueClass || 'text-slate-900'}`}>{value}</div>
     </div>
   )
 }
@@ -496,7 +499,7 @@ function ContractList({
 
 // ── Deadlines / Tickler Table (enhanced) ───────────────────────────────────
 
-function DeadlinesTimeline({ contracts: allContracts }: { contracts: ContractDoc[] }) {
+function DeadlinesTimeline({ contracts: allContracts, onSelectContract }: { contracts: ContractDoc[]; onSelectContract?: (c: ContractDoc) => void }) {
   const today = new Date().toISOString().slice(0, 10)
   const sorted = allContracts.filter((c) => c.expiryDate).sort((a, b) => (a.expiryDate || '').localeCompare(b.expiryDate || ''))
   const minDate = sorted[0]?.expiryDate || today
@@ -521,10 +524,10 @@ function DeadlinesTimeline({ contracts: allContracts }: { contracts: ContractDoc
         <span className="absolute text-[9px] text-red-500 -translate-x-1/2" style={{ left: `${pos(today)}%`, top: '-12px' }}>Today</span>
         {/* Contract dots */}
         {sorted.map((c) => (
-          <div key={c.num} className="absolute top-1/2 -translate-y-1/2 group cursor-pointer" style={{ left: `${pos(c.expiryDate!)}%` }}>
+          <div key={c.num} className="absolute top-1/2 -translate-y-1/2 group cursor-pointer" style={{ left: `${pos(c.expiryDate!)}%` }} onClick={() => onSelectContract?.(c)}>
             <div className={`w-3 h-3 rounded-full border-2 border-white shadow ${c.expiryDate! < today ? 'bg-red-500' : c.expiryDate!.slice(0, 7) === today.slice(0, 7) ? 'bg-amber-500' : 'bg-teal-500'} group-hover:scale-125 transition-transform`} />
             <div className="absolute bottom-5 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition">
-              #{c.num} {c.expiryDate}
+              #{c.num} {c.expiryDate} · click →
             </div>
           </div>
         ))}
@@ -543,7 +546,7 @@ function DeadlinesTimeline({ contracts: allContracts }: { contracts: ContractDoc
   )
 }
 
-function DeadlinesTable({ contracts: allContracts }: { contracts: ContractDoc[] }) {
+function DeadlinesTable({ contracts: allContracts, onSelectContract }: { contracts: ContractDoc[]; onSelectContract?: (c: ContractDoc) => void }) {
   const today = new Date('2026-10-15') // demo reference date
   const rows = allContracts
     .filter((c) => c.expiryDate)
@@ -616,7 +619,7 @@ function DeadlinesTable({ contracts: allContracts }: { contracts: ContractDoc[] 
                 <tr key={i} className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${r.urgency === 'expired' ? 'bg-red-50/30' : ''}`}>
                   <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">#{r.c.num}</td>
                   <td className="px-4 py-2.5">
-                    <button onClick={() => {}} className="text-sm text-slate-800 hover:text-teal-600 hover:underline text-left">
+                    <button onClick={() => onSelectContract?.(r.c)} className="text-sm text-slate-800 hover:text-teal-600 hover:underline text-left">
                       {r.c.displayName}
                     </button>
                     <div className="text-[10px] text-slate-400">{r.c.department}</div>
@@ -1800,6 +1803,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
   const [uploadError, setUploadError] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [diskTree, setDiskTree] = useState<Record<string, { files: string[]; subcategories: Record<string, string[]> }>>({})
+  const [fileDetail, setFileDetail] = useState<string | null>(null)
 
   // Fetch real on-disk folder tree
   useEffect(() => {
@@ -2017,10 +2021,11 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
                             </div>
                             <div className="ml-5 space-y-0.5">
                               {files.map((f) => (
-                                <div key={f} className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                                <button key={f} onClick={(e) => { e.stopPropagation(); setFileDetail(f) }} className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded px-1 py-0.5 w-full text-left transition">
                                   <span className="text-slate-300">📄</span>
                                   <span className="truncate max-w-md" title={f}>{f}</span>
-                                </div>
+                                  <span className="text-[9px] text-slate-300 ml-auto shrink-0">→</span>
+                                </button>
                               ))}
                             </div>
                           </div>
@@ -2084,12 +2089,28 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
       </div>
     </div>
   )
+      {/* File Detail Modal */}
+      {fileDetail && (() => { const fd = fileDetail!; return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setFileDetail(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="text-sm font-bold text-slate-800 mb-2">📄 {fd.split('/').pop()}</div>
+            <div className="text-xs text-slate-500 space-y-1.5">
+              <div><b>Full path:</b> <code className="text-teal-700 break-all">{fd}</code></div>
+              <div><b>HEROC Category:</b> {fd.split('/').find((p) => ['Operational','Financial','Reputational','Continuity','Clean'].includes(p)) || 'Unknown'}</div>
+              <div><b>Subcategory:</b> {fd.split('/').slice(-2, -1)[0] || 'N/A'}</div>
+              <div className="text-slate-400 mt-2">Stored at <code className="text-slate-600">data/archive/{fd}</code></div>
+            </div>
+            <button onClick={() => setFileDetail(null)} className="mt-4 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded px-3 py-1.5">✕ Close</button>
+          </div>
+        </div>
+      )})()}
+
 }
 
 
 
 // ── Risk Prevention Insights: cross-file pattern detection + actionable recommendations ──
-function InsightsView({ contracts: allContracts }: { contracts: ContractDoc[] }) {
+function InsightsView({ contracts: allContracts, onJumpToContract }: { contracts: ContractDoc[]; onJumpToContract?: (c: ContractDoc) => void }) {
   const allFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
   
   // 1. Systemic pattern detection: group flags by field across contracts
@@ -2237,7 +2258,9 @@ function InsightsView({ contracts: allContracts }: { contracts: ContractDoc[] })
                 <span className="text-[10px] text-slate-400 ml-auto">{p.count} flags · {p.contractNums.length} contracts</span>
               </div>
               <div className="flex items-center gap-1 text-[10px] text-slate-400 mb-1.5">
-                {p.contractNums.slice(0, 6).map((n) => <span key={n} className="bg-slate-100 rounded px-1">#{n}</span>)}
+                {p.contractNums.slice(0, 6).map((n) => (
+                  <button key={n} onClick={() => { const c = allContracts.find((cc) => cc.num === n); if (c) onJumpToContract?.(c) }} className="bg-slate-100 hover:bg-teal-100 text-teal-700 rounded px-1.5 text-[10px] font-medium cursor-pointer transition">#{n}</button>
+                ))}
                 {p.contractNums.length > 6 && <span>+{p.contractNums.length - 6} more</span>}
               </div>
             </div>
@@ -2372,7 +2395,7 @@ export default function App() {
       <div className="px-4 sm:px-6 py-4">
         <div className="max-w-screen-2xl mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <KpiCard label="Documents" value={s.totalContracts} />
-          <KpiCard label="Critical Flags" value={s.criticalCount} valueClass="text-red-600" />
+          <KpiCard label="Critical Flags" value={s.criticalCount} valueClass="text-red-600" onClick={() => { setActiveTab('risk-register'); }} />
           <KpiCard label="Open Flags" value={contracts.flatMap((c) => c.flags).filter((f) => f.status === 'open').length} valueClass="text-orange-600" />
           <KpiCard label="Remediated" value={contracts.flatMap((c) => c.flags).filter((f) => f.status === 'remediated').length} valueClass="text-emerald-600" />
           <KpiCard label="Avg Compliance" value={`${Math.round(s.avgComplianceRate * 100)}%`} valueClass="text-teal-600" />
@@ -2525,8 +2548,8 @@ export default function App() {
                 )}
                 {activeTab === 'deadlines' && (
                   <div>
-                    <DeadlinesTimeline contracts={filtered} />
-                    <DeadlinesTable contracts={filtered} />
+                    <DeadlinesTimeline contracts={filtered} onSelectContract={(c) => { setSelected(c); setActiveTab('contracts') }} />
+                    <DeadlinesTable contracts={filtered} onSelectContract={(c) => { setSelected(c); setActiveTab('contracts') }} />
                   </div>
                 )}
                 {activeTab === 'cross-refs' && (
@@ -2536,7 +2559,7 @@ export default function App() {
                   <SmartFilingView contracts={filtered} />
                 )}
                 {activeTab === 'insights' && (
-                  <InsightsView contracts={contracts} />
+                  <InsightsView contracts={contracts} onJumpToContract={(c) => { setSelected(c); setActiveTab('contracts') }} />
                 )}
               </>
             )}
