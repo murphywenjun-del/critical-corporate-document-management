@@ -820,6 +820,12 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [modal, setModal] = useState<{ link: DocLink; to: WfState } | null>(null)
   const [toast, setToast] = useState('')
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(''), 4000)
+      return () => clearTimeout(t)
+    }
+  }, [toast])
 
   function lk(l: DocLink) { return `${l.sourceNum}-${l.targetName}` }
 
@@ -879,7 +885,25 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
           </div>
 
           {!isExpanded && !isSynced && (
-            <div className="mt-2 text-[11px] text-slate-500 line-clamp-1">{link.riskIfNotUpdated}</div>
+            <div className="mt-2 flex items-center gap-3">
+              <div className="text-[11px] text-slate-500 line-clamp-1 flex-1">{link.riskIfNotUpdated}</div>
+              {stepIdx < 4 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const next = WF_STEPS[stepIdx + 1]
+                    if (next) {
+                      setWf((p) => ({ ...p, [key]: next.id }))
+                      setExpanded((p) => ({ ...p, [key]: true }))
+                      setToast(`✓ #${link.sourceNum} → ${link.targetName}: ${WF_STEPS[stepIdx]?.label} → ${next.label}`)
+                    }
+                  }}
+                  className="text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded px-2 py-1 hover:bg-teal-100 transition shrink-0"
+                >
+                  → {WF_STEPS[stepIdx + 1]?.label}
+                </button>
+              )}
+            </div>
           )}
         </div>
 
@@ -897,28 +921,46 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
               </div>
             </div>
 
-            {/* Status buttons → open modal */}
+            {/* Quick-advance workflow bar */}
             <div>
-              <div className="text-[10px] font-bold text-slate-500 uppercase mb-2">Set Status</div>
-              <div className="flex flex-wrap gap-1.5">
-                {WF_STEPS.map((s) => {
+              <div className="text-[10px] font-bold text-slate-500 uppercase mb-2">Workflow</div>
+              <div className="flex items-center gap-1 flex-wrap">
+                {WF_STEPS.map((s, si) => {
                   const isActive = state === s.id
+                  const isNext = si === stepIdx + 1
+                  // Forward move: single click, no modal. Backward/skip: use modal.
+                  const isForward = si === stepIdx + 1
                   return (
-                    <button
-                      key={s.id}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (isActive) return
-                        setModal({ link, to: s.id })
-                      }}
-                      className={`text-[11px] font-medium px-2.5 py-1 rounded border transition-all ${
-                        isActive ? `${s.color} ring-2 ring-offset-1 ring-teal-300` : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
-                      }`}
-                    >
-                      {s.label}{isActive && ' ✓'}
-                    </button>
+                    <div key={s.id} className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (isActive) return
+                          if (isForward) {
+                            // Quick advance: just set state, stay expanded, show toast
+                            setWf((p) => ({ ...p, [key]: s.id }))
+                            setToast(`✓ #${link.sourceNum} → ${link.targetName}: ${WF_STEPS[stepIdx]?.label} → ${s.label}`)
+                          } else {
+                            // Backward or skip: confirm via modal
+                            setModal({ link, to: s.id })
+                          }
+                        }}
+                        className={`text-[11px] font-medium px-2.5 py-1.5 rounded border transition-all ${
+                          isActive ? `${s.color} ring-2 ring-offset-1 ring-teal-300` :
+                          isNext ? 'bg-teal-50 text-teal-700 border-teal-300 hover:bg-teal-100 cursor-pointer animate-pulse' :
+                          'bg-white text-slate-400 border-slate-200 hover:border-slate-400'
+                        }`}
+                        title={isNext ? 'Click to advance (no confirmation needed)' : isActive ? 'Current status' : 'Requires confirmation'}
+                      >
+                        {s.label}{isActive && ' ✓'}
+                      </button>
+                      {si < WF_STEPS.length - 1 && <span className="text-slate-300 text-[10px]">→</span>}
+                    </div>
                   )
                 })}
+              </div>
+              <div className="text-[10px] text-slate-400 mt-1.5">
+                {stepIdx < 4 ? `Next: click highlighted step to advance · ${4 - stepIdx} remaining` : '✓ Complete'}
               </div>
             </div>
 
@@ -1053,7 +1095,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
       )}
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-4 right-4 bg-slate-800 text-white text-xs px-4 py-2.5 rounded-lg shadow-lg max-w-sm">
+        <div className="fixed bottom-4 right-4 bg-slate-800 text-white text-xs px-4 py-2.5 rounded-lg shadow-lg max-w-sm z-50">
           {toast}
           <button onClick={() => setToast('')} className="ml-2 text-slate-400 hover:text-white">✕</button>
         </div>
