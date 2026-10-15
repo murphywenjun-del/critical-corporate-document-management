@@ -242,8 +242,8 @@ function RiskRegisterTable({
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+        <table className="w-full text-sm min-w-[1200px]">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-16">Sev</th>
@@ -573,8 +573,8 @@ function DeadlinesTable({ contracts: allContracts }: { contracts: ContractDoc[] 
       </div>
 
       {/* Table */}
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+        <table className="w-full text-sm min-w-[1200px]">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-12">Num</th>
@@ -703,7 +703,7 @@ function RiskMatrixView({ contracts: allContracts }: { contracts: ContractDoc[] 
       <div className="bg-white border border-slate-200 rounded-lg p-5">
         <h3 className="text-sm font-bold text-slate-800 mb-4">Risk Matrix (flags plotted)</h3>
         <div className="overflow-x-auto">
-          <table className="w-full max-w-lg">
+          <table className="w-full min-w-[700px]">
             <thead>
               <tr>
                 <th className="w-8"></th>
