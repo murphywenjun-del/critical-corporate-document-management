@@ -1520,6 +1520,20 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [dragOver, setDragOver] = useState(false)
+  const [diskTree, setDiskTree] = useState<Record<string, { files: string[]; subcategories: Record<string, string[]> }>>({})
+
+  // Fetch real on-disk folder tree
+  useEffect(() => {
+    const fetchTree = () => {
+      fetch('/api/folder-tree')
+        .then((r) => r.json())
+        .then((d) => setDiskTree(d.categories || {}))
+        .catch(() => {})
+    }
+    fetchTree()
+    // Also refresh after classification completes
+    if (classified) setTimeout(fetchTree, 500)
+  }, [classified])
 
   // Upload handler
   const handleUpload = async (files: FileList | File[]) => {
@@ -1713,6 +1727,23 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
                     {totalDocs === 0 && (
                       <div className="text-[11px] text-slate-300 ml-4 py-1">No documents in this category</div>
                     )}
+                    {/* Show disk-based subcategories (real folders on disk) */}
+                    {diskTree[cat] && Object.keys(diskTree[cat].subcategories).length > 0 && (
+                      <div className="ml-2 mb-1">
+                        <div className="text-[9px] text-slate-400 uppercase font-bold mb-1">On Disk</div>
+                        {Object.entries(diskTree[cat].subcategories).filter(([_, files]) => files.length > 0).map(([sub, files]) => (
+                          <div key={sub} className="flex items-center gap-2 py-0.5">
+                            <span className="text-[11px] text-slate-500">📂 {sub}</span>
+                            <span className="text-[10px] text-slate-400">{files.length} file(s)</span>
+                            {files.slice(0, 3).map((f) => (
+                              <span key={f} className="text-[9px] text-slate-500 truncate max-w-40" title={f}>📄 {f}</span>
+                            ))}
+                            {files.length > 3 && <span className="text-[9px] text-slate-400">+{files.length - 3} more</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Show computed subcategories (from flags + uploaded) */}
                     {Object.entries(subs).map(([sub, items]) => (
                       <div key={sub} className="flex items-start gap-2 py-0.5">
                         <span className="text-[11px] text-slate-500 mt-0.5">📂 {sub}</span>
