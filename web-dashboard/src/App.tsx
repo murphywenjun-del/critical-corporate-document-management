@@ -1689,11 +1689,13 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
       {/* Folder tree */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">
-          FOLDER STRUCTURE <span className="font-normal text-slate-400">({Object.keys(tree).length} HEROC categories · {allContracts.length + uploaded.length} docs)</span>
+          FOLDER STRUCTURE <span className="font-normal text-slate-400">(5 HEROC categories · {allContracts.length + uploaded.length} docs)</span>
         </div>
         <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
-          {Object.entries(tree).map(([cat, subs]) => {
+          {(['Operational', 'Financial', 'Reputational', 'Continuity', 'Clean'] as const).map((cat) => {
+            const subs = tree[cat] || {}
             const totalDocs = Object.values(subs).reduce((a, v) => a + v.docs.length, 0)
+            const icons: Record<string, string> = { Operational: '⚙️', Financial: '💰', Reputational: '📢', Continuity: '🔄', Clean: '✓' }
             return (
               <div key={cat}>
                 <div
@@ -1703,11 +1705,14 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
                   <span className={`text-[10px] ${selectedFolder === cat ? 'text-teal-600' : 'text-slate-400'}`}>
                     {selectedFolder === cat ? '▼' : '▶'}
                   </span>
-                  <span className="text-[13px] font-bold text-slate-700">📁 {cat}</span>
-                  <span className="text-[10px] text-slate-400 ml-auto">{totalDocs} docs</span>
+                  <span className="text-[13px] font-bold text-slate-700">{icons[cat]} {cat}</span>
+                  <span className="text-[10px] text-slate-400 ml-auto">{totalDocs > 0 ? `${totalDocs} docs` : 'empty'}</span>
                 </div>
                 {selectedFolder === cat && (
                   <div className="ml-8 space-y-1.5 pb-2">
+                    {totalDocs === 0 && (
+                      <div className="text-[11px] text-slate-300 ml-4 py-1">No documents in this category</div>
+                    )}
                     {Object.entries(subs).map(([sub, items]) => (
                       <div key={sub} className="flex items-start gap-2 py-0.5">
                         <span className="text-[11px] text-slate-500 mt-0.5">📂 {sub}</span>
