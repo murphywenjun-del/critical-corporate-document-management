@@ -203,6 +203,15 @@ def process_file(file_path: str, use_agnes: bool = True) -> Dict:
                 text = f.read()
         except:
             pass
+    elif ext in {".docx", ".doc"}:
+        # DOCX: extract text via python-docx
+        try:
+            from docx import Document
+            doc = Document(file_path)
+            text = "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        except Exception as e:
+            print(f"  DOCX extraction error: {e}")
+            text = ""
     else:
         try:
             text = agnes_ocr(file_path) if use_agnes else ""
