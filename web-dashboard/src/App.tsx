@@ -1530,11 +1530,21 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
     try {
       const formData = new FormData()
       fileArr.forEach((f) => formData.append('files', f))
-      const resp = await fetch('/api/classify-and-file', { method: 'POST', body: formData })
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+
+      // Try proxy first, then direct API
+      let resp: Response
+      try {
+        resp = await fetch('/api/classify-and-file', { method: 'POST', body: formData })
+        if (!resp.ok) throw new Error(`proxy ${resp.status}`)
+      } catch {
+        // Fallback: direct API call
+        resp = await fetch('http://localhost:8000/api/classify-and-file', { method: 'POST', body: formData })
+        if (!resp.ok) throw new Error(`API ${resp.status}`)
+      }
+
       const data = await resp.json()
-      // API returns { uploaded: N, results: [...] }
       const rawResults: any[] = Array.isArray(data) ? data : (data.results || [data])
+      const errors = rawResults.filter((r: any) => r.error)
       const results: UploadedDoc[] = rawResults.filter((r: any) => !r.error).map((r: any) => ({
         filename: r.filename || 'unknown',
         document_type: r.document_type || 'Unknown',
@@ -1547,8 +1557,11 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         filed_to: r.filed_to || undefined,
       }))
       setUploaded((prev) => [...prev, ...results])
+      if (errors.length > 0) {
+        setUploadError(errors.map((e: any) => `${e.filename}: ${e.error}`).join(' | '))
+      }
     } catch (e: any) {
-      setUploadError(e.message || 'Upload failed — is the API server running on port 8000?')
+      setUploadError(`Upload failed: ${e.message || e}. Is API running on port 8000? (Check terminal)`)
     } finally {
       setUploading(false)
     }
@@ -1609,9 +1622,13 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
           type="file"
           multiple
           accept=".pdf,.png,.jpg,.jpeg,.tiff,.docx,.txt,.md"
-          className="hidden"
+          style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0, pointerEvents: 'none' }}
           id="sf-upload-input"
-          onChange={(e) => e.target.files && handleUpload(e.target.files)}
+          onChange={(e) => {
+            const files = e.target.files
+            if (files && files.length > 0) handleUpload(files)
+            e.target.value = '' // allow re-selecting same file
+          }}
         />
         <button
           onClick={() => document.getElementById('sf-upload-input')?.click()}
@@ -1620,8 +1637,13 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         >
           {uploading ? 'Uploading…' : '📤 Choose Files to Upload'}
         </button>
-        <p className="text-[10px] text-slate-400 mt-2">Drag & drop or click · PDF, images, DOCX, TXT, MD · Max 20 files</p>
-        {uploadError && <p className="text-[11px] text-red-600 mt-2">⚠ {uploadError}</p>}
+        <p className="text-[10px] text-slate-400 mt-2">Drag & drop or click · PDF, images, DOCX, TXT, MD</p>
+        <div className="mt-2 space-y-1">
+          {uploading && <p className="text-[11px] text-teal-600 animate-pulse">⏳ Processing via AI… (OCR → Rules → Filing)</p>}
+          {uploadError && <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded p-1.5">⚠ {uploadError}</p>}
+          {!uploading && !uploadError && uploaded.length === 0 && <p className="text-[10px] text-slate-300">Waiting for files…</p>}
+          {!uploading && !uploadError && uploaded.length > 0 && <p className="text-[10px] text-emerald-600">✓ {uploaded.length} file(s) processed</p>}
+        </div>
         {uploaded.length > 0 && (
           <div className="mt-3 text-left">
             <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Uploaded ({uploaded.length})</div>

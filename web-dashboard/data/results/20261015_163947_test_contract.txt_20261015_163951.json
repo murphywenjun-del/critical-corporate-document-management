@@ -1,0 +1,179 @@
+{
+  "filename": "20261015_163947_test_contract.txt",
+  "document_type": "Procurement",
+  "risk_score": 25.0,
+  "risk_level": "Critical",
+  "flags_count": 8,
+  "flags": [
+    {
+      "field": "signatories",
+      "check": "至少两个VP签字",
+      "flag_if": "只有0个VP签字",
+      "risk_category": "Financial",
+      "subcategory": "Liability",
+      "severity": "Critical",
+      "likelihood": 5,
+      "impact": 5,
+      "risk_score": 25,
+      "compliance_type": "hard"
+    },
+    {
+      "field": "effective_date",
+      "check": "合同有生效日期",
+      "flag_if": "缺少生效日期",
+      "risk_category": "Operational",
+      "subcategory": "Process",
+      "severity": "High",
+      "likelihood": 3,
+      "impact": 3,
+      "risk_score": 9,
+      "compliance_type": "hard"
+    },
+    {
+      "field": "expiry_date",
+      "check": "合同有到期日期",
+      "flag_if": "缺少到期日期",
+      "risk_category": "Operational",
+      "subcategory": "Service Disruption",
+      "severity": "Medium",
+      "likelihood": 3,
+      "impact": 3,
+      "risk_score": 9,
+      "compliance_type": "hard"
+    },
+    {
+      "field": "indemnity_clause",
+      "check": "有赔偿条款",
+      "flag_if": "缺少indemnity条款",
+      "risk_category": "Financial",
+      "subcategory": "Liability",
+      "severity": "High",
+      "likelihood": 3,
+      "impact": 4,
+      "risk_score": 12,
+      "compliance_type": "best_practice"
+    },
+    {
+      "field": "data_security",
+      "check": "有数据安全条款",
+      "flag_if": "涉及数据的合同无数据保护条款",
+      "risk_category": "Reputational",
+      "subcategory": "Security",
+      "severity": "Critical",
+      "likelihood": 4,
+      "impact": 5,
+      "risk_score": 20,
+      "compliance_type": "hard"
+    },
+    {
+      "field": "renewal_notif",
+      "check": "续约有通知机制",
+      "flag_if": "自动续约但无提前通知机制",
+      "risk_category": "Operational",
+      "subcategory": "Compliance",
+      "severity": "Medium",
+      "likelihood": 3,
+      "impact": 2,
+      "risk_score": 6,
+      "compliance_type": "best_practice"
+    },
+    {
+      "field": "governing_law",
+      "check": "Governing law = Ontario",
+      "flag_if": "Governing law references Alberta instead of Ontario — creates jurisdictional conflict",
+      "risk_category": "Financial",
+      "subcategory": "IP & Indemnity",
+      "severity": "High",
+      "likelihood": 3,
+      "impact": 4,
+      "risk_score": 12,
+      "compliance_type": "hard"
+    },
+    {
+      "field": "auto_renewal",
+      "check": "Auto-renewal has opt-out",
+      "flag_if": "Contract auto-renews without explicit opt-out mechanism — creates lock-in risk",
+      "risk_category": "Operational",
+      "subcategory": "Procurement & Vendors",
+      "severity": "Medium",
+      "likelihood": 3,
+      "impact": 3,
+      "risk_score": 9,
+      "compliance_type": "hard"
+    }
+  ],
+  "extracted_fields": {
+    "document_type": "Procurement",
+    "parties": [],
+    "effective_date": null,
+    "expiry_date": null,
+    "vp_signature_count": 0,
+    "has_phipa_clause": false,
+    "has_indemnity": false,
+    "indemnity_has_cap": null,
+    "has_sla": false,
+    "breach_notification_hours": 0,
+    "termination_notice_days": 0,
+    "auto_renewal": true,
+    "renewal_notice_days": 0,
+    "has_data_security": false,
+    "has_audit_rights": false,
+    "has_return_destruction": false,
+    "ocr_quality": "Good",
+    "confidence": 0.7
+  },
+  "jev_result": {
+    "model": "jev-1.13.0",
+    "answers": {
+      "risk_severity": {
+        "type": "choice",
+        "choice": "high",
+        "confidence": 0.71,
+        "probabilities": {
+          "low": 0.01,
+          "medium": 0.04,
+          "high": 0.78,
+          "critical": 0.17
+        }
+      },
+      "needs_human_review": {
+        "type": "noul",
+        "noul": 0.69
+      },
+      "is_compliance_related": {
+        "type": "noul",
+        "noul": 0.12
+      },
+      "should_alert": {
+        "type": "noul",
+        "noul": 0.76
+      },
+      "decision_confidence": {
+        "type": "score",
+        "score": 2.4,
+        "confidence": 0.34,
+        "legend": {
+          "0": "Very uncertain",
+          "1": "Uncertain",
+          "2": "Moderate",
+          "3": "Confident",
+          "4": "Very confident"
+        },
+        "probabilities": {
+          "0": 0.05,
+          "1": 0.14,
+          "2": 0.26,
+          "3": 0.45,
+          "4": 0.1
+        }
+      }
+    },
+    "usage": {
+      "input_tokens": 761,
+      "output_tokens": 121
+    }
+  },
+  "text_preview": "This is a procurement contract governed by the laws of Alberta. It includes an auto-renewal clause. Data retention is 2 years. There is no breach notification requirement.\n",
+  "timestamp": "2026-10-15T16:39:51.725718",
+  "processed_at": "2026-10-15 16:39:51"
+}
