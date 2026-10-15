@@ -62,14 +62,12 @@ function KpiCard({ label, value, valueClass }: { label: string; value: number | 
 
 // ── Tab Bar ───────────────────────────────────────────────────────────────────
 
-type TabId = 'risk-register' | 'matrix' | 'contracts' | 'deadlines' | 'amendments' | 'cross-refs' | 'smart-filing' | 'insights'
+type TabId = 'risk-register' | 'contracts' | 'deadlines' | 'cross-refs' | 'smart-filing' | 'insights'
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'risk-register', label: 'Risk Register' },
-  { id: 'matrix', label: 'Risk Matrix' },
   { id: 'contracts', label: 'Contracts' },
   { id: 'deadlines', label: 'Deadlines' },
-  { id: 'amendments', label: 'Amendments' },
   { id: 'cross-refs', label: 'Cross-Refs' },
   { id: 'smart-filing', label: 'Smart Filing' },
   { id: 'insights', label: 'Insights' },
@@ -140,9 +138,11 @@ function TagSelector({
 function RiskRegisterTable({
   contracts: allContracts,
   onSelectContract,
+  onSwitchTab,
 }: {
   contracts: ContractDoc[]
   onSelectContract: (c: ContractDoc) => void
+  onSwitchTab?: (tab: TabId) => void // used in insights hint
 }) {
   const [selSev, setSelSev] = useState('All')
   const [selCat, setSelCat] = useState('All')
@@ -180,6 +180,21 @@ function RiskRegisterTable({
 
   return (
     <div>
+      {/* Systemic patterns hint */}
+      {(() => {
+        const allF = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f })))
+        const byField: Record<string, number> = {}
+        for (const f of allF) { byField[f.field] = (byField[f.field] || 0) + 1 }
+        const systemic = Object.entries(byField).filter(([, v]) => v >= 3)
+        return systemic.length > 0 ? (
+          <div className="bg-teal-50 border border-teal-200 rounded-lg px-4 py-2.5 mb-3 flex items-center gap-3">
+            <span className="text-teal-600 text-sm">💡</span>
+            <span className="text-xs text-teal-700"><b>{systemic.length} systemic patterns</b> — same issue in 3+ contracts. Consider process-level fixes.</span>
+            <button onClick={() => onSwitchTab?.('insights')} className="ml-auto text-xs font-bold text-teal-600 hover:text-teal-800 hover:underline shrink-0">View Prevention Playbook →</button>
+          </div>
+        ) : null
+      })()}
+
       {/* Search + Export */}
       <div className="mb-3 flex items-center gap-3">
         <div className="relative flex-1 max-w-md">
@@ -243,21 +258,15 @@ function RiskRegisterTable({
 
       {/* Table */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
-        <table className="w-full text-sm min-w-[1200px]">
+        <table className="w-full text-sm min-w-[700px]">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-16">Sev</th>
-              <th className="text-center px-2 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-8">L</th>
-              <th className="text-center px-2 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-8">I</th>
-              <th className="text-center px-2 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-10">Score</th>
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-28">HEROC Category</th>
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-24">Southlake Dept</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-16">Status</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-14">Src</th>
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-16">Type</th>
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Issue</th>
-              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-32">Contract</th>
-              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-20">Action</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-20">Severity</th>
+              <th className="text-center px-2 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-14">Risk</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-20">Status</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Issue</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-28">Contract</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-16">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -270,40 +279,20 @@ function RiskRegisterTable({
                   </span>
                 </td>
                 <td className="px-2 py-2.5 text-center">
-                  <span className="text-xs font-mono font-bold text-slate-600">{f.likelihood}</span>
-                </td>
-                <td className="px-2 py-2.5 text-center">
-                  <span className="text-xs font-mono font-bold text-slate-600">{f.impact}</span>
-                </td>
-                <td className="px-2 py-2.5 text-center">
-                  <span className={`font-mono text-xs font-bold ${f.risk_score>=20?'text-red-600':f.risk_score>=12?'text-orange-600':f.risk_score>=6?'text-yellow-600':'text-emerald-600'}`}>
-                    {f.risk_score}
-                  </span>
-                  <span className="text-[9px] text-slate-400">/25</span>
-                </td>
-                <td className="px-4 py-2.5">
-                  <div className="text-xs text-slate-700 font-medium">{f.risk_category || '—'}</div>
-                  <div className="text-[10px] text-slate-400">{f.subcategory}</div>
-                </td>
-                <td className="px-4 py-2.5">
-                  <span className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">{f.department || '—'}</span>
+                  <div className="text-[10px] font-mono font-bold text-slate-500">{f.likelihood}×{f.impact}</div>
+                  <div className={`text-xs font-bold ${f.risk_score>=20?'text-red-600':f.risk_score>=12?'text-orange-600':f.risk_score>=6?'text-yellow-600':'text-emerald-600'}`}>{f.risk_score}</div>
                 </td>
                 <td className="px-3 py-2.5">
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                    f.status === 'open' ? 'bg-red-100 text-red-700' :
-                    f.status === 'remediated' ? 'bg-emerald-100 text-emerald-700' :
-                    'bg-slate-100 text-slate-600'
-                  }`}>
-                    {f.status === 'open' ? '● Open' : f.status === 'remediated' ? '✓ Remediated' : 'Accepted'}
-                  </span>
-                </td>
-                <td className="px-3 py-2.5">
-                  <span className={`inline-block w-2 h-2 rounded-full ${f.source === 'ai_scan' ? 'bg-purple-500' : 'bg-teal-500'}`} title={f.source === 'ai_scan' ? 'AI-detected' : 'Rule-based'} />
-                </td>
-                <td className="px-4 py-2.5">
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${COMP_TYPE_BG[f.compliance_type] || ''}`}>
-                    {f.compliance_type === 'hard' ? 'HARD' : 'BP'}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      f.status === 'open' ? 'bg-red-100 text-red-700' :
+                      f.status === 'remediated' ? 'bg-emerald-100 text-emerald-700' :
+                      'bg-slate-100 text-slate-600'
+                    }`}>
+                      {f.status === 'open' ? 'Open' : f.status === 'remediated' ? '✓ Done' : 'Accepted'}
+                    </span>
+                    <span className={`w-1.5 h-1.5 rounded-full ${f.source === 'ai_scan' ? 'bg-purple-500' : 'bg-teal-500'}`} title={f.source === 'ai_scan' ? 'AI-detected' : 'Rule-based'} />
+                  </div>
                 </td>
                 <td className="px-4 py-2.5 text-xs text-slate-700 max-w-xs truncate">{f.flag_if}</td>
                 <td className="px-4 py-2.5">
@@ -329,7 +318,7 @@ function RiskRegisterTable({
             ))}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={12} className="px-4 py-8 text-center text-sm text-slate-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">
                   No flags match the selected filters
                 </td>
               </tr>
@@ -338,6 +327,41 @@ function RiskRegisterTable({
         </table>
       </div>
       <p className="text-xs text-slate-400 mt-2">{sorted.length} of {allFlags.length} flags</p>
+
+      {/* Collapsible L×I Distribution */}
+      <details className="mt-4 bg-white border border-slate-200 rounded-lg">
+        <summary className="px-4 py-2.5 text-xs font-bold text-slate-600 cursor-pointer select-none">
+          📊 L × I Risk Distribution <span className="font-normal text-slate-400">(click to expand)</span>
+        </summary>
+        <div className="px-4 pb-4">
+          {(() => {
+            const counts: Record<string, number> = {}
+            const LABELS: string[][] = [
+              ['Rare','Unlikely','Might happen','Likely','Will happen'],
+              ['Tiny','Minor','Noticeable','Significant','Severe'],
+            ]
+            for (const f of allFlags) {
+              const label = `${LABELS[0][f.likelihood-1] || '?'} × ${LABELS[1][f.impact-1] || '?'}`
+              counts[label] = (counts[label] || 0) + 1
+            }
+            return (
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([label, cnt]) => {
+                  const sev = label.includes('Severe') || (label.includes('Will happen') && label.includes('Severe')) ? 'bg-red-500' :
+                    label.includes('Significant') ? 'bg-orange-500' :
+                    label.includes('Noticeable') || label.includes('Likely') ? 'bg-yellow-500' : 'bg-slate-300'
+                  const color = sev
+                  return (
+                    <span key={label} className={`${color} text-white text-[10px] font-bold px-2.5 py-1 rounded`}>
+                      {label} · {cnt}
+                    </span>
+                  )
+                })}
+              </div>
+            )
+          })()}
+        </div>
+      </details>
     </div>
   )
 }
@@ -574,7 +598,7 @@ function DeadlinesTable({ contracts: allContracts }: { contracts: ContractDoc[] 
 
       {/* Table */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
-        <table className="w-full text-sm min-w-[1200px]">
+        <table className="w-full text-sm min-w-[700px]">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-12">Num</th>
@@ -634,6 +658,7 @@ function DeadlinesTable({ contracts: allContracts }: { contracts: ContractDoc[] 
 const L_LABELS = ['', 'Rare', 'Unlikely', 'Might happen', 'Likely', 'Will happen']
 const I_LABELS = ['', 'Tiny', 'Small', 'Noticeable', 'Major', 'Severe']
 
+// @ts-ignore - inlined into Risk Register collapsible
 function RiskMatrixView({ contracts: allContracts }: { contracts: ContractDoc[] }) {
   // Collect all flags with L and I
   const allFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
@@ -1004,6 +1029,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
 
 // ── Amendments View (closed-loop, modal-confirmed) ──────────────────────────
 
+// @ts-ignore - merged into CrossRefs tab
 function AmendmentsView({ contracts: allContracts, onSelect }: { contracts: ContractDoc[]; onSelect: (c: ContractDoc) => void }) {
   type AState = 'pending' | 'reviewed' | 'executed' | 'verified' | 'archived'
   const A_STEPS: Array<{ id: AState; label: string; color: string; desc: string }> = [
@@ -1677,8 +1703,7 @@ interface UploadedDoc {
 }
 
 function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[] }) {
-  const [classifying, setClassifying] = useState(false)
-  const [classified, setClassified] = useState(false)
+
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
   const [uploaded, setUploaded] = useState<UploadedDoc[]>([])
   const [uploading, setUploading] = useState(false)
@@ -1695,9 +1720,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         .catch(() => {})
     }
     fetchTree()
-    // Also refresh after classification completes
-    if (classified) setTimeout(fetchTree, 500)
-  }, [classified])
+  }, [])
 
   // Upload handler
   const handleUpload = async (files: FileList | File[]) => {
@@ -1784,8 +1807,15 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
       {/* Header */}
       <div>
         <h2 className="text-sm font-bold text-slate-800">AI Smart Filing</h2>
-        <p className="text-xs text-slate-500 mt-0.5">Upload documents → AI classifies into HEROC folders. Static contracts auto-filed by flag category.</p>
+        <p className="text-xs text-slate-500 mt-0.5">Upload → AI classifies → auto-files to HEROC folders. No manual step needed.</p>
       </div>
+
+      {/* API Server Warning */}
+      {uploadError && /port 8000|API/i.test(uploadError) && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-xs text-amber-700">
+          ⚠ <b>Upload requires local API server.</b> Run <code className="bg-amber-100 px-1 rounded">python3 server.py</code> in <code className="bg-amber-100 px-1 rounded">web-dashboard/</code> (port 8000).
+        </div>
+      )}
 
       {/* Upload Zone */}
       <div
@@ -1841,28 +1871,12 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         )}
       </div>
 
-      {/* Action button */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => { setClassifying(true); setTimeout(() => { setClassifying(false); setClassified(true) }, 800) }}
-          disabled={classifying || uploaded.length === 0}
-          className={`px-3 py-1.5 rounded text-xs font-medium transition ${
-            classifying ? 'bg-slate-100 text-slate-400' : uploaded.length > 0 ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-slate-100 text-slate-300'
-          }`}
-        >
-          {classifying ? 'Classifying…' : '⚡ Run AI Classification'}
-        </button>
-        {classified && (
-          <div className="text-[11px] text-emerald-600 space-y-0.5">
-            <div>✓ {uploaded.length + allContracts.length} docs classified</div>
-            {uploaded.map((u, i) => (
-              <div key={i} className="text-slate-500 ml-3">
-                📎 {u.filename} → <b className="text-teal-700">{u.filed_to || 'pending'}</b>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Filing status */}
+      {uploaded.length > 0 && (
+        <div className="text-xs text-emerald-600">
+          ✓ {uploaded.length} file(s) auto-classified and filed on upload
+        </div>
+      )}
 
       {/* Folder tree - unified view from disk */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
@@ -2404,6 +2418,7 @@ export default function App() {
                   <RiskRegisterTable
                     contracts={filtered}
                     onSelectContract={(c) => { setSelected(c); setActiveTab('contracts') }}
+                    onSwitchTab={(tab) => setActiveTab(tab)}
                   />
                 )}
                 {activeTab === 'contracts' && (
@@ -2423,12 +2438,6 @@ export default function App() {
                     <DeadlinesTimeline contracts={filtered} />
                     <DeadlinesTable contracts={filtered} />
                   </div>
-                )}
-                {activeTab === 'matrix' && (
-                  <RiskMatrixView contracts={filtered} />
-                )}
-                {activeTab === 'amendments' && (
-                  <AmendmentsView contracts={filtered} onSelect={(c) => { setSelected(c); setActiveTab('contracts') }} />
                 )}
                 {activeTab === 'cross-refs' && (
                   <CrossRefsView contracts={filtered} />
