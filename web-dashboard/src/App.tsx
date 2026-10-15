@@ -153,6 +153,7 @@ function RiskRegisterTable({
   const [selClinDept, setSelClinDept] = useState('All')
   const [selFlagStatus, setSelFlagStatus] = useState('All')
   const [selSource, setSelSource] = useState('All')
+  const [selScore, setSelScore] = useState<number | null>(null)
   const [search, setSearch] = useState('')
   const [statusOverrides, setStatusOverrides] = useState<Record<string, string>>({})
   void statusOverrides; void setStatusOverrides // referenced in row action buttons
@@ -164,6 +165,7 @@ function RiskRegisterTable({
     if (selClinDept !== 'All' && f.department !== selClinDept) return false
     if (selFlagStatus !== 'All' && f.status !== selFlagStatus) return false
     if (selSource !== 'All' && f.source !== selSource) return false
+    if (selScore !== null && f.risk_score !== selScore) return false
     if (search) {
       const q = search.toLowerCase()
       const match = f.flag_if?.toLowerCase().includes(q) || f.field?.toLowerCase().includes(q) || f.contract?.displayName?.toLowerCase().includes(q) || f.contract?.name?.toLowerCase().includes(q)
@@ -348,19 +350,34 @@ function RiskRegisterTable({
               counts[label] = (counts[label] || 0) + 1
             }
             return (
+              <>
               <div className="flex flex-wrap gap-1.5">
                 {Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([label, cnt]) => {
-                  const sev = label.includes('Severe') || (label.includes('Will happen') && label.includes('Severe')) ? 'bg-red-500' :
-                    label.includes('Significant') ? 'bg-orange-500' :
-                    label.includes('Noticeable') || label.includes('Likely') ? 'bg-yellow-500' : 'bg-slate-300'
-                  const color = sev
+                  const lIdx = ['Rare','Unlikely','Might happen','Likely','Will happen'].indexOf(label.split(' × ')[0])
+                  const iIdx = ['Tiny','Minor','Noticeable','Significant','Severe'].indexOf(label.split(' × ')[1] || '')
+                  const matchScore = (lIdx + 1) * (iIdx + 1)
+                  const isActive = selScore === matchScore
+                  const sev = matchScore >= 20 ? 'bg-red-500 hover:bg-red-600' :
+                    matchScore >= 12 ? 'bg-orange-500 hover:bg-orange-600' :
+                    matchScore >= 6 ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-slate-400 hover:bg-slate-500'
                   return (
-                    <span key={label} className={`${color} text-white text-[10px] font-bold px-2.5 py-1 rounded`}>
-                      {label} · {cnt}
-                    </span>
+                    <button
+                      key={label}
+                      onClick={() => setSelScore(isActive ? null : matchScore)}
+                      className={`${isActive ? sev + ' ring-2 ring-offset-1 ring-teal-300' : sev} text-white text-[10px] font-bold px-2.5 py-1.5 rounded cursor-pointer transition-all ${!isActive ? 'opacity-70 hover:opacity-100' : ''}`}
+                      title={isActive ? 'Click to clear filter' : `Filter: ${cnt} flags with this score`}
+                    >
+                      {label} · {cnt}{isActive ? ' ✓' : ''}
+                    </button>
                   )
                 })}
               </div>
+              {selScore !== null && (
+                <div className="mt-2 text-[10px] text-teal-600 font-medium">
+                  Filtering: score = {selScore} ({allFlags.filter((f) => f.risk_score === selScore).length} flags) · <button onClick={() => setSelScore(null)} className="underline">clear</button>
+                </div>
+              )}
+              </>
             )
           })()}
         </div>
