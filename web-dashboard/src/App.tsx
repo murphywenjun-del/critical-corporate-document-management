@@ -1035,19 +1035,21 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
                   {WF_STEPS.map((s, i) => (
                     <div key={s.id} className="flex items-center">
                       <button
-                        onClick={() => {
-                          // Jump to this step (backward or forward skip)
+                        onClick={(e) => {
+                          e.stopPropagation()
                           setWf((p) => ({ ...p, [wKey]: s.id as WfState }))
-                          setToast(`⏪ Jumped to "${s.label}" for #${w.sourceNum} → ${w.targetName}`)
+                          setToast(`→ Jumped to "${s.label}"`)
                         }}
-                        className={`w-3 h-3 rounded-full border-2 transition-all hover:scale-125 ${
+                        className={`w-5 h-5 rounded-full border-2 transition-all hover:scale-110 cursor-pointer ${
                           i < wStepIdx ? 'bg-teal-500 border-teal-400' :
                           i === wStepIdx ? 'bg-teal-500 border-teal-300 ring-2 ring-teal-200' :
                           'bg-white border-slate-300 hover:border-teal-400'
                         }`}
-                        title={`Jump to ${s.label}`}
-                      />
-                      {i < WF_STEPS.length - 1 && <div className={`w-4 h-0.5 ${i < wStepIdx ? 'bg-teal-300' : 'bg-slate-200'}`} />}
+                        title={`Go to ${s.label}`}
+                      >
+                        {i <= wStepIdx && <span className="text-white text-[8px] font-bold flex items-center justify-center h-full">✓</span>}
+                      </button>
+                      {i < WF_STEPS.length - 1 && <div className={`w-3 h-0.5 ${i < wStepIdx ? 'bg-teal-300' : 'bg-slate-200'}`} />}
                     </div>
                   ))}
                   <span className="ml-2 text-[10px] font-bold text-slate-500">{WF_STEPS[wStepIdx]?.label}</span>
@@ -1072,15 +1074,26 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
               <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 rounded-b-xl">
                 <div className="flex items-center gap-2">
                   <button onClick={() => setWizard(null)} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5">
-                    Close
+                    ✕ Close
                   </button>
+                  {wStepIdx > 0 && !isDone && (
+                    <button
+                      onClick={() => {
+                        const prev = WF_STEPS[wStepIdx - 1]
+                        setWf((p) => ({ ...p, [wKey]: prev.id as WfState }))
+                        setToast(`← Back to "${prev.label}"`)
+                      }}
+                      className="text-xs text-slate-600 bg-slate-100 border border-slate-200 hover:bg-slate-200 px-3 py-1.5 rounded-lg"
+                    >
+                      ← Back
+                    </button>
+                  )}
                   <div className="flex-1" />
                   {!isDone && nextStep && (
                     <button
                       onClick={() => {
                         setWf((p) => ({ ...p, [wKey]: nextStep.id as WfState }))
-                        setToast(`✓ ${WF_STEPS[wStepIdx]?.label} → ${nextStep.label} confirmed`)
-                        // Stay in wizard (it auto-advances because wState updated)
+                        setToast(`✓ ${WF_STEPS[wStepIdx]?.label} → ${nextStep.label}`)
                       }}
                       className="text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 px-4 py-2 rounded-lg"
                     >
@@ -1089,7 +1102,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
                   )}
                   {isDone && (
                     <button onClick={() => setWizard(null)} className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-lg">
-                      Done
+                      ✓ Done
                     </button>
                   )}
                 </div>
