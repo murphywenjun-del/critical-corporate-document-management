@@ -172,13 +172,20 @@ function RiskRegisterTable({
   return (
     <div>
       {/* Filters */}
-      <div className="flex gap-6 mb-4 flex-wrap">
-        <TagSelector label="Severity" options={['All', 'Critical', 'High', 'Medium', 'Low']} selected={selSev} onChange={setSelSev} />
-        <TagSelector label="HEROC Category" options={categories} selected={selCat} onChange={setSelCat} />
-        <TagSelector label="Subcategory" options={subcats} selected={selSub} onChange={setSelSub} />
-        <TagSelector label="Clinical Dept" options={clinDepts} selected={selClinDept} onChange={setSelClinDept} />
-        <TagSelector label="Status" options={['All', 'open', 'remediated', 'accepted']} selected={selFlagStatus} onChange={setSelFlagStatus} />
-        <TagSelector label="Source" options={['All', 'rule', 'ai_scan']} selected={selSource} onChange={setSelSource} />
+      <div className="mb-4">
+        <div className="flex gap-6 flex-wrap">
+          <TagSelector label="Severity" options={['All', 'Critical', 'High', 'Medium', 'Low']} selected={selSev} onChange={setSelSev} />
+          <TagSelector label="HEROC Category" options={categories} selected={selCat} onChange={setSelCat} />
+          <TagSelector label="Status" options={['All', 'open', 'remediated', 'accepted']} selected={selFlagStatus} onChange={setSelFlagStatus} />
+          <details className="text-[11px] text-slate-400">
+            <summary className="cursor-pointer hover:text-slate-600 py-1">More filters ▾</summary>
+            <div className="flex gap-6 mt-2 flex-wrap">
+              <TagSelector label="Subcategory" options={subcats} selected={selSub} onChange={setSelSub} />
+              <TagSelector label="Clinical Dept" options={clinDepts} selected={selClinDept} onChange={setSelClinDept} />
+              <TagSelector label="Source" options={['All', 'rule', 'ai_scan']} selected={selSource} onChange={setSelSource} />
+            </div>
+          </details>
+        </div>
       </div>
 
       {/* Source legend */}
@@ -209,7 +216,7 @@ function RiskRegisterTable({
           </thead>
           <tbody>
             {sorted.map((f, i) => (
-              <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50 transition-colors">
+              <tr key={i} className={`border-b border-slate-100 last:border-0 transition-colors ${f.severity === 'Critical' ? 'border-l-4 border-l-red-500 bg-red-50/40 hover:bg-red-50' : f.severity === 'High' ? 'border-l-4 border-l-orange-400 bg-orange-50/30 hover:bg-orange-50' : 'hover:bg-slate-50'}`}>
                 <td className="px-4 py-2.5">
                   <span className={`flex items-center gap-1.5 text-xs font-medium ${SEV_TEXT[f.severity]}`}>
                     <span className={`w-2 h-2 rounded-full ${SEV_DOT[f.severity]}`} />
@@ -1903,13 +1910,84 @@ export default function App() {
 
       {/* ── KPI Row ────────────────────────────────────────────────────────── */}
       <div className="px-4 sm:px-6 py-4">
-        <div className="max-w-screen-2xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="max-w-screen-2xl mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <KpiCard label="Documents" value={s.totalContracts} />
           <KpiCard label="Critical Flags" value={s.criticalCount} valueClass="text-red-600" />
           <KpiCard label="Open Flags" value={contracts.flatMap((c) => c.flags).filter((f) => f.status === 'open').length} valueClass="text-orange-600" />
-          <KpiCard label="Expired / Expiring" value={contracts.filter((c) => c.flags.some((f) => f.field === 'expiry_date')).length} valueClass="text-amber-600" />
+          <KpiCard label="Remediated" value={contracts.flatMap((c) => c.flags).filter((f) => f.status === 'remediated').length} valueClass="text-emerald-600" />
           <KpiCard label="Avg Compliance" value={`${Math.round(s.avgComplianceRate * 100)}%`} valueClass="text-teal-600" />
           <KpiCard label="Clean Docs" value={contracts.filter((c) => c.flags.length === 0).length} valueClass="text-emerald-600" />
+        </div>
+
+        {/* Risk Distribution + Top Actions */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Risk distribution by HEROC */}
+          <div className="bg-white border border-slate-200 rounded-lg p-4">
+            <div className="text-xs font-bold text-slate-700 mb-3">Risk Distribution by HEROC Category</div>
+            {(['Operational', 'Financial', 'Reputational', 'Continuity'] as const).map((cat) => {
+              const catFlags = contracts.flatMap((c) => c.flags).filter((f) => f.risk_category === cat)
+              const total = contracts.flatMap((c) => c.flags).length || 1
+              const pct = Math.round((catFlags.length / total) * 100)
+              const colors: Record<string, string> = { Operational: 'bg-teal-500', Financial: 'bg-amber-500', Reputational: 'bg-purple-500', Continuity: 'bg-blue-500' }
+              return (
+                <div key={cat} className="flex items-center gap-2 mb-2">
+                  <span className="text-[11px] text-slate-600 w-24">{cat}</span>
+                  <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${colors[cat]}`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-[10px] text-slate-400 w-16 text-right">{catFlags.length} flags ({pct}%)</span>
+                </div>
+              )
+            })}
+            {/* Remediation progress */}
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Remediation Progress</div>
+              {(() => {
+                const allFlags = contracts.flatMap((c) => c.flags)
+                const remediated = allFlags.filter((f) => f.status === 'remediated').length
+                const accepted = allFlags.filter((f) => f.status === 'accepted').length
+                const total = allFlags.length || 1
+                const pct = Math.round(((remediated + accepted) / total) * 100)
+                return (
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-teal-400 to-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-[11px] font-bold text-emerald-600">{pct}%</span>
+                    <span className="text-[10px] text-slate-400">{remediated + accepted}/{total} resolved</span>
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+
+          {/* Top 5 Action Items */}
+          <div className="bg-white border border-slate-200 rounded-lg p-4">
+            <div className="text-xs font-bold text-slate-700 mb-3">
+              ⚡ Top 5 Actions <span className="font-normal text-slate-400">(open flags, highest risk)</span>
+            </div>
+            {(() => {
+              const openFlags = contracts.flatMap((c) => c.flags.map((f) => ({ ...f, contractNum: c.num, contractName: c.displayName })))
+                .filter((f) => f.status === 'open')
+                .sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0))
+                .slice(0, 5)
+              if (openFlags.length === 0) return <div className="text-[11px] text-slate-400">All flags resolved. 🎉</div>
+              return openFlags.map((f, i) => (
+                <div key={i} className="flex items-start gap-2 py-1.5 border-b border-slate-50 last:border-0">
+                  <span className={`text-[10px] font-bold w-5 text-center ${i === 0 ? 'text-red-600' : i < 3 ? 'text-orange-600' : 'text-slate-400'}`}>{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] font-medium text-slate-700 truncate">{f.flag_if}</div>
+                    <div className="text-[10px] text-slate-400">
+                      #{f.contractNum} {f.contractName} · {f.severity} · {f.risk_score}pts
+                    </div>
+                  </div>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${f.severity === 'Critical' ? 'bg-red-100 text-red-700' : f.severity === 'High' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                    {f.severity}
+                  </span>
+                </div>
+              ))
+            })()}
+          </div>
         </div>
       </div>
 
