@@ -974,8 +974,8 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
           switch (to) {
             case 'acknowledged': return (
               <div className="space-y-2">
-                <div className="text-[11px] text-slate-600">Confirm a responsible person has <b>reviewed and accepted</b> this gap.</div>
-                <div className="bg-amber-50 border border-amber-200 rounded p-2 text-[11px] text-amber-800">
+                <div className="text-sm text-slate-600">Confirm a responsible person has <b>reviewed and accepted</b> this gap.</div>
+                <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-800">
                   <b>Gap:</b> {w.beforeText}
                 </div>
                 <div className="text-[10px] text-slate-400">Suggested owner: document custodian · SLA: 5 business days</div>
@@ -983,15 +983,15 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
             )
             case 'fixing': return (
               <div className="space-y-2">
-                <div className="text-[11px] text-slate-600">Target document will be <b>updated</b> to match source requirement.</div>
+                <div className="text-sm text-slate-600">Target document will be <b>updated</b> to match source requirement.</div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <div className="text-[10px] font-bold text-red-400 uppercase mb-1">Current</div>
-                    <div className="text-[11px] text-slate-700 bg-red-50 border border-red-100 rounded p-2">{w.beforeText}</div>
+                    <div className="text-xs text-slate-700 bg-red-50 border border-red-100 rounded p-3">{w.beforeText}</div>
                   </div>
                   <div>
                     <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Required</div>
-                    <div className="text-[11px] text-slate-700 bg-emerald-50 border border-emerald-100 rounded p-2">{w.afterText}</div>
+                    <div className="text-xs text-slate-700 bg-emerald-50 border border-emerald-100 rounded p-3">{w.afterText}</div>
                   </div>
                 </div>
                 {w.keyChanges.length > 0 && <div className="text-[10px] text-slate-500"><b>Changes:</b> {w.keyChanges.join(' · ')}</div>}
@@ -1000,8 +1000,8 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
             )
             case 'verified': return (
               <div className="space-y-2">
-                <div className="text-[11px] text-slate-600">Confirm the target document <b>has been updated</b> and matches source.</div>
-                <div className="bg-blue-50 border border-blue-200 rounded p-2 text-[11px] space-y-1">
+                <div className="text-sm text-slate-600">Confirm the target document <b>has been updated</b> and matches source.</div>
+                <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs space-y-1">
                   <div className="text-blue-700 font-medium">Verification checklist:</div>
                   <div>□ {w.targetName} has been revised</div>
                   <div>□ Clause {w.targetClause} now matches: "{w.afterText}"</div>
@@ -1012,8 +1012,8 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
             )
             case 'closed': return (
               <div className="space-y-2">
-                <div className="text-[11px] text-slate-600">Marking this cross-reference as <b>fully resolved</b>.</div>
-                <div className="bg-emerald-50 border border-emerald-200 rounded p-2 text-[11px] text-emerald-800">
+                <div className="text-sm text-slate-600">Marking this cross-reference as <b>fully resolved</b>.</div>
+                <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-xs text-emerald-800">
                   ✓ {w.beforeText} → {w.afterText}
                 </div>
                 <div className="text-[10px] text-slate-400">Permanent. To reopen, set back to "Detected".</div>
@@ -1025,11 +1025,11 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
         
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setWizard(null)}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               {/* Header */}
               <div className="px-5 pt-4 pb-3 border-b border-slate-100">
-                <div className="text-sm font-bold text-slate-800">Workflow: #{w.sourceNum} → {w.targetName}</div>
-                <div className="text-[11px] text-slate-500 mt-0.5">{wSource?.displayName} → {w.targetName}</div>
+                <div className="text-base font-bold text-slate-800">Workflow: #{w.sourceNum} → {w.targetName}</div>
+                <div className="text-xs text-slate-500 mt-1">{wSource?.displayName} → {w.targetName}</div>
                 {/* Step boxes - click to jump, like original 5 buttons */}
                 <div className="flex items-center gap-1.5 mt-3">
                   {WF_STEPS.map((s, i) => (
@@ -1040,7 +1040,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
                         setWf((p) => ({ ...p, [wKey]: s.id as WfState }))
                         setToast(`→ "${s.label}"`)
                       }}
-                      className={`text-[10px] font-medium px-2.5 py-1.5 rounded border transition-all ${
+                      className={`text-xs font-medium px-3 py-2 rounded-lg border transition-all ${
                         i === wStepIdx ? `${s.color} ring-2 ring-offset-1 ring-teal-300` :
                         i < wStepIdx ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
                         'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
@@ -1056,8 +1056,8 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
               <div className="px-5 py-4">
                 {isDone ? (
                   <div className="text-center py-4">
-                    <div className="text-3xl mb-2">✅</div>
-                    <div className="text-sm font-bold text-emerald-700">Workflow Complete</div>
+                    <div className="text-4xl mb-3">✅</div>
+                    <div className="text-base font-bold text-emerald-700">Workflow Complete</div>
                     <div className="text-[11px] text-slate-500 mt-1">All 5 steps completed for this cross-reference.</div>
                   </div>
                 ) : (
@@ -1068,7 +1068,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
               {/* Footer */}
               <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 rounded-b-xl">
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setWizard(null)} className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1.5">
+                  <button onClick={() => setWizard(null)} className="text-sm text-slate-400 hover:text-slate-600 px-3 py-2">
                     ✕
                   </button>
                   {wStepIdx > 0 && (
@@ -1077,7 +1077,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
                         const prev = WF_STEPS[wStepIdx - 1]
                         setWf((p) => ({ ...p, [wKey]: prev.id as WfState }))
                       }}
-                      className="text-xs text-slate-600 bg-slate-100 border border-slate-200 hover:bg-slate-200 px-3 py-1.5 rounded-lg"
+                      className="text-sm text-slate-600 bg-slate-100 border border-slate-200 hover:bg-slate-200 px-4 py-2 rounded-lg"
                     >
                       ← {WF_STEPS[wStepIdx - 1]?.label}
                     </button>
@@ -1089,13 +1089,13 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
                         const nxt = WF_STEPS[wStepIdx + 1]
                         setWf((p) => ({ ...p, [wKey]: nxt.id as WfState }))
                       }}
-                      className="text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 px-4 py-1.5 rounded-lg"
+                      className="text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 px-5 py-2 rounded-lg"
                     >
                       {WF_STEPS[wStepIdx + 1]?.label} →
                     </button>
                   )}
                   {isDone && (
-                    <button onClick={() => setWizard(null)} className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-4 py-1.5 rounded-lg">
+                    <button onClick={() => setWizard(null)} className="text-sm font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-5 py-2 rounded-lg">
                       ✓ Done
                     </button>
                   )}
