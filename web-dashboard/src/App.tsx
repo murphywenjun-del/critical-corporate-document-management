@@ -152,6 +152,7 @@ function RiskRegisterTable({
   const [selSource, setSelSource] = useState('All')
   const [search, setSearch] = useState('')
   const [statusOverrides, setStatusOverrides] = useState<Record<string, string>>({})
+  void statusOverrides; void setStatusOverrides // referenced in row action buttons
   const allFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
   const filtered = allFlags.filter((f) => {
     if (selSev !== 'All' && f.severity !== selSev) return false
@@ -309,6 +310,20 @@ function RiskRegisterTable({
                   <button onClick={() => onSelectContract(f.contract)} className="text-xs text-teal-600 hover:text-teal-800 hover:underline">
                     #{f.contract.num} {f.contract.displayName}
                   </button>
+                </td>
+                <td className="px-3 py-2.5">
+                  <div className="flex items-center gap-1">
+                    {statusOverrides[`${f.contract.num}_${f.field}_${i}`] === 'remediated' ? (
+                      <span className="text-[9px] text-emerald-600 font-bold">✓ Done</span>
+                    ) : statusOverrides[`${f.contract.num}_${f.field}_${i}`] === 'accepted' ? (
+                      <span className="text-[9px] text-slate-500">Accepted</span>
+                    ) : (
+                      <button onClick={(e) => { e.stopPropagation(); setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })) }} className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition">Fix</button>
+                    )}
+                    {!statusOverrides[`${f.contract.num}_${f.field}_${i}`] && (
+                      <button onClick={(e) => { e.stopPropagation(); setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'accepted' })) }} className="text-[9px] px-1.5 py-0.5 bg-slate-50 text-slate-500 border border-slate-200 rounded hover:bg-slate-100 transition">Accept</button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -1278,9 +1293,11 @@ function AmendmentsView({ contracts: allContracts, onSelect }: { contracts: Cont
 function ContractDetail({
   selected,
   onBack,
+  docLinks: allDocLinks,
 }: {
   selected: ContractDoc
   onBack: () => void
+  docLinks: DocLink[]
 }) {
   const s = selected
   return (
@@ -1418,18 +1435,19 @@ function ContractDetail({
         <section>
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Related Documents</h3>
           <div className="space-y-2">
-            {amendments.filter((a) => a.baseContractId === s.num).length > 0 ? (
-              amendments.filter((a) => a.baseContractId === s.num).map((a) => (
+            {s.amendments && s.amendments.length > 0 ? (
+              s.amendments.map((a) => (
                 <div key={a.id} className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                  <div className="text-xs font-bold text-amber-800">#{a.num} {a.displayName} <span className="font-normal text-amber-600">({a.status})</span></div>
-                  <div className="text-[11px] text-amber-700 mt-0.5">{a.changeDescription}</div>
+                  <div className="text-xs font-bold text-amber-800">{a.label}</div>
+                  <div className="text-[11px] text-amber-700 mt-0.5">Effective: {a.effectiveDate} {a.supersedesOriginal && '· supersedes original'}</div>
+                  {a.keyChanges.length > 0 && <div className="text-[10px] text-amber-600 mt-0.5">{a.keyChanges.join(' · ')}</div>}
                 </div>
               ))
             ) : (
               <div className="text-xs text-slate-400">No amendments linked to this contract</div>
             )}
-            {docLinks.filter((l) => l.sourceNum === s.num).map((l) => (
-              <div key={l.id} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+            {allDocLinks.filter((l: DocLink) => l.sourceNum === s.num).map((l: DocLink, i: number) => (
+              <div key={`dl-${i}`} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
                 <div className="text-xs font-medium text-slate-700">→ {l.targetName}</div>
                 <div className="text-[11px] text-slate-500 mt-0.5">{l.changeDescription}</div>
               </div>
@@ -2253,7 +2271,7 @@ export default function App() {
           {/* Main Content */}
           <main className="flex-1 min-w-0 overflow-x-auto">
             {selected ? (
-              <ContractDetail selected={selected} onBack={() => setSelected(null)} />
+              <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} />
             ) : (
               <>
                 {activeTab === 'risk-register' && (
