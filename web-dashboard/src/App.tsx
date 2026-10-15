@@ -200,6 +200,69 @@ function RiskRegisterTable({
         ) : null
       })()}
 
+      {/* Collapsible L×I Distribution */}
+      <details className="mt-4 bg-white border border-slate-200 rounded-lg">
+        <summary className="px-4 py-2.5 text-xs font-bold text-slate-600 cursor-pointer select-none">
+          📊 L × I Risk Distribution <span className="font-normal text-slate-400">(click to expand)</span>
+        </summary>
+        <div className="px-4 pb-4">
+          {(() => {
+            const counts: Record<string, number> = {}
+            const LABELS: string[][] = [
+              ['Rare','Unlikely','Might happen','Likely','Will happen'],
+              ['Tiny','Minor','Noticeable','Significant','Severe'],
+            ]
+            for (const f of allFlags) {
+              const label = `${LABELS[0][f.likelihood-1] || '?'} × ${LABELS[1][f.impact-1] || '?'}`
+              counts[label] = (counts[label] || 0) + 1
+            }
+            return (
+              <>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([label, cnt]) => {
+                  const lIdx = ['Rare','Unlikely','Might happen','Likely','Will happen'].indexOf(label.split(' × ')[0])
+                  const iIdx = ['Tiny','Minor','Noticeable','Significant','Severe'].indexOf(label.split(' × ')[1] || '')
+                  const matchScore = (lIdx + 1) * (iIdx + 1)
+                  const isActive = selScore === matchScore
+                  const sev = matchScore >= 20 ? 'bg-red-500 hover:bg-red-600' :
+                    matchScore >= 12 ? 'bg-orange-500 hover:bg-orange-600' :
+                    matchScore >= 6 ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-slate-400 hover:bg-slate-500'
+                  return (
+                    <button
+                      key={label}
+                      onClick={() => setSelScore(isActive ? null : matchScore)}
+                      className={`${isActive ? sev + ' ring-2 ring-offset-1 ring-teal-300' : sev} text-white text-[10px] font-bold px-2.5 py-1.5 rounded cursor-pointer transition-all ${!isActive ? 'opacity-70 hover:opacity-100' : ''}`}
+                      title={isActive ? 'Click to clear filter' : `Filter: ${cnt} flags with this score`}
+                    >
+                      {label} · {cnt}{isActive ? ' ✓' : ''}
+                    </button>
+                  )
+                })}
+              </div>
+              {selScore !== null && (
+                <div className="mt-3 bg-teal-50 border border-teal-200 rounded-lg p-3">
+                  <div className="text-[10px] font-bold text-teal-700 mb-2">
+                    Score = {selScore}: {allFlags.filter((f) => f.risk_score === selScore).length} flags across {new Set(allFlags.filter((f) => f.risk_score === selScore).map((f) => f.contract.num)).size} contracts
+                    <button onClick={() => setSelScore(null)} className="ml-2 text-teal-500 underline">clear</button>
+                  </div>
+                  <div className="space-y-1">
+                    {allFlags.filter((f) => f.risk_score === selScore).map((f, i) => (
+                      <button key={i} onClick={() => { onSelectContract(f.contract); setSelScore(null) }} className="flex items-center gap-2 text-[11px] text-slate-700 hover:text-teal-700 hover:bg-white rounded px-2 py-1 w-full text-left transition">
+                        <span className={`w-2 h-2 rounded-full ${f.severity === 'Critical' ? 'bg-red-500' : f.severity === 'High' ? 'bg-orange-500' : 'bg-yellow-500'}`} />
+                        <span className="font-medium">#{f.contract.num} {f.contract.displayName}</span>
+                        <span className="text-slate-400">· {f.flag_if}</span>
+                        <span className="ml-auto text-teal-600 text-[10px] font-bold">→</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              </>
+            )
+          })()}
+        </div>
+      </details>
+
       {/* Search + Export */}
       <div className="mb-3 flex items-center gap-3">
         <div className="relative flex-1 max-w-md">
@@ -332,56 +395,6 @@ function RiskRegisterTable({
         </table>
       </div>
       <p className="text-xs text-slate-400 mt-2">{sorted.length} of {allFlags.length} flags</p>
-
-      {/* Collapsible L×I Distribution */}
-      <details className="mt-4 bg-white border border-slate-200 rounded-lg">
-        <summary className="px-4 py-2.5 text-xs font-bold text-slate-600 cursor-pointer select-none">
-          📊 L × I Risk Distribution <span className="font-normal text-slate-400">(click to expand)</span>
-        </summary>
-        <div className="px-4 pb-4">
-          {(() => {
-            const counts: Record<string, number> = {}
-            const LABELS: string[][] = [
-              ['Rare','Unlikely','Might happen','Likely','Will happen'],
-              ['Tiny','Minor','Noticeable','Significant','Severe'],
-            ]
-            for (const f of allFlags) {
-              const label = `${LABELS[0][f.likelihood-1] || '?'} × ${LABELS[1][f.impact-1] || '?'}`
-              counts[label] = (counts[label] || 0) + 1
-            }
-            return (
-              <>
-              <div className="flex flex-wrap gap-1.5">
-                {Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([label, cnt]) => {
-                  const lIdx = ['Rare','Unlikely','Might happen','Likely','Will happen'].indexOf(label.split(' × ')[0])
-                  const iIdx = ['Tiny','Minor','Noticeable','Significant','Severe'].indexOf(label.split(' × ')[1] || '')
-                  const matchScore = (lIdx + 1) * (iIdx + 1)
-                  const isActive = selScore === matchScore
-                  const sev = matchScore >= 20 ? 'bg-red-500 hover:bg-red-600' :
-                    matchScore >= 12 ? 'bg-orange-500 hover:bg-orange-600' :
-                    matchScore >= 6 ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-slate-400 hover:bg-slate-500'
-                  return (
-                    <button
-                      key={label}
-                      onClick={() => setSelScore(isActive ? null : matchScore)}
-                      className={`${isActive ? sev + ' ring-2 ring-offset-1 ring-teal-300' : sev} text-white text-[10px] font-bold px-2.5 py-1.5 rounded cursor-pointer transition-all ${!isActive ? 'opacity-70 hover:opacity-100' : ''}`}
-                      title={isActive ? 'Click to clear filter' : `Filter: ${cnt} flags with this score`}
-                    >
-                      {label} · {cnt}{isActive ? ' ✓' : ''}
-                    </button>
-                  )
-                })}
-              </div>
-              {selScore !== null && (
-                <div className="mt-2 text-[10px] text-teal-600 font-medium">
-                  Filtering: score = {selScore} ({allFlags.filter((f) => f.risk_score === selScore).length} flags) · <button onClick={() => setSelScore(null)} className="underline">clear</button>
-                </div>
-              )}
-              </>
-            )
-          })()}
-        </div>
-      </details>
     </div>
   )
 }
