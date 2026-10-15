@@ -1700,101 +1700,97 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         )}
       </div>
 
-      {/* Folder tree */}
+      {/* Folder tree - unified view from disk */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">
-          FOLDER STRUCTURE <span className="font-normal text-slate-400">(5 HEROC categories · {allContracts.length + uploaded.length} docs)</span>
+          FOLDER STRUCTURE
+          <span className="font-normal text-slate-400 ml-2">5 HEROC categories - {allContracts.length + uploaded.length} docs - real disk paths</span>
         </div>
-        <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+        <div className="divide-y divide-slate-100">
           {(['Operational', 'Financial', 'Reputational', 'Continuity', 'Clean'] as const).map((cat) => {
-            const subs = tree[cat] || {}
-            const totalDocs = Object.values(subs).reduce((a, v) => a + v.docs.length, 0)
-            const icons: Record<string, string> = { Operational: '⚙️', Financial: '💰', Reputational: '📢', Continuity: '🔄', Clean: '✓' }
+            const icons: Record<string, string> = { Operational: '⚙️', Financial: '💰', Reputational: '📢', Continuity: '🔄', Clean: '✅' }
+            const diskSubs = diskTree[cat]?.subcategories || {}
+            const diskSubsWithFiles = Object.entries(diskSubs).filter(([_ , files]) => files.length > 0)
+            const diskFileCount = diskSubsWithFiles.reduce((a, [_, files]) => a + files.length, 0)
+            const computedSubs = tree[cat] || {}
+            const computedDocCount = Object.values(computedSubs).reduce((a, v) => a + v.docs.length, 0)
+            const totalVisible = Math.max(diskFileCount, computedDocCount)
+            const isExpanded = selectedFolder === cat
+
             return (
               <div key={cat}>
                 <div
-                  className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-slate-50"
-                  onClick={() => setSelectedFolder(selectedFolder === cat ? null : cat)}
+                  className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-slate-50 transition"
+                  onClick={() => setSelectedFolder(isExpanded ? null : cat)}
                 >
-                  <span className={`text-[10px] ${selectedFolder === cat ? 'text-teal-600' : 'text-slate-400'}`}>
-                    {selectedFolder === cat ? '▼' : '▶'}
-                  </span>
-                  <span className="text-[13px] font-bold text-slate-700">{icons[cat]} {cat}</span>
-                  <span className="text-[10px] text-slate-400 ml-auto">{totalDocs > 0 ? `${totalDocs} docs` : 'empty'}</span>
+                  <span className={`text-[10px] transition ${isExpanded ? 'text-teal-600' : 'text-slate-400'}`}>{isExpanded ? '▼' : '▶'}</span>
+                  <span className="text-sm font-bold text-slate-800">{icons[cat]} {cat}</span>
+                  <div className="ml-auto flex items-center gap-3">
+                    {diskFileCount > 0 && <span className="text-[10px] text-slate-400">{diskFileCount} on disk</span>}
+                    <span className={`text-[11px] font-medium ${totalVisible > 0 ? 'text-slate-600' : 'text-slate-300'}`}>
+                      {totalVisible > 0 ? `${totalVisible} docs` : 'empty'}
+                    </span>
+                  </div>
                 </div>
-                {selectedFolder === cat && (
-                  <div className="ml-8 space-y-1.5 pb-2">
-                    {totalDocs === 0 && (
-                      <div className="text-[11px] text-slate-300 ml-4 py-1">No documents in this category</div>
-                    )}
-                    {/* Show disk-based subcategories (real folders on disk) */}
-                    {diskTree[cat] && Object.keys(diskTree[cat].subcategories).length > 0 && (
-                      <div className="ml-2 mb-1">
-                        <div className="text-[9px] text-slate-400 uppercase font-bold mb-1">On Disk</div>
-                        {Object.entries(diskTree[cat].subcategories).filter(([_, files]) => files.length > 0).map(([sub, files]) => (
-                          <div key={sub} className="flex items-center gap-2 py-0.5">
-                            <span className="text-[11px] text-slate-500">📂 {sub}</span>
-                            <span className="text-[10px] text-slate-400">{files.length} file(s)</span>
-                            {files.slice(0, 3).map((f) => (
-                              <span key={f} className="text-[9px] text-slate-500 truncate max-w-40" title={f}>📄 {f}</span>
-                            ))}
-                            {files.length > 3 && <span className="text-[9px] text-slate-400">+{files.length - 3} more</span>}
+
+                {isExpanded && (
+                  <div className="ml-8 space-y-2 pb-3">
+                    {diskSubsWithFiles.length > 0 && (
+                      <div>
+                        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">Disk Files (data/archive/{cat}/)</div>
+                        {diskSubsWithFiles.map(([sub, files]) => (
+                          <div key={sub} className="ml-3 mb-1.5">
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-medium">
+                              <span>U+1F4C2</span>
+                              <span>{sub.replace(/_/g, ' ')}</span>
+                              <span className="text-[9px] text-slate-400">({files.length})</span>
+                            </div>
+                            <div className="ml-5 space-y-0.5">
+                              {files.map((f) => (
+                                <div key={f} className="flex items-center gap-1.5 text-[11px] text-slate-500">
+                                  <span className="text-slate-300">U+1F4C4</span>
+                                  <span className="truncate max-w-md" title={f}>{f}</span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         ))}
                       </div>
                     )}
-                    {/* Show computed subcategories (from flags + uploaded) */}
-                    {Object.entries(subs).map(([sub, items]) => (
-                      <div key={sub} className="flex items-start gap-2 py-0.5">
-                        <span className="text-[11px] text-slate-500 mt-0.5">📂 {sub}</span>
-                        <div className="flex-1 space-y-0.5">
-                          {items.docs.map((doc, i) => (
-                            <div key={i} className="ml-4 flex items-center gap-2 py-0.5">
-                              <span className="text-[10px] text-slate-400">📄</span>
-                              <span className="text-[11px] text-slate-600 flex-1 truncate">{doc.label}</span>
-                              {doc.isUploaded && <span className="text-[9px] text-purple-600 bg-purple-50 border border-purple-200 rounded px-1">uploaded</span>}
-                              <span className={`text-[9px] font-bold ${doc.riskLevel === 'Critical' ? 'text-red-600' : doc.riskLevel === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>
-                                {doc.riskLevel}
-                              </span>
-                              <span className="text-[9px] text-slate-400">{doc.flagsCount} flags</span>
-                              <span className="text-[9px] text-teal-600 font-mono w-8 text-right">{Math.round(confidence(doc.flagsCount) * 100)}%</span>
+
+                    {Object.keys(computedSubs).length > 0 && (
+                      <div>
+                        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">Risk Assessment (computed)</div>
+                        {Object.entries(computedSubs).map(([sub, items]) => (
+                          <div key={sub} className="ml-3 mb-1.5">
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-medium">
+                              <span>U+1F4C2</span>
+                              <span>{sub}</span>
                             </div>
-                          ))}
-                        </div>
+                            <div className="ml-5 space-y-0.5">
+                              {items.docs.map((doc, i) => (
+                                <div key={i} className="flex items-center gap-2 text-[11px]">
+                                  <span className="text-slate-300">U+1F4C4</span>
+                                  <span className="text-slate-600 flex-1 truncate">{doc.label}</span>
+                                  {doc.isUploaded && <span className="text-[9px] text-purple-600 bg-purple-50 border border-purple-200 rounded px-1">uploaded</span>}
+                                  <span className={`text-[10px] font-bold ${doc.riskLevel === 'Critical' ? 'text-red-600' : doc.riskLevel === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>{doc.riskLevel}</span>
+                                  <span className="text-[9px] text-slate-400">{doc.flagsCount}F</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
+
+                    {totalVisible === 0 && diskSubsWithFiles.length === 0 && (
+                      <div className="text-[11px] text-slate-300 ml-4 py-2">No documents in this category yet.</div>
+                    )}
                   </div>
                 )}
               </div>
             )
           })}
-          {/* Clean / Unfiled */}
-          <div className="py-2">
-            <div className="flex items-center gap-2 px-4 py-1.5">
-              <span className="text-[10px] text-slate-400">▶</span>
-              <span className="text-[13px] font-bold text-emerald-700">📁 Clean / Unfiled</span>
-              <span className="text-[10px] text-slate-400 ml-auto">{cleanDocs.length + cleanUploaded.length} docs</span>
-            </div>
-            {cleanDocs.length > 0 && (
-              <div className="ml-8 space-y-0.5">
-                {cleanDocs.map((d) => (
-                  <div key={d.num} className="flex items-center gap-2 ml-4 py-0.5">
-                    <span className="text-[10px] text-slate-400">📄</span>
-                    <span className="text-[11px] text-slate-600">#{d.num} {d.displayName}</span>
-                    <span className="text-[9px] text-emerald-600">verified clean</span>
-                  </div>
-                ))}
-                {cleanUploaded.map((u, i) => (
-                  <div key={`u${i}`} className="flex items-center gap-2 ml-4 py-0.5">
-                    <span className="text-[10px] text-slate-400">📄</span>
-                    <span className="text-[11px] text-slate-600">📎 {u.filename}</span>
-                    <span className="text-[9px] text-purple-600">uploaded</span>
-                    <span className="text-[9px] text-emerald-600">clean</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
