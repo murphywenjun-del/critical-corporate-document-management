@@ -1,32 +1,38 @@
-# React + TypeScript + Vite
+# Southlake Health — Corporate Document Risk Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+## Prototype Overview
 
-Currently, two official plugins are available:
+A digital tool that helps Southlake Health identify and manage risks in critical corporate documents such as contracts, agreements, and policies.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+### What It Does
 
-## React Compiler
+When a document is uploaded, the system automatically:
+- **Reads and understands** the contract or agreement
+- **Checks compliance** against Southlake's signing authority rules (e.g., requiring two VP signatures)
+- **Flags potential risks** such as expired agreements, missing clauses, or unauthorized signatories
+- **Ranks severity** — from minor reminders to critical compliance gaps
+- **Highlights the exact text** in the document so you can see exactly what was flagged and why
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### How It Helps
 
-## Expanding the Oxlint configuration
+1. **Reduced legal exposure** — Catches issues before they become problems
+2. **Faster document review** — AI assists with the first pass; your team focuses on what matters
+3. **Consistent compliance** — Every document is checked the same way, every time
+4. **Clear audit trail** — Every flag comes with a documented reason, making it easy to explain to stakeholders
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+### Key Features
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
+- **Drag-and-drop upload** — Simply drop PDFs, scans, or Word documents into the tool
+- **Visual risk indicators** — Color-coded severity (red = critical, orange = high, yellow = medium)
+- **Click-to-reveal reasons** — Click any highlighted section to see why it was flagged
+- **Smart summaries** — Each document gets a clear score and action recommendation
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+### Current Capabilities
+
+- Processes contracts, NDAs, MOUs, procurement agreements, and data sharing arrangements
+- Checks for: unauthorized signatures, expired terms, missing compliance clauses, uncapped financial obligations
+- Integrates with Southlake's existing AI governance framework (DHLC review compliant)
+
+### Built For
+
+This prototype was developed by Ivey Business School students as part of the Advanced Field Project, in partnership with Southlake Health's leadership team.

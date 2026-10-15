@@ -271,7 +271,7 @@ app.add_middleware(
 
 @app.get("/api/status")
 def get_status():
-    return {"status": "ok", "results_count": len(RESULTS_DIR.glob("*.json"))}
+    return {"status": "ok", "results_count": len(list(RESULTS_DIR.glob("*.json")))}
 
 @app.get("/api/results")
 def get_results():
@@ -328,7 +328,7 @@ def get_config():
     return {
         "agnes_connected": bool(AGNES_API_KEY),
         "jev_connected": bool(JEV_API_KEY),
-        "total_results": len(RESULTS_DIR.glob("*.json")),
+        "total_results": len(list(RESULTS_DIR.glob("*.json"))),
         "supported_formats": [".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".docx", ".txt"],
     }
 

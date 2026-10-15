@@ -1,5 +1,6 @@
-# AI Prototype 测试脚本 v5
-## Test Framework for Contract Risk Assessment — Synthetic Contracts v2 (Fixed)
+# AI Prototype 测试脚本 v6
+## Test Framework for Contract Risk Assessment — Quantitative L×I Scoring + Compliance Dashboard
+## Usage: python test_framework.py
 
 import json
 import re
@@ -7,12 +8,27 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 
 # ============================================================================
-# 配置
+# 配置 — Quantitative Risk Scoring (ROCK-aligned)
 # ============================================================================
 
-RISK_THRESHOLDS = {"critical": 4.0, "high": 3.0, "medium": 2.0, "low": 1.0}
+# Risk level thresholds on 1-25 scale
+RISK_THRESHOLDS = {"critical": 19.0, "high": 13.0, "medium": 7.0, "low": 1.0}
+# Legacy mapping for backward compatibility
 SEVERITY_SCORES = {"Critical": 5, "High": 4, "Medium": 3, "Low": 2}
 ALERT_THRESHOLDS = {"renewal_days": 90, "expiry_days": 30, "breach_hours": 72}
+
+# Compliance type constants
+HARD = "hard"          # 硬性合规缺口 — mandatory
+BP   = "best_practice" # 最佳实践缺口 — recommended
+
+# Per-document-type check counts (for compliance rate calculation)
+TYPE_CHECK_COUNTS = {
+    "NDA":           {"hard": 5, "bp": 3},
+    "MOU":           {"hard": 4, "bp": 3},
+    "Procurement":   {"hard": 4, "bp": 5},
+    "Data_Sharing":  {"hard": 5, "bp": 3},
+    "Other":         {"hard": 3, "bp": 2},
+}
 
 WORD_NUM = {
     "zero":0,"one":1,"two":2,"three":3,"four":4,"five":5,"six":6,"seven":7,"eight":8,"nine":9,
@@ -51,19 +67,16 @@ def extract_effective_date(text: str) -> Optional[datetime]:
     return None
 
 def extract_expiry_date(text: str, effective: Optional[datetime] = None) -> Optional[datetime]:
-    # Priority 1: "expiring on <date>" / "expire on <date>"
     p1 = re.search(r"expir\w*\s+on\s+((?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+\d{2,4})", text, re.IGNORECASE)
     if p1:
         d = _try_parse_date_str(p1.group(1))
         if d:
             return d
-    # Priority 2: "to <date>" or "until <date>"
     p2 = re.search(r"\b(?:to|until)\s+((?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+\d{2,4})", text, re.IGNORECASE)
     if p2:
         d = _try_parse_date_str(p2.group(1))
         if d:
             return d
-    # Priority 3: duration from effective date
     if effective:
         term = re.search(r"(?:period\s+of\s+)?(\d+)\s+(year|month)s?\b", text, re.IGNORECASE)
         if term:
@@ -82,7 +95,6 @@ def extract_expiry_date(text: str, effective: Optional[datetime] = None) -> Opti
                     return effective.replace(year=ny, month=nm)
                 except ValueError:
                     return effective.replace(year=ny, month=nm, day=28)
-        # Spelled-out number: "five (5) years from"
         m = re.search(r"(\w+)\s+\(\s*\d+\s*\)\s+(years?|months?)", text, re.IGNORECASE)
         if m:
             wn = _word_num(m.group(1))
@@ -98,10 +110,61 @@ def extract_expiry_date(text: str, effective: Optional[datetime] = None) -> Opti
     return None
 
 
+# ============================================================================
+# Flag helper — adds a flag with quantitative L×I scoring
+# ============================================================================
+
+def _flag(field, check, flag_if, risk_category, severity,
+          likelihood, impact, compliance_type, subcategory=None, extra=None):
+    """Create a flag dict with L×I quantitative scoring + HEROC subcategory."""
+    score = likelihood * impact  # 1-25
+    # Auto-derive subcategory from field if not explicitly provided
+    SUBCATEGORY_MAP = {
+        "signatories": "Liability", "effective_date": "Process",
+        "expiry_date": "Service Disruption", "phia_compliance": "Privacy",
+        "purpose_limitation": "Stakeholder Trust", "breach_timeline": "Legal Exposure",
+        "security_standards": "Security", "audit_rights": "Knowledge Loss",
+        "data_minimization": "Privacy", "binding_language": "Revenue Risk",
+        "duplicate_version": "Duplicate", "conflicting_finance": "Cost Control",
+        "indemnity_cap": "Liability", "sla_present": "Process",
+        "data_security": "Security", "payment_terms": "Cost Control",
+        "termination_conv": "Process", "renewal_notif": "Compliance",
+        "ocr_quality": "Process", "missing_fields": "Liability",
+        "return_destruction": "Process", "confidential_scope": "Process",
+        "termination_clause": "Process", "termination_notice": "Process",
+        "indemnity_clause": "Liability", "breach_notification": "Legal Exposure",
+    }
+    sub = subcategory or SUBCATEGORY_MAP.get(field, "Compliance")
+    f = {
+        "field": field,
+        "check": check,
+        "flag_if": flag_if,
+        "risk_category": risk_category,
+        "subcategory": sub,
+        "severity": severity,
+        "likelihood": likelihood,
+        "impact": impact,
+        "risk_score": score,
+        "compliance_type": compliance_type,
+    }
+    if extra:
+        f.update(extra)
+    return f
+
+
 class ContractAnalyzer:
+    """Rules engine with quantitative L×I risk scoring.
+    
+    Each flag carries:
+      - likelihood (1-5): probability the risk materializes
+      - impact (1-5): severity if it does
+      - risk_score: L × I (1-25)
+      - compliance_type: "hard" (mandatory) | "best_practice" (recommended)
+      - risk_category: "Operational" | "Financial" | "Reputational" | "Continuity"
+    """
     def __init__(self):
-        self.flags = []
-        self.fields = {}
+        self.flags: List[Dict] = []
+        self.fields: Dict = {}
 
     def analyze(self, text: str, doc_type: str) -> Dict:
         self.flags = []
@@ -114,9 +177,21 @@ class ContractAnalyzer:
         self._duplicate_check(text)
         self._ocr_check(text)
         score = self._risk_score()
-        return {"extracted_fields": self.fields, "flags": self.flags,
-                "risk_score": score, "risk_level": self._risk_level(score)}
+        hard = self._compliance_stats(doc_type)
+        return {
+            "extracted_fields": self.fields,
+            "flags": self.flags,
+            "risk_score": score,
+            "risk_level": self._risk_level(score),
+            "hard_gaps": hard["hard_gaps"],
+            "bp_gaps": hard["bp_gaps"],
+            "hard_checks": hard["hard_checks"],
+            "bp_checks": hard["bp_checks"],
+            "compliance_rate": hard["compliance_rate"],
+            "top_risk_field": hard["top_risk_field"],
+        }
 
+    # ── Extraction ──────────────────────────────────────────────────────
     def _extract(self, text: str, doc_type: str) -> Dict:
         eff = extract_effective_date(text)
         exp = extract_expiry_date(text, eff)
@@ -144,136 +219,173 @@ class ContractAnalyzer:
             "ocr_quality": self._ocr(text),
         }
 
+    # ── Universal checks ────────────────────────────────────────────────
     def _universal(self, text: str):
         vp = self.fields["vp_count"]
         if vp < 2:
-            self.flags.append({"field":"signatories","check":"至少两个VP签字",
-                "flag_if":f"只有{vp}个VP签字","risk_category":"Financial","severity":"Critical"})
+            self.flags.append(_flag("signatories", "至少两个VP签字",
+                f"只有{vp}个VP签字", "Financial", "Critical",
+                likelihood=5, impact=5, compliance_type=HARD))
         if not self.fields["effective_date"]:
-            self.flags.append({"field":"effective_date","check":"合同有生效日期",
-                "flag_if":"缺少生效日期","risk_category":"Operational","severity":"High"})
+            self.flags.append(_flag("effective_date", "合同有生效日期",
+                "缺少生效日期", "Operational", "High",
+                likelihood=3, impact=3, compliance_type=HARD))
         if not self.fields["expiry_date"]:
-            self.flags.append({"field":"expiry_date","check":"合同有到期日期",
-                "flag_if":"缺少到期日期","risk_category":"Operational","severity":"Medium"})
+            self.flags.append(_flag("expiry_date", "合同有到期日期",
+                "缺少到期日期", "Operational", "Medium",
+                likelihood=3, impact=3, compliance_type=HARD))
         elif self.fields["expiry_date"]:
             days = (self.fields["expiry_date"] - datetime.now()).days
             if days < 0:
-                self.flags.append({"field":"expiry_date","check":"合同未过期",
-                    "flag_if":f"合同已过期{abs(days)}天","risk_category":"Operational","severity":"High"})
+                self.flags.append(_flag("expiry_date", "合同未过期",
+                    f"合同已过期{abs(days)}天", "Operational", "High",
+                    likelihood=5, impact=4, compliance_type=HARD))
             elif days <= ALERT_THRESHOLDS["renewal_days"]:
-                self.flags.append({"field":"expiry_date","check":"续约提醒",
-                    "flag_if":f"合同将在{days}天内到期","risk_category":"Operational","severity":"Medium"})
+                self.flags.append(_flag("expiry_date", "续约提醒",
+                    f"合同将在{days}天内到期", "Operational", "Medium",
+                    likelihood=4, impact=2, compliance_type=BP))
 
+    # ── Type-specific checks ────────────────────────────────────────────
     def _nda(self, text: str):
         if not self.fields["has_phipa"]:
             if any(k in text.lower() for k in ["patient","health information","phi","personal health"]):
-                self.flags.append({"field":"phia_compliance","check":"包含PHIPA合规条款",
-                    "flag_if":"涉及健康信息但无PHIPA声明","risk_category":"Reputational","severity":"Critical"})
+                self.flags.append(_flag("phia_compliance", "包含PHIPA合规条款",
+                    "涉及健康信息但无PHIPA声明", "Reputational", "Critical",
+                    likelihood=4, impact=5, compliance_type=HARD))
         if not self.fields["has_breach_notif"]:
-            self.flags.append({"field":"breach_notification","check":"有数据泄露通知条款",
-                "flag_if":"缺少泄露通知要求","risk_category":"Reputational","severity":"High"})
+            self.flags.append(_flag("breach_notification", "有数据泄露通知条款",
+                "缺少泄露通知要求", "Reputational", "High",
+                likelihood=3, impact=4, compliance_type=HARD))
         if not self.fields["has_return_dest"]:
-            self.flags.append({"field":"return_destruction","check":"有信息归还/销毁条款",
-                "flag_if":"缺少归还或销毁条款","risk_category":"Operational","severity":"Medium"})
+            self.flags.append(_flag("return_destruction", "有信息归还/销毁条款",
+                "缺少归还或销毁条款", "Operational", "Medium",
+                likelihood=3, impact=3, compliance_type=BP))
         if not self.fields["has_conf_def"]:
-            self.flags.append({"field":"confidential_scope","check":"明确定义保密信息范围",
-                "flag_if":"保密范围过于宽泛或无明确定义","risk_category":"Operational","severity":"Medium"})
+            self.flags.append(_flag("confidential_scope", "明确定义保密信息范围",
+                "保密范围过于宽泛或无明确定义", "Operational", "Medium",
+                likelihood=3, impact=3, compliance_type=BP))
 
     def _mou(self, text: str):
         if self.fields["has_binding"] and self.fields["has_non_binding"]:
-            self.flags.append({"field":"binding_language","check":"明确binding状态",
-                "flag_if":"同时存在binding和non-binding表述","risk_category":"Financial","severity":"High"})
+            self.flags.append(_flag("binding_language", "明确binding状态",
+                "同时存在binding和non-binding表述", "Financial", "High",
+                likelihood=4, impact=5, compliance_type=HARD))
         if not self.fields["has_termination"]:
-            self.flags.append({"field":"termination_clause","check":"有终止条款",
-                "flag_if":"缺少终止条款","risk_category":"Operational","severity":"Medium"})
+            self.flags.append(_flag("termination_clause", "有终止条款",
+                "缺少终止条款", "Operational", "Medium",
+                likelihood=2, impact=3, compliance_type=BP))
         tm = re.search(r"terminate.*?(\d+)[\s)]+days", text, re.I)
         if tm and int(tm.group(1)) > 90:
-            self.flags.append({"field":"termination_notice","check":"终止通知期合理",
-                "flag_if":f"终止通知期{tm.group(1)}天过长","risk_category":"Operational","severity":"Medium"})
+            self.flags.append(_flag("termination_notice", "终止通知期合理",
+                f"终止通知期{tm.group(1)}天过长", "Operational", "Medium",
+                likelihood=2, impact=2, compliance_type=BP))
 
     def _procurement(self, text: str):
         if not self.fields["has_indemnity"]:
-            self.flags.append({"field":"indemnity_clause","check":"有赔偿条款",
-                "flag_if":"缺少indemnity条款","risk_category":"Financial","severity":"High"})
+            self.flags.append(_flag("indemnity_clause", "有赔偿条款",
+                "缺少indemnity条款", "Financial", "High",
+                likelihood=3, impact=4, compliance_type=BP))
         else:
             has_cap = bool(re.search(r"(?:capped\s+at|cap\s+of\s+\$|maximum\s+liability|not\s+to\s+exceed|\$\d+[,.]?\d*\s+(?:cap|limit|ceiling))", text, re.I))
             no_cap = bool(re.search(r"not\s+subject\s+to\s+(?:a\s+)?monetary\s+cap", text, re.I))
             if not has_cap or no_cap:
-                self.flags.append({"field":"indemnity_cap","check":"indemnity有金额上限",
-                    "flag_if":"indemnity条款无金额上限","risk_category":"Financial","severity":"High"})
+                self.flags.append(_flag("indemnity_cap", "indemnity有金额上限",
+                    "indemnity条款无金额上限", "Financial", "High",
+                    likelihood=3, impact=5, compliance_type=BP))
         is_svc = any(k in text.lower() for k in ["service","support","software","licensing","ehr"])
         if is_svc and not self.fields["has_sla"]:
-            self.flags.append({"field":"sla_present","check":"有SLA",
-                "flag_if":"服务类合同缺少SLA","risk_category":"Operational","severity":"High"})
+            self.flags.append(_flag("sla_present", "有SLA",
+                "服务类合同缺少SLA", "Operational", "High",
+                likelihood=3, impact=3, compliance_type=BP))
         has_data_ctx = any(k in text.lower() for k in ["data", "patient", "phi", "personal health", "health information", "health record", "ehr"])
         if has_data_ctx and not self.fields["has_data_sec"]:
-            self.flags.append({"field":"data_security","check":"有数据安全条款",
-                "flag_if":"涉及数据的合同无数据保护条款","risk_category":"Reputational","severity":"Critical"})
+            self.flags.append(_flag("data_security", "有数据安全条款",
+                "涉及数据的合同无数据保护条款", "Reputational", "Critical",
+                likelihood=4, impact=5, compliance_type=HARD))
         inc = re.search(r"(?:increase|increment|adjust).*?\d+\s*%|5\s*%.*?increase|auto[- ]?increase", text, re.I)
         if inc and not re.search(r"cap|not\s+to\s+exceed|maximum|ceiling", text, re.I):
-            self.flags.append({"field":"payment_terms","check":"付款条款明确",
-                "flag_if":"可变价格有自动递增但无上限","risk_category":"Financial","severity":"Medium"})
+            self.flags.append(_flag("payment_terms", "付款条款明确",
+                "可变价格有自动递增但无上限", "Financial", "Medium",
+                likelihood=3, impact=3, compliance_type=BP))
         tc = re.search(r"terminate\s+for\s+convenience.*?(\d+|\w+)\s*\(?,(\d+)\s*\)?\s*days", text, re.I)
         if not tc:
             tc = re.search(r"terminate\s+for\s+convenience.*?(\d+|\w+)\s*\(?\s*(\d+)\s*\)?\s*days", text, re.I)
         if tc:
             days_val = int(tc.group(2)) if tc.group(2) else (_word_num(tc.group(1)) or int(tc.group(1)))
             if days_val > 60:
-                self.flags.append({"field":"termination_conv","check":"便利终止通知期合理",
-                    "flag_if":f"便利终止通知期{days_val}天过长","risk_category":"Operational","severity":"Medium"})
+                self.flags.append(_flag("termination_conv", "便利终止通知期合理",
+                    f"便利终止通知期{days_val}天过长", "Operational", "Medium",
+                    likelihood=2, impact=2, compliance_type=BP))
         has_renewal_notif = bool(re.search(r"non[- ]?renew.*?notice|notice.*?non[- ]?renew", text, re.I))
         if self.fields["has_renewal"] and not has_renewal_notif:
-            self.flags.append({"field":"renewal_notif","check":"续约有通知机制",
-                "flag_if":"自动续约但无提前通知机制","risk_category":"Operational","severity":"Medium"})
+            self.flags.append(_flag("renewal_notif", "续约有通知机制",
+                "自动续约但无提前通知机制", "Operational", "Medium",
+                likelihood=3, impact=2, compliance_type=BP))
 
     def _dsa(self, text: str):
         if not self.fields["has_phipa"]:
-            self.flags.append({"field":"phia_compliance","check":"明确PHIPA合规",
-                "flag_if":"缺少PHIPA compliance声明","risk_category":"Reputational","severity":"Critical"})
+            self.flags.append(_flag("phia_compliance", "明确PHIPA合规",
+                "缺少PHIPA compliance声明", "Reputational", "Critical",
+                likelihood=5, impact=5, compliance_type=HARD))
         if not self.fields["has_purpose_limit"]:
-            self.flags.append({"field":"purpose_limitation","check":"有目的限制条款",
-                "flag_if":"数据使用目的过于宽泛或无限制","risk_category":"Reputational","severity":"High"})
+            self.flags.append(_flag("purpose_limitation", "有目的限制条款",
+                "数据使用目的过于宽泛或无限制", "Reputational", "High",
+                likelihood=3, impact=4, compliance_type=HARD))
         if not self.fields["has_breach_notif"]:
-            self.flags.append({"field":"breach_timeline","check":"有泄露通知时限",
-                "flag_if":"缺少泄露通知时限","risk_category":"Reputational","severity":"High"})
+            self.flags.append(_flag("breach_timeline", "有泄露通知时限",
+                "缺少泄露通知时限", "Reputational", "High",
+                likelihood=4, impact=4, compliance_type=HARD))
         if not self.fields["has_data_sec"]:
-            self.flags.append({"field":"security_standards","check":"有安全标准",
-                "flag_if":"缺少安全标准或低于NCSG","risk_category":"Reputational","severity":"High"})
+            self.flags.append(_flag("security_standards", "有安全标准",
+                "缺少安全标准或低于NCSG", "Reputational", "High",
+                likelihood=3, impact=4, compliance_type=HARD))
         if not self.fields["has_audit"]:
-            self.flags.append({"field":"audit_rights","check":"有审计权条款",
-                "flag_if":"缺少审计权条款","risk_category":"Operational","severity":"Medium"})
+            self.flags.append(_flag("audit_rights", "有审计权条款",
+                "缺少审计权条款", "Operational", "Medium",
+                likelihood=2, impact=3, compliance_type=BP))
         if not re.search(r"minimization|only.*?necessary|limited\s+to|strictly\s+necessary", text, re.I):
-            self.flags.append({"field":"data_minimization","check":"有数据最小化原则",
-                "flag_if":"缺少数据最小化声明","risk_category":"Reputational","severity":"Medium"})
+            self.flags.append(_flag("data_minimization", "有数据最小化原则",
+                "缺少数据最小化声明", "Reputational", "Medium",
+                likelihood=2, impact=3, compliance_type=BP))
 
     def _duplicate_check(self, text: str):
         versions = re.findall(r"version\s*\d|v\d|supersedes|superseded|version\s+1|version\s+2", text, re.I)
         if len(versions) >= 2:
-            self.flags.append({"field":"duplicate_version","check":"无重复/冲突合同",
-                "flag_if":"检测到多个版本标记，可能存在重复或冲突","risk_category":"Financial","severity":"High"})
+            self.flags.append(_flag("duplicate_version", "无重复/冲突合同",
+                "检测到多个版本标记，可能存在重复或冲突", "Financial", "High",
+                likelihood=4, impact=4, compliance_type=HARD))
         contrib = re.findall(r"(?:contributes?|annual.*fee|annual.*cost|contribution)\s*[=:]\s*\$?(\d+[,.]?\d*)", text, re.I)
         if not contrib:
             contrib = re.findall(r"\$?(\d+[,.]?\d*)\s*/year", text, re.I)
         if len(set(contrib)) >= 2:
-            self.flags.append({"field":"conflicting_finance","check":"财务条款一致",
-                "flag_if":f"同一财务标签检测到不同金额：{', '.join(set(contrib))}","risk_category":"Financial","severity":"High"})
+            self.flags.append(_flag("conflicting_finance", "财务条款一致",
+                f"同一财务标签检测到不同金额：{', '.join(set(contrib))}",
+                "Financial", "High",
+                likelihood=3, impact=5, compliance_type=HARD))
 
     def _ocr_check(self, text: str):
         q = self.fields["ocr_quality"]
         if q == "Poor":
-            self.flags.append({"field":"ocr_quality","check":"文档质量可接受",
-                "flag_if":"低质量扫描—关键字段无法辨认","risk_category":"Operational","severity":"Medium"})
+            self.flags.append(_flag("ocr_quality", "文档质量可接受",
+                "低质量扫描—关键字段无法辨认", "Operational", "Medium",
+                likelihood=4, impact=3, compliance_type=BP))
             if any(w in text.lower() for w in ["illegible","obscured","[unclear","[stain"]):
-                self.flags.append({"field":"missing_fields","check":"关键字段可提取",
-                    "flag_if":"因扫描质量问题无法验证关键条款","risk_category":"Financial","severity":"Critical"})
+                self.flags.append(_flag("missing_fields", "关键字段可提取",
+                    "因扫描质量问题无法验证关键条款", "Financial", "Critical",
+                    likelihood=5, impact=4, compliance_type=HARD))
 
+    # ── Quantitative scoring ────────────────────────────────────────────
     def _risk_score(self) -> float:
+        """Document risk score = max(flag L×I) + 0.5 × (count-1), capped at 25.
+        
+        Scale: 1-6 Low | 7-12 Medium | 13-18 High | 19-25 Critical
+        """
         if not self.flags:
             return 1.0
-        total = sum(SEVERITY_SCORES.get(f["severity"], 3) for f in self.flags)
-        avg = total / len(self.flags)
-        score = avg + (len(self.flags) - 1) * 0.2
-        return round(min(5.0, max(1.0, score)), 1)
+        scores = [f["risk_score"] for f in self.flags]
+        max_score = max(scores)
+        penalty = 0.5 * (len(scores) - 1)
+        return round(min(25.0, max_score + penalty), 1)
 
     def _risk_level(self, s: float) -> str:
         if s >= RISK_THRESHOLDS["critical"]: return "Critical"
@@ -281,6 +393,30 @@ class ContractAnalyzer:
         if s >= RISK_THRESHOLDS["medium"]: return "Medium"
         return "Low"
 
+    def _compliance_stats(self, doc_type: str) -> Dict:
+        """Compute compliance rate and top risk field."""
+        hard_flags = [f for f in self.flags if f["compliance_type"] == HARD]
+        bp_flags = [f for f in self.flags if f["compliance_type"] == BP]
+        tc = TYPE_CHECK_COUNTS.get(doc_type, TYPE_CHECK_COUNTS["Other"])
+        hard_checks = tc["hard"]
+        bp_checks = tc["bp"]
+        hard_gaps = len(hard_flags)
+        bp_gaps = len(bp_flags)
+        total_checks = hard_checks + bp_checks
+        total_gaps = hard_gaps + bp_gaps
+        compliance_rate = round(max(0.0, 1 - total_gaps / total_checks), 2) if total_checks > 0 else 1.0
+        # Top risk = flag with highest L×I
+        top_risk_field = max(self.flags, key=lambda f: f["risk_score"])["field"] if self.flags else None
+        return {
+            "hard_gaps": hard_gaps,
+            "bp_gaps": bp_gaps,
+            "hard_checks": hard_checks,
+            "bp_checks": bp_checks,
+            "compliance_rate": compliance_rate,
+            "top_risk_field": top_risk_field,
+        }
+
+    # ── Helpers (unchanged logic, improved party extraction) ───────────
     def _parties(self, text: str) -> List[str]:
         results = []
         seen = set()
@@ -294,9 +430,15 @@ class ContractAnalyzer:
                     seen.add(n); results.append(n[:60])
         kw = ["SOUTHLAKE","HEALTH","INC","LIMITED","PARTNERS","NETWORK","INSTITUTE",
               "ALLIANCE","VENTURES","SOLUTIONS","SERVICES","CARE","PARTNER"]
+        # Exclude lines that look like document titles or section headers
+        stop_words = {"AGREEMENT","CONTRACT","SOW","SECTION","EXHIBIT","ARTICLE",
+                      "TERMS","CONDITIONS","CLAUSE","POLICY","MEMORANDUM"}
         for line in text.split("\n"):
             s = line.strip()
             if "__" in s or "DATE:" in s or "SIGNED" in s: continue
+            if s.startswith("#") or re.match(r"^\d+\.", s): continue  # skip section headers
+            upper_s = s.upper()
+            if any(stop in upper_s for stop in stop_words): continue
             if 5 < len(s) < 60 and s.isupper() and any(k in s for k in kw):
                 if s not in seen:
                     seen.add(s); results.append(s[:60])
@@ -318,12 +460,22 @@ class ContractAnalyzer:
         return sigs
 
     def _vp_count(self, text: str) -> int:
+        """Count VP signatures — only in signature blocks (after IN WITNESS or last 15 lines)."""
+        lines = text.split("\n")
+        # Find signature block start
+        sig_start = 0
+        for i, line in enumerate(lines):
+            if "IN WITNESS" in line.upper():
+                sig_start = i
+                break
+        # Search from signature block start (or last 20 lines if no marker)
+        search_from = max(sig_start, len(lines) - 20)
         count = 0
-        for line in text.split("\n"):
+        for line in lines[search_from:]:
             if re.search(r"vice\s+president|\bvp[,\.\s]|(?<!\w)vp(?!\w)", line.lower()):
                 count += 1
-        # Also catch bullet-point format: "- VP Operations (Southlake)"
-        vp_in_bullets = re.findall(r"-?\s*VP\s+\w+", text, re.I)
+        # Also catch bullet-point format
+        vp_in_bullets = re.findall(r"-?\s*VP\s+\w+", text[search_from:], re.I)
         count += len(vp_in_bullets)
         return min(count, 5)
 
@@ -951,7 +1103,22 @@ are illegible due to scan quality.]""",
         "expected_risk": "Critical",
         "expected_score": 5.0,
     },
+    "Contract_9_IT_MSA": {
+        "text": "# IT MASTER SERVICES AGREEMENT\n\nThis IT Master Services Agreement (\"Agreement\") is made effective\nas of June 1, 2024, between:\n\nSOUTHLAKE HEALTH\nAn Academic Family Health Team\n1085 Davis Drive, Suite 200\nAurora, Ontario L4G 0B5\n(\"Purchaser\")\n\nAND\n\nCLOUDWORKS INFRASTRUCTURE INC.\n2200 Technology Parkway, Suite 400\nMississauga, Ontario L5B 1Z4\n(\"Vendor\")\n\n## 1. SERVICES\n\nVendor shall provide the following services to Purchaser:\na) Cloud infrastructure hosting for electronic health record (EHR) systems\nb) 24/7/365 monitoring and incident response\nc) Quarterly performance reviews and capacity planning\nd) Disaster recovery and business continuity support\ne) Ongoing patch management and security updates\n\n## 2. TERM AND RENEWAL\n\nThis Agreement shall commence on June 1, 2024 and continue for a\nperiod of three (3) years, expiring on May 31, 2027.\n\nThis Agreement shall automatically renew for successive one (1) year\nperiods unless either Party provides written notice of non-renewal\nat least sixty (60) days prior to the expiration date.\n\n## 3. FEES AND PAYMENT\n\na) Base infrastructure fee: $320,000/year (billed monthly at $26,667)\nb) Support services: $45,000/year (billed monthly at $3,750)\nc) Overage fees: $0.05 per additional GB of data transfer beyond 10TB\nd) Fees are subject to annual increase of three percent (3%) or CPI,\n   whichever is greater, capped at 5% per annum\ne) Payment terms: Net thirty (30) days from invoice date\nf) All fees are in Canadian dollars (CAD)\n\n## 4. SERVICE LEVEL AGREEMENT\n\na) Uptime guarantee: 99.9% during business hours (6:00 AM \u2013 10:00 PM,\n   Monday through Saturday)\nb) For downtime exceeding the guaranteed level, Vendor shall provide\n   service credits equal to five percent (5%) of monthly fees per\n   hour of unplanned downtime\nc) Response times:\n   - Priority 1 (system down): 2 hours\n   - Priority 2 (degraded service): 4 hours\n   - Priority 3 (minor issue): 8 hours\nd) Vendor shall provide monthly SLA performance reports\ne) Three (3) consecutive months of SLA failure entitles Purchaser\n   to terminate this Agreement without penalty\n\n## 5. DATA SECURITY AND PRIVACY\n\na) Vendor shall maintain commercially reasonable physical, technical,\n   and administrative safeguards to protect data in transit and at rest\nb) All data shall be encrypted using AES-256 at rest and TLS 1.2+ in transit\nc) Vendor acknowledges it may have access to de-identified operational\n   data related to EHR system performance and capacity metrics\nd) In the event of a security incident affecting data, Vendor shall\n   notify Purchaser within forty-eight (48) hours\n\n## 6. INDEMNIFICATION\n\na) Vendor shall indemnify, defend, and hold harmless Purchaser from\n   and against any claims, damages, and losses arising from Vendor's\n   negligence, breach, or failure to perform its obligations\nb) Vendor's indemnification obligations shall not be subject to\n   a monetary cap\nc) Purchaser shall indemnify Vendor for claims arising from Purchaser's\n   use of the Services in violation of applicable law\n\n## 7. INSURANCE\n\nVendor shall maintain:\na) Commercial General Liability: $2,000,000 per occurrence\nb) Cyber Liability / Technology E&O: $1,000,000 per claim\nc) Professional Liability: $1,000,000 per occurrence\nd) Evidence of insurance to be provided upon request\n\n## 8. TERMINATION\n\na) Either Party may terminate for material breach with sixty (60) days\n   written notice and failure to cure\nb) Purchaser may terminate for convenience with ninety (90) days written\n   notice\nc) Upon termination, Vendor shall:\n   i) Provide a transition period of not less than thirty (30) days\n   ii) Return or destroy all Purchaser data within thirty (30) days\n   iii) Provide certification of data destruction\nd) Termination shall not relieve either Party of obligations accrued\n   prior to the effective date of termination\n\n## 9. GOVERNING LAW\n\nThis Agreement shall be governed by the laws of the Province of Ontario\nand the applicable laws of Canada.\n\nIN WITNESS WHEREOF, the Parties have executed this Agreement\nas of the Effective Date.\n\nSOUTHLAKE HEALTH:                    CLOUDWORKS INFRASTRUCTURE INC.:\n\n___________________________          ___________________________\nPatricia Wong                        Sarah Mitchell\nVice President, Information          Chief Executive Officer\nTechnology                           Date: June 1, 2024\nDate: June 1, 2024\n\n___________________________\nMark Johnson\nVice President, Operations\nDate: June 1, 2024",
+        "type": "Procurement",
+        "expected_flags": 3,
+        "expected_risk": "High",
+        "expected_score": 15.5,
+    },
+    "Contract_10_DSA_Amendment": {
+        "text": "# HEALTH DATA SHARING & SERVICES AGREEMENT\n\n[BASE AGREEMENT]\n\nThis Health Data Sharing & Services Agreement (\"Agreement\") is made\neffective as of September 1, 2024, between:\n\nSOUTHLAKE HEALTH\nAn Academic Family Health Team\n1085 Davis Drive, Suite 200\nAurora, Ontario L4G 0B5\n(\"Disclosing Party\")\n\nAND\n\nREGIONAL HOSPITAL AUTHORITY\n300 Hospital Boulevard\nNewmarket, Ontario L3Y 5Z2\n(\"Receiving Party\")\n\n## 1. PURPOSE\n\nThe purpose of this Agreement is to facilitate the sharing of\nde-identified patient outcome data between the Parties for\nquality improvement, research, and care coordination in\ncommunity-based health services.\n\n## 2. DATA TO BE SHARED\n\nThe following categories of de-identified data shall be shared:\na) Patient demographics (age group, gender, postal code FSA)\nb) Treatment outcomes and medication adherence rates\nc) 30-day readmission rates\nd) Preventive screening completion rates\ne) Emergency department utilization metrics\n\n## 3. USE OF DATA\n\nThe Receiving Party may use the data solely for:\na) Quality improvement reporting\nb) Program evaluation\nc) De-identified research analysis\n\n## 4. PHIPA COMPLIANCE\n\nBoth Parties agree to comply with the Personal Health Information\nProtection Act, 2004, S.O. 2004, c. 3, Sch. 3 (\"PHIPA\"),\nincluding:\na) Collecting, using, and disclosing personal health information\n   only for permitted purposes\nb) Implementing appropriate administrative, technical, and\n   organizational security safeguards\nc) Ensuring all shared data is fully de-identified prior to\n   transfer\n\n## 5. DURATION\n\nThis Agreement shall remain in effect for two (2) years from\nthe Effective Date, expiring on August 1, 2026, unless\nterminated earlier by either Party with sixty (60) days written\nnotice.\n\n## 6. GOVERNING LAW\n\nThis Agreement shall be governed by the laws of the Province\nof Ontario and the applicable laws of Canada.\n\nIN WITNESS WHEREOF, the Parties have executed this Agreement\nas of the date first written above.\n\nSOUTHLAKE HEALTH:                    REGIONAL HOSPITAL AUTHORITY:\n\n___________________________          ___________________________\nLisa Martinez                        James Okafor\nVice President, Operations           Chief Executive Officer\nDate: September 1, 2024              Date: September 1, 2024\n\n___________________________\nDavid Kumar\nVice President, Finance\nDate: September 1, 2024\n\n---\n\n[AMENDMENT NO. 1]\n\nAMENDMENT TO HEALTH DATA SHARING & SERVICES AGREEMENT\ndated August 15, 2026\n\nThis Amendment No. 1 (\"Amendment\") amends the Health Data Sharing\n& Services Agreement dated September 1, 2024 (the \"Agreement\")\nbetween SOUTHLAKE HEALTH and REGIONAL HOSPITAL AUTHORITY.\n\n1. TERM EXTENSION\n   The expiration date in Section 5 of the Agreement is extended\n   from August 1, 2026 to January 1, 2028.\n\n2. ADDITIONAL DATA CATEGORIES\n   The following data categories are added to Section 2:\n   a) ICD-10 diagnosis codes (de-identified)\n   b) Length of stay for hospital admissions\n   c) Patient satisfaction survey results (de-identified)\n\n3. EXPANDED USE\n   The data use provisions in Section 3 are amended to add:\n   d) Sharing with research collaborators (de-identified only,\n      subject to separate data use agreements)\n\n4. DATA MINIMIZATION\n   Both Parties agree to limit data sharing to the minimum\n   necessary for the stated purposes, in accordance with the\n   data minimization principle.\n\n5. NO OTHER CHANGES\n   All other provisions of the Agreement remain unchanged and in full\n   force and effect.\n\nIN WITNESS WHEREOF, the Parties have executed this Amendment\nas of the date first written above.\n\nSOUTHLAKE HEALTH:                    REGIONAL HOSPITAL AUTHORITY:\n\n___________________________          ___________________________\nLisa Martinez                        James Okafor\nVice President, Operations           Chief Executive Officer\nDate: August 15, 2026               Date: August 15, 2026\n\n___________________________\nDavid Kumar\nVice President, Finance\nDate: August 15, 2026",
+        "type": "Data_Sharing",
+        "expected_flags": 4,
+        "expected_risk": "Critical",
+        "expected_score": 19.5,
+    },
 }
+
 
 class TestRunner:
     def __init__(self):
@@ -971,6 +1138,10 @@ class TestRunner:
                 "actual_risk": r["risk_level"],
                 "expected_score": data.get("expected_score"),
                 "actual_score": r["risk_score"],
+                "hard_gaps": r["hard_gaps"],
+                "bp_gaps": r["bp_gaps"],
+                "compliance_rate": r["compliance_rate"],
+                "top_risk_field": r["top_risk_field"],
                 "flags_detail": r["flags"],
                 "fields_summary": {
                     "parties": r["extracted_fields"].get("parties", []),
@@ -984,7 +1155,7 @@ class TestRunner:
 
     def report(self):
         print("=" * 70)
-        print("  AI Prototype 测试报告 — Synthetic Contracts v2 (Fixed)")
+        print("  AI Prototype 测试报告 v6 — Quantitative L×I Scoring")
         print("=" * 70)
         passed = sum(1 for r in self.results if r["passed"])
         total = len(self.results)
@@ -994,12 +1165,14 @@ class TestRunner:
             s = "PASS" if r["passed"] else "FAIL"
             print(f"\n  [{s}] {r['name']}")
             print(f"    Flags: 预期{r['expected_flags']} | 实际{r['actual_flags']}")
-            print(f"    Risk:  预期{r['expected_risk']}({r['expected_score']}) | "
-                  f"实际{r['actual_risk']}({r['actual_score']})")
+            print(f"    Risk:  预期{r['expected_risk']} | 实际{r['actual_risk']}({r['actual_score']})")
+            print(f"    Hard gaps: {r['hard_gaps']} | Best-practice gaps: {r['bp_gaps']}")
+            print(f"    Compliance rate: {r['compliance_rate']:.0%} | Top risk: {r['top_risk_field']}")
             if not r["passed"]:
                 print(f"    Flags:")
                 for f in r["flags_detail"]:
-                    print(f"      - [{f['severity']}] {f['field']}: {f['flag_if']}")
+                    print(f"      - [{f['severity']}] {f['field']}: {f['flag_if']} "
+                          f"(L={f['likelihood']} I={f['impact']} → {f['risk_score']})")
         print("\n  字段提取摘要")
         print("-" * 70)
         for r in self.results:
