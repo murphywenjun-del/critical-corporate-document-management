@@ -818,7 +818,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
     return init
   })
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const [modal, setModal] = useState<{ link: DocLink; to: WfState } | null>(null)
+  const [wizard, setWizard] = useState<DocLink | null>(null) // open wizard for this link
   const [toast, setToast] = useState('')
   useEffect(() => {
     if (toast) {
@@ -831,21 +831,8 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
 
   const openCount = docLinks.filter((l) => wf[lk(l)] !== 'closed').length
 
-  function confirmModal() {
-    if (!modal) return
-    setWf((p) => ({ ...p, [lk(modal.link)]: modal.to }))
-    setModal(null)
-  }
 
-  function getNextStepText(to: WfState, link: DocLink): string {
-    switch (to) {
-      case 'acknowledged': return `Owner should review ${link.targetName} within 5 business days.`
-      case 'fixing': return `Update clause ${link.targetClause} in ${link.targetName}. SLA: 30 days.`
-      case 'verified': return `Verify revised document matches source. Notify Risk team.`
-      case 'closed': return `Cross-reference resolved. No further action.`
-      default: return 'Continue monitoring.'
-    }
-  }
+
 
   function LinkCard({ link }: { link: DocLink }) {
     const key = lk(link)
@@ -887,20 +874,12 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
           {!isExpanded && !isSynced && (
             <div className="mt-2 flex items-center gap-3">
               <div className="text-[11px] text-slate-500 line-clamp-1 flex-1">{link.riskIfNotUpdated}</div>
-              {stepIdx < 4 && (
+              {stepIdx < 4 && !isSynced && (
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    const next = WF_STEPS[stepIdx + 1]
-                    if (next) {
-                      setWf((p) => ({ ...p, [key]: next.id }))
-                      setExpanded((p) => ({ ...p, [key]: true }))
-                      setToast(`✓ #${link.sourceNum} → ${link.targetName}: ${WF_STEPS[stepIdx]?.label} → ${next.label}`)
-                    }
-                  }}
+                  onClick={(e) => { e.stopPropagation(); setWizard(link); setExpanded((p) => ({ ...p, [key]: true })) }}
                   className="text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded px-2 py-1 hover:bg-teal-100 transition shrink-0"
                 >
-                  → {WF_STEPS[stepIdx + 1]?.label}
+                  ▶ Open Workflow
                 </button>
               )}
             </div>
@@ -921,46 +900,24 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
               </div>
             </div>
 
-            {/* Quick-advance workflow bar */}
+            {/* Workflow button */}
             <div>
               <div className="text-[10px] font-bold text-slate-500 uppercase mb-2">Workflow</div>
-              <div className="flex items-center gap-1 flex-wrap">
-                {WF_STEPS.map((s, si) => {
-                  const isActive = state === s.id
-                  const isNext = si === stepIdx + 1
-                  // Forward move: single click, no modal. Backward/skip: use modal.
-                  const isForward = si === stepIdx + 1
-                  return (
-                    <div key={s.id} className="flex items-center gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          if (isActive) return
-                          if (isForward) {
-                            // Quick advance: just set state, stay expanded, show toast
-                            setWf((p) => ({ ...p, [key]: s.id }))
-                            setToast(`✓ #${link.sourceNum} → ${link.targetName}: ${WF_STEPS[stepIdx]?.label} → ${s.label}`)
-                          } else {
-                            // Backward or skip: confirm via modal
-                            setModal({ link, to: s.id })
-                          }
-                        }}
-                        className={`text-[11px] font-medium px-2.5 py-1.5 rounded border transition-all ${
-                          isActive ? `${s.color} ring-2 ring-offset-1 ring-teal-300` :
-                          isNext ? 'bg-teal-50 text-teal-700 border-teal-300 hover:bg-teal-100 cursor-pointer animate-pulse' :
-                          'bg-white text-slate-400 border-slate-200 hover:border-slate-400'
-                        }`}
-                        title={isNext ? 'Click to advance (no confirmation needed)' : isActive ? 'Current status' : 'Requires confirmation'}
-                      >
-                        {s.label}{isActive && ' ✓'}
-                      </button>
-                      {si < WF_STEPS.length - 1 && <span className="text-slate-300 text-[10px]">→</span>}
-                    </div>
-                  )
-                })}
-              </div>
-              <div className="text-[10px] text-slate-400 mt-1.5">
-                {stepIdx < 4 ? `Next: click highlighted step to advance · ${4 - stepIdx} remaining` : '✓ Complete'}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setWizard(link) }}
+                  disabled={isSynced}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-all ${
+                    isSynced ? 'bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default' :
+                    state === 'detected' ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' :
+                    'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
+                  }`}
+                >
+                  {isSynced ? '✓ Resolved' : state === 'closed' ? 'Reopen' : `Continue from "${WF_STEPS[stepIdx]?.label}"`}
+                </button>
+                <span className="text-[10px] text-slate-400">
+                  {isSynced ? 'No action needed' : `${4 - stepIdx} steps remaining`}
+                </span>
               </div>
             </div>
 
@@ -1002,97 +959,133 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
         {docLinks.map((l) => <LinkCard key={lk(l)} link={l} />)}
       </div>
 
-      {/* Status-aware Modal */}
-      {modal && (
-        <Modal
-          title={`→ ${WF_STEPS.find((s) => s.id === modal.to)?.label}`}
-          onConfirm={() => {
-            const from = wf[lk(modal.link)]
-            confirmModal()
-            setToast(`✓ #${modal.link.sourceNum} → ${modal.link.targetName}: ${WF_STEPS.find((s) => s.id === from)?.label} → ${WF_STEPS.find((s) => s.id === modal.to)?.label}. ${getNextStepText(modal.to, modal.link)}`)
-          }}
-          onCancel={() => setModal(null)}
-          confirmLabel={`Confirm ${WF_STEPS.find((s) => s.id === modal.to)?.label}`}
-        >
-          <div className="space-y-3">
-            {/* Context line */}
-            <div className="text-xs text-slate-600">
-              <b>{allContracts.find((c) => c.num === modal.link.sourceNum)?.displayName || `#${modal.link.sourceNum}`}</b>
-              {' → '}
-              <b>{modal.link.targetName}</b>
-            </div>
-
-            {/* Status-specific content */}
-            {modal.to === 'acknowledged' && (
-              <>
-                <div className="text-[11px] text-slate-600">
-                  You are confirming that a responsible person has <b>reviewed and accepted</b> this gap.
-                </div>
+      {/* Workflow Wizard Modal */}
+      {wizard && (() => {
+        const w = wizard
+        const wKey = `${w.sourceNum}-${w.targetName}`
+        const wState = wf[wKey]
+        const wStepIdx = WF_STEPS.findIndex((s) => s.id === wState)
+        const wSource = allContracts.find((c) => c.num === w.sourceNum)
+        const nextStep = wStepIdx < 4 ? WF_STEPS[wStepIdx + 1] : null
+        const isDone = wState === 'closed' || wState === 'verified'
+        
+        // Step content generator
+        function stepContent(to: WfState) {
+          switch (to) {
+            case 'acknowledged': return (
+              <div className="space-y-2">
+                <div className="text-[11px] text-slate-600">Confirm a responsible person has <b>reviewed and accepted</b> this gap.</div>
                 <div className="bg-amber-50 border border-amber-200 rounded p-2 text-[11px] text-amber-800">
-                  <b>Gap:</b> {modal.link.beforeText}
+                  <b>Gap:</b> {w.beforeText}
                 </div>
-                <div className="text-[10px] text-slate-400">
-                  Suggested owner: {modal.link.targetName} document custodian · SLA: acknowledge within 5 business days
-                </div>
-              </>
-            )}
-            {modal.to === 'fixing' && (
-              <>
-                <div className="text-[11px] text-slate-600">
-                  Moving to <b>Fixing</b> means the target document will be updated to match the source requirement.
-                </div>
+                <div className="text-[10px] text-slate-400">Suggested owner: document custodian · SLA: 5 business days</div>
+              </div>
+            )
+            case 'fixing': return (
+              <div className="space-y-2">
+                <div className="text-[11px] text-slate-600">Target document will be <b>updated</b> to match source requirement.</div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <div className="text-[10px] font-bold text-red-400 uppercase mb-1">Current (target)</div>
-                    <div className="text-[11px] text-slate-700 bg-red-50 border border-red-100 rounded p-2">{modal.link.beforeText}</div>
+                    <div className="text-[10px] font-bold text-red-400 uppercase mb-1">Current</div>
+                    <div className="text-[11px] text-slate-700 bg-red-50 border border-red-100 rounded p-2">{w.beforeText}</div>
                   </div>
                   <div>
-                    <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Required (from source)</div>
-                    <div className="text-[11px] text-slate-700 bg-emerald-50 border border-emerald-100 rounded p-2">{modal.link.afterText}</div>
+                    <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Required</div>
+                    <div className="text-[11px] text-slate-700 bg-emerald-50 border border-emerald-100 rounded p-2">{w.afterText}</div>
                   </div>
                 </div>
-                {modal.link.keyChanges.length > 0 && (
-                  <div className="text-[10px] text-slate-500">
-                    <b>Changes needed:</b> {modal.link.keyChanges.join(' · ')}
-                  </div>
-                )}
-                <div className="text-[10px] text-slate-400">
-                  Expected completion: within 30 days · Notify: document custodian + Legal
-                </div>
-              </>
-            )}
-            {modal.to === 'verified' && (
-              <>
-                <div className="text-[11px] text-slate-600">
-                  Before marking <b>Verified</b>, confirm the target document has been updated and matches the source.
-                </div>
+                {w.keyChanges.length > 0 && <div className="text-[10px] text-slate-500"><b>Changes:</b> {w.keyChanges.join(' · ')}</div>}
+                <div className="text-[10px] text-slate-400">SLA: 30 days · Notify: custodian + Legal</div>
+              </div>
+            )
+            case 'verified': return (
+              <div className="space-y-2">
+                <div className="text-[11px] text-slate-600">Confirm the target document <b>has been updated</b> and matches source.</div>
                 <div className="bg-blue-50 border border-blue-200 rounded p-2 text-[11px] space-y-1">
                   <div className="text-blue-700 font-medium">Verification checklist:</div>
-                  <div>□ {modal.link.targetName} has been revised</div>
-                  <div>□ Clause {modal.link.targetClause} now matches: "{modal.link.afterText}"</div>
+                  <div>□ {w.targetName} has been revised</div>
+                  <div>□ Clause {w.targetClause} now matches: "{w.afterText}"</div>
                   <div>□ No other documents reference the old value</div>
                 </div>
-                <div className="text-[10px] text-slate-400">
-                  Verifier: Risk team or document owner · Evidence: revised document version
-                </div>
-              </>
-            )}
-            {modal.to === 'closed' && (
-              <>
-                <div className="text-[11px] text-slate-600">
-                  Closing this link means the cross-reference is <b>fully resolved</b>. No further action needed.
-                </div>
+                <div className="text-[10px] text-slate-400">Verifier: Risk team · Evidence: revised doc version</div>
+              </div>
+            )
+            case 'closed': return (
+              <div className="space-y-2">
+                <div className="text-[11px] text-slate-600">Marking this cross-reference as <b>fully resolved</b>.</div>
                 <div className="bg-emerald-50 border border-emerald-200 rounded p-2 text-[11px] text-emerald-800">
-                  ✓ {modal.link.beforeText} → {modal.link.afterText}
+                  ✓ {w.beforeText} → {w.afterText}
                 </div>
-                <div className="text-[10px] text-slate-400">
-                  This action is permanent. To reopen, set status back to "Detected".
+                <div className="text-[10px] text-slate-400">Permanent. To reopen, set back to "Detected".</div>
+              </div>
+            )
+            default: return <div className="text-[11px] text-slate-500">Review and continue.</div>
+          }
+        }
+        
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setWizard(null)}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className="px-5 pt-4 pb-3 border-b border-slate-100">
+                <div className="text-sm font-bold text-slate-800">Workflow: #{w.sourceNum} → {w.targetName}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">{wSource?.displayName} → {w.targetName}</div>
+                {/* Progress steps */}
+                <div className="flex items-center gap-1 mt-3">
+                  {WF_STEPS.map((s, i) => (
+                    <div key={s.id} className="flex items-center">
+                      <div className={`w-3 h-3 rounded-full border-2 ${i <= wStepIdx ? 'bg-teal-500 border-teal-400' : 'bg-white border-slate-300'}`} />
+                      {i < WF_STEPS.length - 1 && <div className={`w-4 h-0.5 ${i < wStepIdx ? 'bg-teal-300' : 'bg-slate-200'}`} />}
+                    </div>
+                  ))}
+                  <span className="ml-2 text-[10px] font-bold text-slate-500">{WF_STEPS[wStepIdx]?.label}</span>
                 </div>
-              </>
-            )}
+              </div>
+
+              {/* Body */}
+              <div className="px-5 py-4">
+                {isDone ? (
+                  <div className="text-center py-4">
+                    <div className="text-3xl mb-2">✅</div>
+                    <div className="text-sm font-bold text-emerald-700">Workflow Complete</div>
+                    <div className="text-[11px] text-slate-500 mt-1">All 5 steps completed for this cross-reference.</div>
+                  </div>
+                ) : (
+                  stepContent(nextStep!.id as WfState)
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 rounded-b-xl">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setWizard(null)} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5">
+                    Close
+                  </button>
+                  <div className="flex-1" />
+                  {!isDone && nextStep && (
+                    <button
+                      onClick={() => {
+                        setWf((p) => ({ ...p, [wKey]: nextStep.id as WfState }))
+                        setToast(`✓ ${WF_STEPS[wStepIdx]?.label} → ${nextStep.label} confirmed`)
+                        // Stay in wizard (it auto-advances because wState updated)
+                      }}
+                      className="text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 px-4 py-2 rounded-lg"
+                    >
+                      Confirm: {nextStep.label} →
+                    </button>
+                  )}
+                  {isDone && (
+                    <button onClick={() => setWizard(null)} className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-lg">
+                      Done
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
-        </Modal>
-      )}
+        )
+      })()}
+      
       {/* Toast */}
       {toast && (
         <div className="fixed bottom-4 right-4 bg-slate-800 text-white text-xs px-4 py-2.5 rounded-lg shadow-lg max-w-sm z-50">
