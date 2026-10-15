@@ -1737,14 +1737,14 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
                         {diskSubsWithFiles.map(([sub, files]) => (
                           <div key={sub} className="ml-3 mb-1.5">
                             <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-medium">
-                              <span>U+1F4C2</span>
+                              <span>📂</span>
                               <span>{sub.replace(/_/g, ' ')}</span>
                               <span className="text-[9px] text-slate-400">({files.length})</span>
                             </div>
                             <div className="ml-5 space-y-0.5">
                               {files.map((f) => (
                                 <div key={f} className="flex items-center gap-1.5 text-[11px] text-slate-500">
-                                  <span className="text-slate-300">U+1F4C4</span>
+                                  <span className="text-slate-300">📄</span>
                                   <span className="truncate max-w-md" title={f}>{f}</span>
                                 </div>
                               ))}
@@ -1760,13 +1760,13 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
                         {Object.entries(computedSubs).map(([sub, items]) => (
                           <div key={sub} className="ml-3 mb-1.5">
                             <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-medium">
-                              <span>U+1F4C2</span>
+                              <span>📂</span>
                               <span>{sub}</span>
                             </div>
                             <div className="ml-5 space-y-0.5">
                               {items.docs.map((doc, i) => (
                                 <div key={i} className="flex items-center gap-2 text-[11px]">
-                                  <span className="text-slate-300">U+1F4C4</span>
+                                  <span className="text-slate-300">📄</span>
                                   <span className="text-slate-600 flex-1 truncate">{doc.label}</span>
                                   {doc.isUploaded && <span className="text-[9px] text-purple-600 bg-purple-50 border border-purple-200 rounded px-1">uploaded</span>}
                                   <span className={`text-[10px] font-bold ${doc.riskLevel === 'Critical' ? 'text-red-600' : doc.riskLevel === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>{doc.riskLevel}</span>
