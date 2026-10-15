@@ -1552,20 +1552,22 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
 
   // Static contracts
   for (const c of allContracts) {
-    if (c.flags.length === 0) continue
+    const cFlags = c.flags || []
+    if (cFlags.length === 0) continue
     // Use highest-severity flag's category
-    const topFlag = c.flags.slice().sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0))[0]
+    const topFlag = cFlags.slice().sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0))[0]
     const cat = topFlag?.risk_category || 'Uncategorized'
     const sub = topFlag?.subcategory || 'General'
-    addToTree(cat, sub, { label: `#${c.num} ${c.displayName}`, num: c.num, riskLevel: c.riskLevel, flagsCount: c.flagsCount, isUploaded: false })
+    addToTree(cat, sub, { label: `#${c.num} ${c.displayName}`, num: c.num, riskLevel: c.riskLevel, flagsCount: c.flagsCount || cFlags.length, isUploaded: false })
   }
 
   // Uploaded docs
   for (const u of uploaded) {
-    const topFlag = u.flags.slice().sort((a, b) => (a.severity === 'Critical' ? 3 : a.severity === 'High' ? 2 : 1) - (b.severity === 'Critical' ? 3 : b.severity === 'High' ? 2 : 1))[0]
+    const flags = u.flags || []
+    const topFlag = flags.slice().sort((a, b) => (a.severity === 'Critical' ? 3 : a.severity === 'High' ? 2 : 1) - (b.severity === 'Critical' ? 3 : b.severity === 'High' ? 2 : 1))[0]
     const cat = topFlag?.risk_category || u.document_type || 'Uncategorized'
     const sub = topFlag?.subcategory || 'General'
-    addToTree(cat, sub, { label: `📎 ${u.filename}`, riskLevel: u.risk_level, flagsCount: u.flags_count, isUploaded: true })
+    addToTree(cat, sub, { label: `📎 ${u.filename}`, riskLevel: u.risk_level, flagsCount: u.flags_count || flags.length, isUploaded: true })
   }
 
   // Clean docs (no flags)
