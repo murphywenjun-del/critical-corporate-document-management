@@ -1030,31 +1030,26 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
               <div className="px-5 pt-4 pb-3 border-b border-slate-100">
                 <div className="text-sm font-bold text-slate-800">Workflow: #{w.sourceNum} → {w.targetName}</div>
                 <div className="text-[11px] text-slate-500 mt-0.5">{wSource?.displayName} → {w.targetName}</div>
-                {/* Progress steps (clickable - jump to any step) */}
-                <div className="flex items-center gap-1 mt-3">
+                {/* Step boxes - click to jump, like original 5 buttons */}
+                <div className="flex items-center gap-1.5 mt-3">
                   {WF_STEPS.map((s, i) => (
-                    <div key={s.id} className="flex items-center">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setWf((p) => ({ ...p, [wKey]: s.id as WfState }))
-                          setToast(`→ Jumped to "${s.label}"`)
-                        }}
-                        className={`w-5 h-5 rounded-full border-2 transition-all hover:scale-110 cursor-pointer ${
-                          i < wStepIdx ? 'bg-teal-500 border-teal-400' :
-                          i === wStepIdx ? 'bg-teal-500 border-teal-300 ring-2 ring-teal-200' :
-                          'bg-white border-slate-300 hover:border-teal-400'
-                        }`}
-                        title={`Go to ${s.label}`}
-                      >
-                        {i <= wStepIdx && <span className="text-white text-[8px] font-bold flex items-center justify-center h-full">✓</span>}
-                      </button>
-                      {i < WF_STEPS.length - 1 && <div className={`w-3 h-0.5 ${i < wStepIdx ? 'bg-teal-300' : 'bg-slate-200'}`} />}
-                    </div>
+                    <button
+                      key={s.id}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setWf((p) => ({ ...p, [wKey]: s.id as WfState }))
+                        setToast(`→ "${s.label}"`)
+                      }}
+                      className={`text-[10px] font-medium px-2.5 py-1.5 rounded border transition-all ${
+                        i === wStepIdx ? `${s.color} ring-2 ring-offset-1 ring-teal-300` :
+                        i < wStepIdx ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
+                        'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                      }`}
+                    >
+                      {i < wStepIdx && '✓ '}{s.label}{i === wStepIdx && ' ·'}
+                    </button>
                   ))}
-                  <span className="ml-2 text-[10px] font-bold text-slate-500">{WF_STEPS[wStepIdx]?.label}</span>
                 </div>
-                <div className="text-[9px] text-slate-400 mt-1">Click any dot to jump · Use "Confirm →" to advance in order</div>
               </div>
 
               {/* Body */}
@@ -1073,35 +1068,34 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
               {/* Footer */}
               <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 rounded-b-xl">
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setWizard(null)} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5">
-                    ✕ Close
+                  <button onClick={() => setWizard(null)} className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1.5">
+                    ✕
                   </button>
-                  {wStepIdx > 0 && !isDone && (
+                  {wStepIdx > 0 && (
                     <button
                       onClick={() => {
                         const prev = WF_STEPS[wStepIdx - 1]
                         setWf((p) => ({ ...p, [wKey]: prev.id as WfState }))
-                        setToast(`← Back to "${prev.label}"`)
                       }}
                       className="text-xs text-slate-600 bg-slate-100 border border-slate-200 hover:bg-slate-200 px-3 py-1.5 rounded-lg"
                     >
-                      ← Back
+                      ← {WF_STEPS[wStepIdx - 1]?.label}
                     </button>
                   )}
                   <div className="flex-1" />
-                  {!isDone && nextStep && (
+                  {wStepIdx < 4 && (
                     <button
                       onClick={() => {
-                        setWf((p) => ({ ...p, [wKey]: nextStep.id as WfState }))
-                        setToast(`✓ ${WF_STEPS[wStepIdx]?.label} → ${nextStep.label}`)
+                        const nxt = WF_STEPS[wStepIdx + 1]
+                        setWf((p) => ({ ...p, [wKey]: nxt.id as WfState }))
                       }}
-                      className="text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 px-4 py-2 rounded-lg"
+                      className="text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 px-4 py-1.5 rounded-lg"
                     >
-                      Confirm: {nextStep.label} →
+                      {WF_STEPS[wStepIdx + 1]?.label} →
                     </button>
                   )}
                   {isDone && (
-                    <button onClick={() => setWizard(null)} className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-lg">
+                    <button onClick={() => setWizard(null)} className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-4 py-1.5 rounded-lg">
                       ✓ Done
                     </button>
                   )}
