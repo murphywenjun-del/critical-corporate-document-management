@@ -1700,7 +1700,9 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">
           FOLDER STRUCTURE
-          <span className="font-normal text-slate-400 ml-2">5 HEROC categories - {allContracts.length + uploaded.length} docs - real disk paths</span>
+          <span className="font-normal text-slate-400 ml-2">
+            5 HEROC categories · {Object.values(diskTree).reduce((a, v) => a + Object.values(v.subcategories).reduce((b, files) => b + files.length, 0), 0)} files on disk
+          </span>
         </div>
         <div className="divide-y divide-slate-100">
           {(['Operational', 'Financial', 'Reputational', 'Continuity', 'Clean'] as const).map((cat) => {
