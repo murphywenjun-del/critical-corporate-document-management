@@ -62,7 +62,7 @@ function KpiCard({ label, value, valueClass }: { label: string; value: number | 
 
 // ── Tab Bar ───────────────────────────────────────────────────────────────────
 
-type TabId = 'risk-register' | 'matrix' | 'contracts' | 'deadlines' | 'amendments' | 'cross-refs' | 'smart-filing'
+type TabId = 'risk-register' | 'matrix' | 'contracts' | 'deadlines' | 'amendments' | 'cross-refs' | 'smart-filing' | 'department'
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'risk-register', label: 'Risk Register' },
@@ -72,6 +72,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'amendments', label: 'Amendments' },
   { id: 'cross-refs', label: 'Cross-Refs' },
   { id: 'smart-filing', label: 'Smart Filing' },
+  { id: 'department', label: 'Department' },
 ]
 
 function TabBar({ active, onChange }: { active: TabId; onChange: (t: TabId) => void }) {
@@ -149,6 +150,8 @@ function RiskRegisterTable({
   const [selClinDept, setSelClinDept] = useState('All')
   const [selFlagStatus, setSelFlagStatus] = useState('All')
   const [selSource, setSelSource] = useState('All')
+  const [search, setSearch] = useState('')
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, string>>({})
   const allFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
   const filtered = allFlags.filter((f) => {
     if (selSev !== 'All' && f.severity !== selSev) return false
@@ -157,6 +160,11 @@ function RiskRegisterTable({
     if (selClinDept !== 'All' && f.department !== selClinDept) return false
     if (selFlagStatus !== 'All' && f.status !== selFlagStatus) return false
     if (selSource !== 'All' && f.source !== selSource) return false
+    if (search) {
+      const q = search.toLowerCase()
+      const match = f.flag_if?.toLowerCase().includes(q) || f.field?.toLowerCase().includes(q) || f.contract?.displayName?.toLowerCase().includes(q) || f.contract?.name?.toLowerCase().includes(q)
+      if (!match) return false
+    }
     return true
   })
   const sorted = [...filtered].sort((a, b) => b.risk_score - a.risk_score)
@@ -171,6 +179,42 @@ function RiskRegisterTable({
 
   return (
     <div>
+      {/* Search + Export */}
+      <div className="mb-3 flex items-center gap-3">
+        <div className="relative flex-1 max-w-md">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search flags, contracts… (e.g. 'breach', 'NDA', 'VP signature')"
+            className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300 outline-none transition"
+          />
+          {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs">✕</button>}
+        </div>
+        <button
+          onClick={() => {
+            const header = 'Severity,L,Impact,Score,Category,Subcategory,Department,Status,Source,Compliance,Issue,Contract\n'
+            const rows = sorted.map((f) => [
+              f.severity, f.likelihood, f.impact, f.risk_score,
+              f.risk_category, f.subcategory, f.department,
+              f.status, f.source, f.compliance_type,
+              `"${f.flag_if.replace(/"/g, '""')}"`,
+              `#${f.contract.num} ${f.contract.displayName}`
+            ].join(',')).join('\n')
+            const blob = new Blob([header + rows], { type: 'text/csv' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `risk_register_${new Date().toISOString().slice(0, 10)}.csv`
+            a.click()
+            URL.revokeObjectURL(url)
+          }}
+          className="text-[10px] font-medium text-slate-500 hover:text-teal-600 border border-slate-200 rounded px-2 py-1.5 bg-white hover:bg-teal-50 transition"
+        >
+          ⬇ Export CSV ({sorted.length})
+        </button>
+      </div>
+
       {/* Filters */}
       <div className="mb-4">
         <div className="flex gap-6 flex-wrap">
@@ -212,6 +256,7 @@ function RiskRegisterTable({
               <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-16">Type</th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Issue</th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-32">Contract</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-20">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -269,7 +314,7 @@ function RiskRegisterTable({
             ))}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={11} className="px-4 py-8 text-center text-sm text-slate-400">
+                <td colSpan={12} className="px-4 py-8 text-center text-sm text-slate-400">
                   No flags match the selected filters
                 </td>
               </tr>
@@ -411,6 +456,53 @@ function ContractList({
 }
 
 // ── Deadlines / Tickler Table (enhanced) ───────────────────────────────────
+
+function DeadlinesTimeline({ contracts: allContracts }: { contracts: ContractDoc[] }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const sorted = allContracts.filter((c) => c.expiryDate).sort((a, b) => (a.expiryDate || '').localeCompare(b.expiryDate || ''))
+  const minDate = sorted[0]?.expiryDate || today
+  const maxDate = sorted[sorted.length - 1]?.expiryDate || today
+
+  // Calculate position on timeline (0-100%)
+  const pos = (d: string) => {
+    const min = new Date(minDate).getTime()
+    const max = new Date(maxDate).getTime()
+    if (max === min) return 50
+    return Math.round(((new Date(d).getTime() - min) / (max - min)) * 100)
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4 mb-4">
+      <div className="text-xs font-bold text-slate-700 mb-3">Expiration Timeline</div>
+      <div className="relative h-32">
+        {/* Timeline line */}
+        <div className="absolute top-1/2 left-0 right-0 h-1 bg-slate-200 rounded" />
+        {/* Today marker */}
+        <div className="absolute top-0 bottom-0 w-0.5 bg-red-400 opacity-50" style={{ left: `${pos(today)}%` }} />
+        <span className="absolute text-[9px] text-red-500 -translate-x-1/2" style={{ left: `${pos(today)}%`, top: '-12px' }}>Today</span>
+        {/* Contract dots */}
+        {sorted.map((c) => (
+          <div key={c.num} className="absolute top-1/2 -translate-y-1/2 group cursor-pointer" style={{ left: `${pos(c.expiryDate!)}%` }}>
+            <div className={`w-3 h-3 rounded-full border-2 border-white shadow ${c.expiryDate! < today ? 'bg-red-500' : c.expiryDate!.slice(0, 7) === today.slice(0, 7) ? 'bg-amber-500' : 'bg-teal-500'} group-hover:scale-125 transition-transform`} />
+            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition">
+              #{c.num} {c.expiryDate}
+            </div>
+          </div>
+        ))}
+        {/* Axis labels */}
+        <div className="absolute bottom-0 left-0 text-[9px] text-slate-400">{minDate}</div>
+        <div className="absolute bottom-0 right-0 text-[9px] text-slate-400">{maxDate}</div>
+      </div>
+      {/* Legend */}
+      <div className="flex items-center gap-4 mt-2 text-[9px] text-slate-400">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> Expired</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> Expiring (this month)</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500" /> Future</span>
+        <span className="flex items-center gap-1"><span className="w-0.5 h-3 bg-red-400" /> Today</span>
+      </div>
+    </div>
+  )
+}
 
 function DeadlinesTable({ contracts: allContracts }: { contracts: ContractDoc[] }) {
   const today = new Date('2026-10-15') // demo reference date
@@ -1320,6 +1412,53 @@ function ContractDetail({
           <AmendmentTimeline amendments={s.amendments} />
         </section>
       )}
+
+      {/* Related Documents + Compliance */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        <section>
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Related Documents</h3>
+          <div className="space-y-2">
+            {amendments.filter((a) => a.baseContractId === s.num).length > 0 ? (
+              amendments.filter((a) => a.baseContractId === s.num).map((a) => (
+                <div key={a.id} className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <div className="text-xs font-bold text-amber-800">#{a.num} {a.displayName} <span className="font-normal text-amber-600">({a.status})</span></div>
+                  <div className="text-[11px] text-amber-700 mt-0.5">{a.changeDescription}</div>
+                </div>
+              ))
+            ) : (
+              <div className="text-xs text-slate-400">No amendments linked to this contract</div>
+            )}
+            {docLinks.filter((l) => l.sourceNum === s.num).map((l) => (
+              <div key={l.id} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                <div className="text-xs font-medium text-slate-700">→ {l.targetName}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">{l.changeDescription}</div>
+              </div>
+            ))}
+          </div>
+        </section>
+        <section>
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Compliance Summary</h3>
+          <div className="bg-white border border-slate-200 rounded-lg p-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="text-center">
+                <div className="text-xl font-bold text-red-500">{s.compliance.hardGaps}</div>
+                <div className="text-[10px] text-slate-400 uppercase">Hard Gaps</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-amber-500">{s.compliance.bpGaps}</div>
+                <div className="text-[10px] text-slate-400 uppercase">BP Gaps</div>
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="text-[10px] text-slate-400 mb-1">Compliance Rate</div>
+              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full ${s.compliance.complianceRate >= 0.8 ? 'bg-emerald-500' : s.compliance.complianceRate >= 0.5 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${s.compliance.complianceRate * 100}%` }} />
+              </div>
+              <div className="text-[10px] text-slate-500 mt-1">{Math.round(s.compliance.complianceRate * 100)}% · Top risk: {s.compliance.topRiskField}</div>
+            </div>
+          </div>
+        </section>
+      </div>
     </div>
   )
 }
@@ -1826,6 +1965,79 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
 }
 
 
+
+// ── Department View: filter all by clinical/admin department ─────────────────
+function DepartmentView({ contracts: allContracts }: { contracts: ContractDoc[] }) {
+  const [selDept, setSelDept] = useState<string>('All')
+  const depts = ['All', ...SOUTHDEPARTMENTS]
+
+  const deptContracts = selDept === 'All' ? allContracts : allContracts.filter((c) => {
+    const flagDepts = c.flags.map((f) => f.department).filter(Boolean)
+    return flagDepts.includes(selDept)
+  })
+  const deptFlags = deptContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
+    .filter((f) => selDept === 'All' || f.department === selDept)
+
+  const deptDeadlines = deptContracts.filter((c) => c.expiryDate).sort((a, b) => (a.expiryDate || '').localeCompare(b.expiryDate || ''))
+
+  return (
+    <div className="space-y-4">
+      {/* Dept selector */}
+      <div className="flex items-center gap-3">
+        <label className="text-xs font-bold text-slate-600">Department:</label>
+        <select
+          value={selDept}
+          onChange={(e) => setSelDept(e.target.value)}
+          className="text-xs border border-slate-200 rounded px-2 py-1.5 bg-white focus:ring-2 focus:ring-teal-500/20 outline-none"
+        >
+          {depts.map((d) => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <span className="text-[11px] text-slate-400">{selDept === 'All' ? 'All departments' : `${deptContracts.length} contracts`}</span>
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="bg-white border border-slate-200 rounded p-3 text-center">
+          <div className="text-xl font-bold text-slate-800">{deptContracts.length}</div>
+          <div className="text-[10px] text-slate-400 uppercase">Contracts</div>
+        </div>
+        <div className="bg-white border border-slate-200 rounded p-3 text-center">
+          <div className="text-xl font-bold text-red-600">{deptFlags.filter((f) => f.severity === 'Critical').length}</div>
+          <div className="text-[10px] text-slate-400 uppercase">Critical</div>
+        </div>
+        <div className="bg-white border border-slate-200 rounded p-3 text-center">
+          <div className="text-xl font-bold text-orange-500">{deptFlags.filter((f) => f.severity === 'High').length}</div>
+          <div className="text-[10px] text-slate-400 uppercase">High</div>
+        </div>
+        <div className="bg-white border border-slate-200 rounded p-3 text-center">
+          <div className="text-xl font-bold text-slate-700">{deptDeadlines.length}</div>
+          <div className="text-[10px] text-slate-400 uppercase">With Deadline</div>
+        </div>
+      </div>
+
+      {/* Contracts in this dept */}
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2 text-xs font-bold text-slate-600">
+          CONTRACTS ({selDept === 'All' ? 'ALL' : selDept.toUpperCase()})
+        </div>
+        <div className="divide-y divide-slate-100">
+          {deptContracts.map((c) => (
+            <div key={c.num} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50">
+              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${c.riskLevel === 'Critical' ? 'bg-red-500' : c.riskLevel === 'High' ? 'bg-orange-500' : 'bg-emerald-500'}`} />
+              <span className="text-xs font-medium text-slate-700 flex-1">#{c.num} {c.displayName}</span>
+              <span className="text-[10px] text-slate-400">{c.type}</span>
+              <span className="text-[10px] text-slate-400">{c.flagsCount} flags</span>
+              <span className="text-[10px] text-slate-400 font-mono">{c.riskScore}pts</span>
+            </div>
+          ))}
+          {deptContracts.length === 0 && <div className="px-4 py-6 text-center text-xs text-slate-400">No contracts mapped to this department</div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('risk-register')
   const [selected, setSelected] = useState<ContractDoc | null>(null)
@@ -2063,7 +2275,10 @@ export default function App() {
                   </div>
                 )}
                 {activeTab === 'deadlines' && (
-                  <DeadlinesTable contracts={filtered} />
+                  <div>
+                    <DeadlinesTimeline contracts={filtered} />
+                    <DeadlinesTable contracts={filtered} />
+                  </div>
                 )}
                 {activeTab === 'matrix' && (
                   <RiskMatrixView contracts={filtered} />
@@ -2076,6 +2291,9 @@ export default function App() {
                 )}
                 {activeTab === 'smart-filing' && (
                   <SmartFilingView contracts={filtered} />
+                )}
+                {activeTab === 'department' && (
+                  <DepartmentView contracts={contracts} />
                 )}
               </>
             )}
