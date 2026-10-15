@@ -819,6 +819,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
   })
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [modal, setModal] = useState<{ link: DocLink; to: WfState } | null>(null)
+  const [toast, setToast] = useState('')
 
   function lk(l: DocLink) { return `${l.sourceNum}-${l.targetName}` }
 
@@ -828,6 +829,16 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
     if (!modal) return
     setWf((p) => ({ ...p, [lk(modal.link)]: modal.to }))
     setModal(null)
+  }
+
+  function getNextStepText(to: WfState, link: DocLink): string {
+    switch (to) {
+      case 'acknowledged': return `Owner should review ${link.targetName} within 5 business days.`
+      case 'fixing': return `Update clause ${link.targetClause} in ${link.targetName}. SLA: 30 days.`
+      case 'verified': return `Verify revised document matches source. Notify Risk team.`
+      case 'closed': return `Cross-reference resolved. No further action.`
+      default: return 'Continue monitoring.'
+    }
   }
 
   function LinkCard({ link }: { link: DocLink }) {
@@ -949,79 +960,103 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
         {docLinks.map((l) => <LinkCard key={lk(l)} link={l} />)}
       </div>
 
-      {/* Modal */}
+      {/* Status-aware Modal */}
       {modal && (
         <Modal
-          title={`Confirm: ${WF_STEPS.find((s) => s.id === modal.to)?.label}`}
-          onConfirm={confirmModal}
+          title={`→ ${WF_STEPS.find((s) => s.id === modal.to)?.label}`}
+          onConfirm={() => {
+            const from = wf[lk(modal.link)]
+            confirmModal()
+            setToast(`✓ #${modal.link.sourceNum} → ${modal.link.targetName}: ${WF_STEPS.find((s) => s.id === from)?.label} → ${WF_STEPS.find((s) => s.id === modal.to)?.label}. ${getNextStepText(modal.to, modal.link)}`)
+          }}
           onCancel={() => setModal(null)}
-          confirmLabel={`Confirm → ${WF_STEPS.find((s) => s.id === modal.to)?.label}`}
+          confirmLabel={`Confirm ${WF_STEPS.find((s) => s.id === modal.to)?.label}`}
         >
           <div className="space-y-3">
-            {/* Source → Target */}
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-slate-600 font-medium">{allContracts.find((c) => c.num === modal.link.sourceNum)?.displayName || `#${modal.link.sourceNum}`}</span>
-              <span className="text-slate-300">→</span>
-              <span className="text-slate-600 font-medium">{modal.link.targetName}</span>
+            {/* Context line */}
+            <div className="text-xs text-slate-600">
+              <b>{allContracts.find((c) => c.num === modal.link.sourceNum)?.displayName || `#${modal.link.sourceNum}`}</b>
+              {' → '}
+              <b>{modal.link.targetName}</b>
             </div>
 
-            {/* Before / After */}
-            <div>
-              <div className="text-[10px] font-bold text-red-400 uppercase mb-1">Before (current in target)</div>
-              <div className="text-[11px] text-slate-700 bg-red-50 border border-red-100 rounded p-2 leading-relaxed">{modal.link.beforeText}</div>
-            </div>
-            <div>
-              <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">After (required by source)</div>
-              <div className="text-[11px] text-slate-700 bg-emerald-50 border border-emerald-100 rounded p-2 leading-relaxed">{modal.link.afterText}</div>
-            </div>
-
-            {/* Key changes */}
-            {modal.link.keyChanges.length > 0 && (
-              <div>
-                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Key Changes</div>
-                <div className="space-y-1">
-                  {modal.link.keyChanges.map((k, i) => (
-                    <div key={i} className="text-[11px] text-slate-600 flex items-start gap-1.5">
-                      <span className="text-teal-500 mt-0.5">•</span>
-                      <span>{k}</span>
-                    </div>
-                  ))}
+            {/* Status-specific content */}
+            {modal.to === 'acknowledged' && (
+              <>
+                <div className="text-[11px] text-slate-600">
+                  You are confirming that a responsible person has <b>reviewed and accepted</b> this gap.
                 </div>
-              </div>
+                <div className="bg-amber-50 border border-amber-200 rounded p-2 text-[11px] text-amber-800">
+                  <b>Gap:</b> {modal.link.beforeText}
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  Suggested owner: {modal.link.targetName} document custodian · SLA: acknowledge within 5 business days
+                </div>
+              </>
             )}
-
-            {/* Status transition */}
-            <div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Status Change</div>
-              <div className="flex items-center gap-2 text-xs">
-                <span className={`px-2 py-0.5 rounded border ${WF_STEPS.find((s) => s.id === wf[lk(modal.link)])?.color}`}>
-                  {WF_STEPS.find((s) => s.id === wf[lk(modal.link)])?.label}
-                </span>
-                <span className="text-slate-400">→</span>
-                <span className={`px-2 py-0.5 rounded border ${WF_STEPS.find((s) => s.id === modal.to)?.color}`}>
-                  {WF_STEPS.find((s) => s.id === modal.to)?.label}
-                </span>
-              </div>
-            </div>
-
-            {/* Verification checklist */}
-            {modal.to === 'verified' && (
-              <div className="bg-amber-50 border border-amber-200 rounded p-2 text-[11px] text-slate-600">
-                <strong>Before confirming, verify:</strong>
-                <div className="mt-1 space-y-0.5">
-                  <div>□ {modal.link.targetName} clause {modal.link.targetClause} updated</div>
-                  <div>□ No other documents still reference the old value</div>
-                  <div>□ Change is logged in document control register</div>
+            {modal.to === 'fixing' && (
+              <>
+                <div className="text-[11px] text-slate-600">
+                  Moving to <b>Fixing</b> means the target document will be updated to match the source requirement.
                 </div>
-              </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="text-[10px] font-bold text-red-400 uppercase mb-1">Current (target)</div>
+                    <div className="text-[11px] text-slate-700 bg-red-50 border border-red-100 rounded p-2">{modal.link.beforeText}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Required (from source)</div>
+                    <div className="text-[11px] text-slate-700 bg-emerald-50 border border-emerald-100 rounded p-2">{modal.link.afterText}</div>
+                  </div>
+                </div>
+                {modal.link.keyChanges.length > 0 && (
+                  <div className="text-[10px] text-slate-500">
+                    <b>Changes needed:</b> {modal.link.keyChanges.join(' · ')}
+                  </div>
+                )}
+                <div className="text-[10px] text-slate-400">
+                  Expected completion: within 30 days · Notify: document custodian + Legal
+                </div>
+              </>
+            )}
+            {modal.to === 'verified' && (
+              <>
+                <div className="text-[11px] text-slate-600">
+                  Before marking <b>Verified</b>, confirm the target document has been updated and matches the source.
+                </div>
+                <div className="bg-blue-50 border border-blue-200 rounded p-2 text-[11px] space-y-1">
+                  <div className="text-blue-700 font-medium">Verification checklist:</div>
+                  <div>□ {modal.link.targetName} has been revised</div>
+                  <div>□ Clause {modal.link.targetClause} now matches: "{modal.link.afterText}"</div>
+                  <div>□ No other documents reference the old value</div>
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  Verifier: Risk team or document owner · Evidence: revised document version
+                </div>
+              </>
             )}
             {modal.to === 'closed' && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded p-2 text-[11px] text-slate-600">
-                <strong>Closing loop.</strong> Reopen by setting status back to "Detected".
-              </div>
+              <>
+                <div className="text-[11px] text-slate-600">
+                  Closing this link means the cross-reference is <b>fully resolved</b>. No further action needed.
+                </div>
+                <div className="bg-emerald-50 border border-emerald-200 rounded p-2 text-[11px] text-emerald-800">
+                  ✓ {modal.link.beforeText} → {modal.link.afterText}
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  This action is permanent. To reopen, set status back to "Detected".
+                </div>
+              </>
             )}
           </div>
         </Modal>
+      )}
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 bg-slate-800 text-white text-xs px-4 py-2.5 rounded-lg shadow-lg max-w-sm">
+          {toast}
+          <button onClick={() => setToast('')} className="ml-2 text-slate-400 hover:text-white">✕</button>
+        </div>
       )}
     </div>
   )
