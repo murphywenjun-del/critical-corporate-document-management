@@ -133,6 +133,7 @@ def _flag(field, check, flag_if, risk_category, severity,
         "return_destruction": "Process", "confidential_scope": "Process",
         "termination_clause": "Process", "termination_notice": "Process",
         "indemnity_clause": "Liability", "breach_notification": "Legal Exposure",
+        "governing_law": "IP & Indemnity", "auto_renewal": "Procurement & Vendors",
     }
     sub = subcategory or SUBCATEGORY_MAP.get(field, "Compliance")
     f = {
@@ -176,6 +177,8 @@ class ContractAnalyzer:
             checker(text)
         self._duplicate_check(text)
         self._ocr_check(text)
+        self._governing_law_check(text)
+        self._auto_renewal_check(text)
         score = self._risk_score()
         hard = self._compliance_stats(doc_type)
         return {
@@ -362,6 +365,41 @@ class ContractAnalyzer:
                 f"同一财务标签检测到不同金额：{', '.join(set(contrib))}",
                 "Financial", "High",
                 likelihood=3, impact=5, compliance_type=HARD))
+
+    def _governing_law_check(self, text: str):
+        """Flag if governing law is not Ontario (Southlake's default)."""
+        # Detect non-Ontario governing law
+        non_ontario = re.search(
+            r"governed\s+by\s+(?:the\s+)?laws?\s+of\s+(?!.*?Ontario)",
+            text, re.I
+        )
+        ontario_law = re.search(r"Province\s+of\s+Ontario|laws?\s+of\s+Ontario", text, re.I)
+        if non_ontario and not ontario_law:
+            # Extract which jurisdiction is referenced
+            match = re.search(r"governed\s+by\s+(?:the\s+)?laws?\s+of\s+([A-Z][a-zA-Z\s]+?)(?:and|,|\.)", text, re.I)
+            jurisdiction = match.group(1).strip() if match else "another jurisdiction"
+            self.flags.append(_flag("governing_law", "Governing law = Ontario",
+                f"Governing law references {jurisdiction} instead of Ontario — creates jurisdictional conflict",
+                "Financial", "High",
+                likelihood=3, impact=4, compliance_type=HARD,
+                subcategory="IP & Indemnity"))
+
+    def _auto_renewal_check(self, text: str):
+        """Flag if contract auto-renews without explicit opt-out mechanism."""
+        has_auto_renewal = re.search(
+            r"automatically\s+renew|auto[- ]?renew|renew\s+for\s+successive|continue\s+in\s+effect\s+unless",
+            text, re.I
+        )
+        has_opt_out = re.search(
+            r"(?:written\s+notice\s+of\s+non[- ]?renewal|opt[- ]?out|termination\s+for\s+convenience|either\s+Party\s+may\s+(?:terminate|cancel))",
+            text, re.I
+        )
+        if has_auto_renewal and not has_opt_out:
+            self.flags.append(_flag("auto_renewal", "Auto-renewal has opt-out",
+                "Contract auto-renews without explicit opt-out mechanism — creates lock-in risk",
+                "Operational", "Medium",
+                likelihood=3, impact=3, compliance_type=HARD,
+                subcategory="Procurement & Vendors"))
 
     def _ocr_check(self, text: str):
         q = self.fields["ocr_quality"]

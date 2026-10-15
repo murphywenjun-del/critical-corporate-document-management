@@ -146,12 +146,16 @@ function RiskRegisterTable({
   const [selCat, setSelCat] = useState('All')
   const [selSub, setSelSub] = useState('All')
   const [selClinDept, setSelClinDept] = useState('All')
+  const [selFlagStatus, setSelFlagStatus] = useState('All')
+  const [selSource, setSelSource] = useState('All')
   const allFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
   const filtered = allFlags.filter((f) => {
     if (selSev !== 'All' && f.severity !== selSev) return false
     if (selCat !== 'All' && f.risk_category !== selCat) return false
     if (selSub !== 'All' && f.subcategory !== selSub) return false
     if (selClinDept !== 'All' && f.department !== selClinDept) return false
+    if (selFlagStatus !== 'All' && f.status !== selFlagStatus) return false
+    if (selSource !== 'All' && f.source !== selSource) return false
     return true
   })
   const sorted = [...filtered].sort((a, b) => b.risk_score - a.risk_score)
@@ -172,6 +176,16 @@ function RiskRegisterTable({
         <TagSelector label="HEROC Category" options={categories} selected={selCat} onChange={setSelCat} />
         <TagSelector label="Subcategory" options={subcats} selected={selSub} onChange={setSelSub} />
         <TagSelector label="Clinical Dept" options={clinDepts} selected={selClinDept} onChange={setSelClinDept} />
+        <TagSelector label="Status" options={['All', 'open', 'remediated', 'accepted']} selected={selFlagStatus} onChange={setSelFlagStatus} />
+        <TagSelector label="Source" options={['All', 'rule', 'ai_scan']} selected={selSource} onChange={setSelSource} />
+      </div>
+
+      {/* Source legend */}
+      <div className="flex items-center gap-4 mb-2 text-[10px] text-slate-400">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500" /> Rule-based</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500" /> AI-detected</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> Open</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Remediated</span>
       </div>
 
       {/* Table */}
@@ -185,6 +199,8 @@ function RiskRegisterTable({
               <th className="text-center px-2 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-10">Score</th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-28">HEROC Category</th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-24">Southlake Dept</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-16">Status</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-14">Src</th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-16">Type</th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Issue</th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-32">Contract</th>
@@ -218,6 +234,18 @@ function RiskRegisterTable({
                 <td className="px-4 py-2.5">
                   <span className="text-[11px] text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5">{f.department || '—'}</span>
                 </td>
+                <td className="px-3 py-2.5">
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                    f.status === 'open' ? 'bg-red-100 text-red-700' :
+                    f.status === 'remediated' ? 'bg-emerald-100 text-emerald-700' :
+                    'bg-slate-100 text-slate-600'
+                  }`}>
+                    {f.status === 'open' ? '● Open' : f.status === 'remediated' ? '✓ Remediated' : 'Accepted'}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5">
+                  <span className={`inline-block w-2 h-2 rounded-full ${f.source === 'ai_scan' ? 'bg-purple-500' : 'bg-teal-500'}`} title={f.source === 'ai_scan' ? 'AI-detected' : 'Rule-based'} />
+                </td>
                 <td className="px-4 py-2.5">
                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${COMP_TYPE_BG[f.compliance_type] || ''}`}>
                     {f.compliance_type === 'hard' ? 'HARD' : 'BP'}
@@ -233,7 +261,7 @@ function RiskRegisterTable({
             ))}
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-400">
+                <td colSpan={11} className="px-4 py-8 text-center text-sm text-slate-400">
                   No flags match the selected filters
                 </td>
               </tr>
@@ -247,6 +275,62 @@ function RiskRegisterTable({
 }
 
 // ── Contract List (flat items, not cards) ───────────────────────────────────
+
+
+// ── Criteria-Based Compliance Panel (F) ─────────────────────────────────────────
+// Sam's proposal: applicability varies by document type
+function CriteriaPanel({ contracts: allContracts }: { contracts: ContractDoc[] }) {
+  const CRITERIA: Record<string, string[]> = {
+    'NDA': ['PHIPA clause', 'Data return/destruction', 'Breach notification ≤48h', 'Governing law = Ontario', '2 VP signatures', 'Confidentiality ≥3yr'],
+    'MOU': ['Clear binding language', 'Financial caps', 'Termination mechanism', 'Governing law = Ontario', '2 VP signatures'],
+    'Procurement': ['SLA with KPIs', 'Service credits', 'Insurance specified', 'Data security + encryption', 'Termination for convenience', 'Governing law = Ontario'],
+    'Data_Sharing': ['PHIPA declaration', 'Data minimization', 'Breach notification ≤24h', 'Audit rights', 'Governing law = Ontario', 'Retention period defined'],
+  }
+
+  // Group by type and show criteria met
+  const byType: Record<string, ContractDoc[]> = {}
+  for (const c of allContracts) {
+    if (!byType[c.type]) byType[c.type] = []
+    byType[c.type].push(c)
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <h3 className="text-sm font-bold text-slate-800">Criteria-Based Compliance</h3>
+        <span className="text-[10px] text-slate-400">Applicability varies by document type</span>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {Object.entries(byType).map(([type, docs]) => {
+          const criteria = CRITERIA[type] || []
+          const total = docs.length
+          const clean = docs.filter((d) => d.flags.length === 0).length
+          const hardGaps = docs.reduce((sum, d) => sum + (d.compliance?.hardGaps || 0), 0)
+          const rate = total > 0 ? Math.round(((total - hardGaps) / (total * (criteria.length || 1))) * 100) : 100
+          return (
+            <div key={type} className="border border-slate-100 rounded p-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-bold text-slate-700">{type}</span>
+                <span className="text-[10px] text-slate-400">{total} docs</span>
+              </div>
+              <div className="text-[10px] text-slate-500 mb-2">{clean}/{total} clean · {hardGaps} hard gaps</div>
+              {/* Progress bar */}
+              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                  style={{ width: `${Math.min(100, rate)}%` }}
+                />
+              </div>
+              <div className="text-[10px] text-slate-400 mt-1">{rate}% criteria met</div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── ContractList (with archive + superseded) ───────────────────────────────────
 
 function ContractList({
   contracts: allContracts,
@@ -280,8 +364,23 @@ function ContractList({
               <p className="text-xs text-slate-400 truncate">{c.summary}</p>
             </div>
 
-            {/* Right: risk indicators */}
-            <div className="flex items-center gap-3 shrink-0 w-32">
+            {/* Right: risk indicators + badges */}
+            <div className="flex items-center gap-3 shrink-0">
+              {c.baseContractId != null && (
+                <span className="text-[9px] font-bold bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded border border-purple-200">
+                  AMENDMENT
+                </span>
+              )}
+              {c.flags.some((f) => f.field === 'duplicate_version') && (
+                <span className="text-[9px] font-bold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">
+                  SUPERSEDED
+                </span>
+              )}
+              {c.flags.length === 0 && (
+                <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200">
+                  CLEAN ✓
+                </span>
+              )}
               <div className="text-right">
                 <div className="text-xs font-bold text-slate-700">{c.riskScore.toFixed(1)}</div>
                 <div className="text-[10px] text-slate-400">score</div>
@@ -348,6 +447,14 @@ function DeadlinesTable({ contracts: allContracts }: { contracts: ContractDoc[] 
             </div>
           )
         })}
+      </div>
+
+      {/* Source legend */}
+      <div className="flex items-center gap-4 mb-2 text-[10px] text-slate-400">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500" /> Rule-based</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500" /> AI-detected</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> Open</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Remediated</span>
       </div>
 
       {/* Table */}
@@ -1477,8 +1584,10 @@ export default function App() {
         <div className="max-w-screen-2xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-3">
           <KpiCard label="Documents" value={s.totalContracts} />
           <KpiCard label="Critical Flags" value={s.criticalCount} valueClass="text-red-600" />
+          <KpiCard label="Open Flags" value={contracts.flatMap((c) => c.flags).filter((f) => f.status === 'open').length} valueClass="text-orange-600" />
           <KpiCard label="Expired / Expiring" value={contracts.filter((c) => c.flags.some((f) => f.field === 'expiry_date')).length} valueClass="text-amber-600" />
           <KpiCard label="Avg Compliance" value={`${Math.round(s.avgComplianceRate * 100)}%`} valueClass="text-teal-600" />
+          <KpiCard label="Clean Docs" value={contracts.filter((c) => c.flags.length === 0).length} valueClass="text-emerald-600" />
         </div>
       </div>
 
@@ -1542,11 +1651,16 @@ export default function App() {
                   />
                 )}
                 {activeTab === 'contracts' && (
-                  <ContractList
-                    contracts={filtered}
-                    selectedNum={null}
-                    onSelect={(c) => setSelected(c)}
-                  />
+                  <div className="space-y-4">
+                    {/* Criteria-based compliance panel (F) */}
+                    <CriteriaPanel contracts={filtered} />
+
+                    <ContractList
+                      contracts={filtered}
+                      selectedNum={null}
+                      onSelect={(c) => setSelected(c)}
+                    />
+                  </div>
                 )}
                 {activeTab === 'deadlines' && (
                   <DeadlinesTable contracts={filtered} />

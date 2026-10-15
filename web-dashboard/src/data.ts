@@ -13,6 +13,8 @@ export interface Flag {
   risk_category: string // HEROC: Operational | Financial | Reputational | Continuity
   subcategory: string  // HEROC subcategory (e.g. Clinical Practice, Data Privacy & PHIPA)
   department: string   // Southlake department affected
+  status: string       // 'open' | 'remediated' | 'accepted'
+  source: string       // 'rule' | 'ai_scan'
 }
 
 export interface DocLink {
@@ -236,6 +238,43 @@ export const SUBCAT_DEPTS: Record<string, string[]> = {
   ],
 }
 
+// ── Criteria-based compliance (per contract type) ──────────────────────────────
+// Sam's proposal: applicability varies by document type
+export const CRITERIA_BY_TYPE: Record<string, string[]> = {
+  'NDA': [
+    'PHIPA / privacy compliance clause',
+    'Data return or destruction on termination',
+    'Breach notification timeline ≤ 48h',
+    'Governing law = Ontario',
+    'Minimum 2 VP-level signatures',
+    'Confidentiality term ≥ 3 years',
+  ],
+  'MOU': [
+    'Clear binding vs non-binding language',
+    'Financial caps defined',
+    'Termination mechanism with notice period',
+    'Governing law = Ontario',
+    'Minimum 2 VP-level signatures',
+  ],
+  'Procurement': [
+    'SLA with measurable KPIs',
+    'Service credits for SLA failure',
+    'Insurance requirements specified',
+    'Data security + encryption standards',
+    'Termination for convenience clause',
+    'Governing law = Ontario',
+  ],
+  'Data_Sharing': [
+    'PHIPA compliance declaration',
+    'Data minimization principle',
+    'Breach notification timeline ≤ 24h',
+    'Audit rights clause',
+    'Governing law = Ontario',
+    'Data retention period defined',
+  ],
+}
+
+
 export const contracts: ContractDoc[] = [
   {
     num: 1, name: "NDA_Standard_Compliant_2024", displayName: "NDA — Standard Compliant",
@@ -264,9 +303,9 @@ export const contracts: ContractDoc[] = [
     summary: "MOU with Executive Director & CMO signing (neither is VP). Mixed binding/non-binding language creates legal ambiguity.",
     filePath: "research/contracts/02_MOU_Missing_Second_Signature_2024.md",
     riskScore: 25.0, riskLevel: "Critical", flagsCount: 3, flags: [
-      { severity: "Critical", field: "signatories", flag_if: "Only 0 VP signatures found — signed by Executive Director & CMO", likelihood: 5, impact: 5, risk_score: 25, compliance_type: "hard", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance" },
-      { severity: "High", field: "expiry_date", flag_if: "Contract expired 119 days ago (May 31, 2026)", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" },
-      { severity: "High", field: "binding_language", flag_if: "Both binding and non-binding language present — creates legal ambiguity", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Financial", subcategory: "Contract Pricing", department: "Finance & Procurement" }
+      { severity: "Critical", field: "signatories", flag_if: "Only 0 VP signatures found — signed by Executive Director & CMO", likelihood: 5, impact: 5, risk_score: 25, compliance_type: "hard", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance" , status: "open", source: "rule" },
+      { severity: "High", field: "expiry_date", flag_if: "Contract expired 119 days ago (May 31, 2026)", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule" },
+      { severity: "High", field: "binding_language", flag_if: "Both binding and non-binding language present — creates legal ambiguity", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Financial", subcategory: "Contract Pricing", department: "Finance & Procurement", status: "open", source: "rule" }
 
     ],
     textHighlights: [],
@@ -289,10 +328,10 @@ export const contracts: ContractDoc[] = [
     summary: "EHR vendor agreement with unlimited indemnity, auto-increasing fees without cap, and 90-day convenience termination.",
     filePath: "research/contracts/03_Procurement_HealthIT_Service_Agreement_2023.md",
     riskScore: 21.0, riskLevel: "Critical", flagsCount: 3, flags: [
-      { severity: "High", field: "expiry_date", flag_if: "Contract expired 270 days ago (Dec 31, 2025)", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" },
-      { severity: "High", field: "indemnity_cap", highlightField: "a monetary cap", flag_if: "Indemnity clause has no monetary cap", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance" },
+      { severity: "High", field: "expiry_date", flag_if: "Contract expired 270 days ago (Dec 31, 2025)", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule" },
+      { severity: "High", field: "indemnity_cap", highlightField: "a monetary cap", flag_if: "Indemnity clause has no monetary cap", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance" , status: "open", source: "rule" },
 
-      { severity: "Medium", field: "termination_conv", highlightField: "ninety", flag_if: "Convenience termination notice period of 90 days is excessive", likelihood: 2, impact: 2, risk_score: 4, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" }
+      { severity: "Medium", field: "termination_conv", highlightField: "ninety", flag_if: "Convenience termination notice period of 90 days is excessive", likelihood: 2, impact: 2, risk_score: 4, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule" }
     ],
     textHighlights: [
       { text: "Robert Thompson", severity: "Critical", reason: "Signatory is Executive Director, not an authorized VP" },
@@ -320,15 +359,15 @@ export const contracts: ContractDoc[] = [
     summary: "Data sharing with University Health Research Institute — zero PHIPA compliance mention, no breach notification, no VP signatories.",
     filePath: "research/contracts/04_DSA_Provider_Data_Sharing_2024.md",
     riskScore: 25.0, riskLevel: "Critical", flagsCount: 7, flags: [
-      { severity: "Critical", field: "signatories", flag_if: "Only 0 VP signatures found — Director & CRO signed", likelihood: 5, impact: 5, risk_score: 25, compliance_type: "hard", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance" },
-      { severity: "Critical", field: "phia_compliance", flag_if: "Missing PHIPA compliance declaration entirely", likelihood: 5, impact: 5, risk_score: 25, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" },
-      { severity: "High", field: "purpose_limitation", flag_if: "Data use purpose too broad — allows publication and sharing with collaborators", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" },
-      { severity: "High", field: "breach_timeline", flag_if: "Missing breach notification timeline", likelihood: 4, impact: 4, risk_score: 16, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" },
+      { severity: "Critical", field: "signatories", flag_if: "Only 0 VP signatures found — Director & CRO signed", likelihood: 5, impact: 5, risk_score: 25, compliance_type: "hard", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance" , status: "open", source: "rule" },
+      { severity: "Critical", field: "phia_compliance", flag_if: "Missing PHIPA compliance declaration entirely", likelihood: 5, impact: 5, risk_score: 25, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" , status: "open", source: "rule" },
+      { severity: "High", field: "purpose_limitation", flag_if: "Data use purpose too broad — allows publication and sharing with collaborators", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" , status: "open", source: "rule" },
+      { severity: "High", field: "breach_timeline", flag_if: "Missing breach notification timeline", likelihood: 4, impact: 4, risk_score: 16, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" , status: "open", source: "rule" },
 
-      { severity: "High", field: "security_standards", flag_if: "No security standards specified", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" },
+      { severity: "High", field: "security_standards", flag_if: "No security standards specified", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" , status: "open", source: "rule" },
 
-      { severity: "Medium", field: "audit_rights", flag_if: "No audit rights clause", likelihood: 2, impact: 3, risk_score: 6, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" },
-      { severity: "Medium", field: "data_minimization", flag_if: "No data minimization principle stated", likelihood: 2, impact: 3, risk_score: 6, compliance_type: "best_practice", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" }
+      { severity: "Medium", field: "audit_rights", flag_if: "No audit rights clause", likelihood: 2, impact: 3, risk_score: 6, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule" },
+      { severity: "Medium", field: "data_minimization", flag_if: "No data minimization principle stated", likelihood: 2, impact: 3, risk_score: 6, compliance_type: "best_practice", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office", status: "open", source: "rule" }
 
     ],
     textHighlights: [
@@ -354,13 +393,13 @@ export const contracts: ContractDoc[] = [
     summary: "NDA expired ~956 days ago with no renewal or termination. Also missing PHIPA compliance and return/destruction clauses.",
     filePath: "research/contracts/05_NDA_Old_Vendor_2022.md",
     riskScore: 21.5, riskLevel: "Critical", flagsCount: 4, flags: [
-      { severity: "High", field: "expiry_date", flag_if: "Contract expired 956 days ago", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" },
-      { severity: "Critical", field: "phia_compliance", flag_if: "Missing PHIPA compliance declaration entirely", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" },
+      { severity: "High", field: "expiry_date", flag_if: "Contract expired 956 days ago", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule" },
+      { severity: "Critical", field: "phia_compliance", flag_if: "Missing PHIPA compliance declaration entirely", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" , status: "open", source: "rule" },
 
-      { severity: "High", field: "breach_notification", flag_if: "Missing breach notification requirement", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" },
-      { severity: "Medium", field: "return_destruction", flag_if: "Missing return or destruction clause", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" }
-
-    ],
+      { severity: "High", field: "breach_notification", flag_if: "Missing breach notification requirement", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" , status: "open", source: "rule" },
+      { severity: "Medium", field: "return_destruction", flag_if: "Missing return or destruction clause", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule" },
+          { severity: "High", field: "governing_law", flag_if: "Governing law references Alberta instead of Ontario — creates jurisdictional conflict for Southlake", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "hard", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance", status: "open", source: "rule" },
+],
     textHighlights: [
       { text: "Susan Park", severity: "Critical", reason: "Signatory is Director, not authorized VP" },
       { text: "Publication in peer-reviewed journals", severity: "High", reason: "Data use purpose too broad" },
@@ -384,8 +423,8 @@ export const contracts: ContractDoc[] = [
     summary: "Well-drafted security services agreement. Only alert: renewal within 90-day threshold. Expired 545 days ago.",
     filePath: "research/contracts/06_Procurement_Security_Services_2024.md",
     riskScore: 20.5, riskLevel: "Critical", flagsCount: 2, flags: [
-      { severity: "High", field: "expiry_date", flag_if: "Contract expired 545 days ago (March 31, 2025)", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" },
-      { severity: "High", field: "indemnity_clause", flag_if: "Missing indemnity clause entirely", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance" }
+      { severity: "High", field: "expiry_date", flag_if: "Contract expired 545 days ago (March 31, 2025)", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule" },
+      { severity: "High", field: "indemnity_clause", flag_if: "Missing indemnity clause entirely", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance", status: "open", source: "rule" }
 
     ],
     textHighlights: [
@@ -410,13 +449,13 @@ export const contracts: ContractDoc[] = [
     summary: "Two versions of the same MOU with conflicting financial terms ($100K vs $150K), different signatories, and different binding language.",
     filePath: "research/contracts/07_MOU_Partnership_Duplicate_Versions.md",
     riskScore: 22.0, riskLevel: "Critical", flagsCount: 5, flags: [
-      { severity: "High", field: "expiry_date", flag_if: "Contract expired 423 days ago (July 31, 2025)", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" },
-      { severity: "High", field: "binding_language", flag_if: "V1 non-binding vs V2 partially binding — creates legal ambiguity", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Financial", subcategory: "Contract Pricing", department: "Finance & Procurement" },
+      { severity: "High", field: "expiry_date", flag_if: "Contract expired 423 days ago (July 31, 2025)", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule" },
+      { severity: "High", field: "binding_language", flag_if: "V1 non-binding vs V2 partially binding — creates legal ambiguity", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Financial", subcategory: "Contract Pricing", department: "Finance & Procurement" , status: "open", source: "rule" },
 
-      { severity: "High", field: "duplicate_version", flag_if: "Two active versions in circulation with conflicting terms", likelihood: 4, impact: 4, risk_score: 16, compliance_type: "hard", risk_category: "Financial", subcategory: "Budget & Licensing", department: "Finance & Procurement" },
+      { severity: "High", field: "duplicate_version", flag_if: "Two active versions in circulation with conflicting terms", likelihood: 4, impact: 4, risk_score: 16, compliance_type: "hard", risk_category: "Financial", subcategory: "Budget & Licensing", department: "Finance & Procurement" , status: "open", source: "rule" },
 
-      { severity: "High", field: "conflicting_finance", flag_if: "$100K vs $150K annual commitment between versions", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "hard", risk_category: "Financial", subcategory: "Budget & Licensing", department: "Finance & Procurement" },
-      { severity: "Medium", field: "termination_clause", flag_if: "Missing termination clause in both versions", likelihood: 2, impact: 3, risk_score: 6, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" }
+      { severity: "High", field: "conflicting_finance", flag_if: "$100K vs $150K annual commitment between versions", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "hard", risk_category: "Financial", subcategory: "Budget & Licensing", department: "Finance & Procurement" , status: "open", source: "rule" },
+      { severity: "Medium", field: "termination_clause", flag_if: "Missing termination clause in both versions", likelihood: 2, impact: 3, risk_score: 6, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule" }
 
     ],
     textHighlights: [
@@ -459,12 +498,12 @@ export const contracts: ContractDoc[] = [
     summary: "2019 IT license agreement — 150 DPI scan with stains, rotated pages, and faded text. Critical fields are illegible.",
     filePath: "research/contracts/08_Legacy_IT_Contract_2019_Scan.md",
     riskScore: 25.0, riskLevel: "Critical", flagsCount: 6, flags: [
-      { severity: "Critical", field: "signatories", flag_if: "Cannot verify — names and titles obscured by scan quality", likelihood: 5, impact: 5, risk_score: 25, compliance_type: "hard", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance" },
-      { severity: "Critical", field: "missing_fields", flag_if: "Cannot verify key clauses due to scan quality", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance" },
-      { severity: "High", field: "effective_date", flag_if: "Missing effective date — only approximate 'March 2019' readable", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" },
-      { severity: "High", field: "indemnity_cap", flag_if: "Indemnity clause has no monetary cap (partially visible but unverifiable)", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance" },
-      { severity: "Medium", field: "ocr_quality", flag_if: "Low-quality scan — key fields illegible (150 DPI, stains, rotation)", likelihood: 4, impact: 3, risk_score: 12, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" },
-      { severity: "Medium", field: "expiry_date", flag_if: "Missing expiry date — cannot determine from scan", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" }
+      { severity: "Critical", field: "signatories", flag_if: "Cannot verify — names and titles obscured by scan quality", likelihood: 5, impact: 5, risk_score: 25, compliance_type: "hard", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance" , status: "open", source: "rule" },
+      { severity: "Critical", field: "missing_fields", flag_if: "Cannot verify key clauses due to scan quality", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance" , status: "open", source: "rule" },
+      { severity: "High", field: "effective_date", flag_if: "Missing effective date — only approximate 'March 2019' readable", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule" },
+      { severity: "High", field: "indemnity_cap", flag_if: "Indemnity clause has no monetary cap (partially visible but unverifiable)", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance" , status: "open", source: "rule" },
+      { severity: "Medium", field: "ocr_quality", flag_if: "Low-quality scan — key fields illegible (150 DPI, stains, rotation)", likelihood: 4, impact: 3, risk_score: 12, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule" },
+      { severity: "Medium", field: "expiry_date", flag_if: "Missing expiry date — cannot determine from scan", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule" }
     ],
     textHighlights: [
       { text: "VERSION 1", severity: "High", reason: "Conflicting terms between v1 and v2" },
@@ -491,9 +530,10 @@ export const contracts: ContractDoc[] = [
     summary: "Comprehensive 3-year IT support agreement with CloudWorks Inc. Well-drafted with SLA, service credits, and insurance. 2 VP signed. Missing: indemnity cap + PHI data security clause.",
     filePath: "research/contracts/09_IT_Master_Services_Agreement_2024.md",
     riskScore: 15.5, riskLevel: "High", flagsCount: 2, flags: [
-      { severity: "High", field: "indemnity_cap", highlightField: "not subject to a monetary cap", flag_if: "Indemnity clause explicitly states no monetary cap", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance" },
-      { severity: "High", field: "conflicting_finance", flag_if: "Detected different annual fee amounts: 320,000 vs 45,000", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "hard", risk_category: "Financial", subcategory: "Budget & Licensing", department: "Finance & Procurement" }
-    ],
+      { severity: "High", field: "indemnity_cap", highlightField: "not subject to a monetary cap", flag_if: "Indemnity clause explicitly states no monetary cap", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance" , status: "open", source: "rule" },
+      { severity: "High", field: "conflicting_finance", flag_if: "Detected different annual fee amounts: 320,000 vs 45,000", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "hard", risk_category: "Financial", subcategory: "Budget & Licensing", department: "Finance & Procurement", status: "open", source: "ai_scan" },
+          { severity: "Medium", field: "auto_renewal", flag_if: "Contract auto-renews for 1-year periods — no explicit opt-out mechanism beyond 60-day notice window", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule" },
+],
     textHighlights: [
       { text: "not subject to a monetary cap", severity: "High", reason: "Uncapped indemnity creates unlimited financial liability" },
       { text: "99.9%", severity: "Medium", reason: "Uptime guarantee is aggressive — verify SLA credit mechanism" },
@@ -522,9 +562,9 @@ export const contracts: ContractDoc[] = [
     summary: "Data sharing with Regional Hospital Authority for de-identified patient outcomes. Has PHIPA + 2 VPs. Expired 45 days. Amendment 1 extends term + adds data categories.",
     filePath: "research/contracts/10_Health_Data_Sharing_Services_2024.md",
     riskScore: 21.0, riskLevel: "Critical", flagsCount: 3, flags: [
-      { severity: "High", field: "expiry_date", flag_if: "Base contract expired 45 days ago (Aug 1, 2026) — amendment not yet executed", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" },
-      { severity: "High", field: "breach_timeline", flag_if: "No breach notification timeline specified", likelihood: 4, impact: 4, risk_score: 16, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" },
-      { severity: "Medium", field: "audit_rights", flag_if: "No audit rights clause in base or amendment", likelihood: 2, impact: 3, risk_score: 6, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" }
+      { severity: "High", field: "expiry_date", flag_if: "Base contract expired 45 days ago (Aug 1, 2026) — amendment not yet executed", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule" },
+      { severity: "High", field: "breach_timeline", flag_if: "No breach notification timeline specified", likelihood: 4, impact: 4, risk_score: 16, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" , status: "open", source: "rule" },
+      { severity: "Medium", field: "audit_rights", flag_if: "No audit rights clause in base or amendment", likelihood: 2, impact: 3, risk_score: 6, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule" }
 
     ],
     textHighlights: [
@@ -570,10 +610,10 @@ export const contracts: ContractDoc[] = [
     summary: "Amendment to Health DSA: extends retention 3→5yr, adds ICD-10 codes, strengthens breach notification (48h→24h) + annual pen-testing. PENDING EXECUTION — missing VP signatures.",
     filePath: "research/contracts/11_DSA_Amendment_No1_Extended_Retention_2026.md",
     riskScore: 18.0, riskLevel: "High", flagsCount: 4, flags: [
-      { severity: "High", field: "signatories", flag_if: "Amendment pending execution — both VP signatures missing", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Legal & Compliance" },
-      { severity: "High", field: "breach_timeline", flag_if: "Amends breach notification from 48h to 24h — not yet in force until executed", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" },
-      { severity: "Medium", field: "security_standards", flag_if: "New ICD-10 data elements require AES-256 encryption — compliance unverified", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" },
-      { severity: "Medium", field: "expiry_date", flag_if: "Parent DSA expired 45 days ago — amendment extends to Jan 2028 but gap exists", likelihood: 4, impact: 4, risk_score: 16, compliance_type: "hard", risk_category: "Continuity", subcategory: "Termination & Exit", department: "Legal & Compliance" }
+      { severity: "High", field: "signatories", flag_if: "Amendment pending execution — both VP signatures missing", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Legal & Compliance" , status: "open", source: "rule" },
+      { severity: "High", field: "breach_timeline", flag_if: "Amends breach notification from 48h to 24h — not yet in force until executed", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office" , status: "open", source: "rule" },
+      { severity: "Medium", field: "security_standards", flag_if: "New ICD-10 data elements require AES-256 encryption — compliance unverified", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule" },
+      { severity: "Medium", field: "expiry_date", flag_if: "Parent DSA expired 45 days ago — amendment extends to Jan 2028 but gap exists", likelihood: 4, impact: 4, risk_score: 16, compliance_type: "hard", risk_category: "Continuity", subcategory: "Termination & Exit", department: "Legal & Compliance", status: "open", source: "rule" }
     ],
     textHighlights: [
       { text: "PENDING EXECUTION", severity: "High", reason: "Both VP signatures missing — amendment not yet in force" },
@@ -595,6 +635,49 @@ export const contracts: ContractDoc[] = [
     compliance: { hardGaps: 3, bpGaps: 1, complianceRate: 0.5, topRiskField: "signatories" },
     department: "Research", expiryDate: "2027-01-01",
     baseContractId: 10,
+  },
+  {
+    num: 12, name: "NDA_Clean_Compliant_2025", displayName: "NDA — Fully Compliant (Test)",
+    type: "NDA",
+    summary: "Clean NDA with all required fields: 2 VP signatures, Ontario governing law, 48h breach notification, data destruction clause, 5-year confidentiality. TEST DOCUMENT — should produce zero flags.",
+    filePath: "research/contracts/12_NDA_Clean_Compliant_2025.md",
+    riskScore: 0, riskLevel: "Low", flagsCount: 0, flags: [],
+    jev: { riskSeverity: { choice: "low", confidence: 0.95 }, needsHumanReview: 0.05, isComplianceRelated: 1.0, shouldAlert: 0.0, decisionConfidence: 0.0 },
+    textHighlights: [],
+    extractedFields: [
+      { label: "Parties", value: "Southlake Health, TestVendor Inc.", status: "✓" },
+      { label: "Effective Date", value: "January 15, 2025", status: "✓" },
+      { label: "Expiry Date", value: "January 15, 2030", status: "✓" },
+      { label: "VP Signatures", value: "2 — VP Operations + VP Finance", status: "✓" },
+      { label: "Governing Law", value: "Province of Ontario", status: "✓" },
+      { label: "Breach Notification", value: "48 hours", status: "✓" },
+      { label: "Data Destruction", value: "30-day destruction + certification", status: "✓" },
+      { label: "Confidentiality Term", value: "5 years post-termination", status: "✓" },
+    ],
+    compliance: { hardGaps: 0, bpGaps: 0, complianceRate: 1.0, topRiskField: "none" },
+    department: "Legal & Compliance", expiryDate: "2030-01-15",
+  },
+  {
+    num: 13, name: "DSA_Clean_Compliant_2025", displayName: "Data Sharing — Fully Compliant (Test)",
+    type: "Data_Sharing",
+    summary: "Clean DSA with PHIPA compliance, 24h breach notification, audit rights, data minimization, 5-year retention, 2 VP signatures. TEST DOCUMENT — should produce zero flags.",
+    filePath: "research/contracts/13_DSA_Clean_Compliant_2025.md",
+    riskScore: 0, riskLevel: "Low", flagsCount: 0, flags: [],
+    jev: { riskSeverity: { choice: "low", confidence: 0.92 }, needsHumanReview: 0.08, isComplianceRelated: 1.0, shouldAlert: 0.0, decisionConfidence: 0.0 },
+    textHighlights: [],
+    extractedFields: [
+      { label: "Parties", value: "Southlake Health, Regional Health Authority", status: "✓" },
+      { label: "Effective Date", value: "March 1, 2025", status: "✓" },
+      { label: "Expiry Date", value: "March 1, 2028", status: "✓" },
+      { label: "VP Signatures", value: "2 — VP Operations + VP Finance", status: "✓" },
+      { label: "PHIPA Compliance", value: "Full declaration present", status: "✓" },
+      { label: "Breach Notification", value: "24 hours", status: "✓" },
+      { label: "Audit Rights", value: "Annual audit with 30-day notice", status: "✓" },
+      { label: "Data Retention", value: "5 years post-termination", status: "✓" },
+      { label: "Governing Law", value: "Province of Ontario", status: "✓" },
+    ],
+    compliance: { hardGaps: 0, bpGaps: 0, complianceRate: 1.0, topRiskField: "none" },
+    department: "Research", expiryDate: "2028-03-01",
   },
 ]
 
