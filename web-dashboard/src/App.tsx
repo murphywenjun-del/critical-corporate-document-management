@@ -1610,10 +1610,6 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
   }
 
   // Clean docs (no flags)
-  const cleanDocs = allContracts.filter((c) => c.flags.length === 0)
-  const cleanUploaded = uploaded.filter((u) => u.flags_count === 0)
-
-  const confidence = (n: number) => n === 0 ? 0.95 : n <= 2 ? 0.88 : n <= 5 ? 0.72 : 0.55
 
   return (
     <div className="space-y-4">
