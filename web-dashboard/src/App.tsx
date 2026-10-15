@@ -1030,16 +1030,29 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
               <div className="px-5 pt-4 pb-3 border-b border-slate-100">
                 <div className="text-sm font-bold text-slate-800">Workflow: #{w.sourceNum} → {w.targetName}</div>
                 <div className="text-[11px] text-slate-500 mt-0.5">{wSource?.displayName} → {w.targetName}</div>
-                {/* Progress steps */}
+                {/* Progress steps (clickable - jump to any step) */}
                 <div className="flex items-center gap-1 mt-3">
                   {WF_STEPS.map((s, i) => (
                     <div key={s.id} className="flex items-center">
-                      <div className={`w-3 h-3 rounded-full border-2 ${i <= wStepIdx ? 'bg-teal-500 border-teal-400' : 'bg-white border-slate-300'}`} />
+                      <button
+                        onClick={() => {
+                          // Jump to this step (backward or forward skip)
+                          setWf((p) => ({ ...p, [wKey]: s.id as WfState }))
+                          setToast(`⏪ Jumped to "${s.label}" for #${w.sourceNum} → ${w.targetName}`)
+                        }}
+                        className={`w-3 h-3 rounded-full border-2 transition-all hover:scale-125 ${
+                          i < wStepIdx ? 'bg-teal-500 border-teal-400' :
+                          i === wStepIdx ? 'bg-teal-500 border-teal-300 ring-2 ring-teal-200' :
+                          'bg-white border-slate-300 hover:border-teal-400'
+                        }`}
+                        title={`Jump to ${s.label}`}
+                      />
                       {i < WF_STEPS.length - 1 && <div className={`w-4 h-0.5 ${i < wStepIdx ? 'bg-teal-300' : 'bg-slate-200'}`} />}
                     </div>
                   ))}
                   <span className="ml-2 text-[10px] font-bold text-slate-500">{WF_STEPS[wStepIdx]?.label}</span>
                 </div>
+                <div className="text-[9px] text-slate-400 mt-1">Click any dot to jump · Use "Confirm →" to advance in order</div>
               </div>
 
               {/* Body */}
