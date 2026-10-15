@@ -1532,9 +1532,19 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
       const resp = await fetch('/api/batch-upload?use_agnes=true', { method: 'POST', body: formData })
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
       const data = await resp.json()
-      // data is an array of results
-      const results: UploadedDoc[] = Array.isArray(data) ? data : [data]
-      setUploaded((prev) => [...prev, ...results.filter((r: any) => !r.error)])
+      // API returns { uploaded: N, results: [...] }
+      const rawResults: any[] = Array.isArray(data) ? data : (data.results || [data])
+      const results: UploadedDoc[] = rawResults.filter((r: any) => !r.error).map((r: any) => ({
+        filename: r.filename || 'unknown',
+        document_type: r.document_type || 'Unknown',
+        risk_score: r.risk_score || 0,
+        risk_level: r.risk_level || 'Low',
+        flags_count: r.flags_count ?? r.flags?.length ?? 0,
+        flags: r.flags || [],
+        text_preview: r.text_preview || '',
+        processed_at: r.processed_at || new Date().toISOString(),
+      }))
+      setUploaded((prev) => [...prev, ...results])
     } catch (e: any) {
       setUploadError(e.message || 'Upload failed — is the API server running on port 8000?')
     } finally {
@@ -1639,7 +1649,22 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         >
           {classifying ? 'Classifying…' : '⚡ Run AI Classification'}
         </button>
-        {classified && <span className="text-[11px] text-emerald-600">✓ {uploaded.length + allContracts.length} docs classified</span>}
+        {classified && (
+          <div className="text-[11px] text-emerald-600 space-y-0.5">
+            <div>✓ {uploaded.length + allContracts.length} docs classified</div>
+            {uploaded.map((u, i) => {
+              const flags = u.flags || []
+              const topFlag = flags[0]
+              const cat = topFlag?.risk_category || u.document_type || 'Uncategorized'
+              const sub = topFlag?.subcategory || 'General'
+              return (
+                <div key={i} className="text-slate-500 ml-3">
+                  📎 {u.filename} → <b className="text-slate-700">{cat} / {sub}</b>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Folder tree */}
