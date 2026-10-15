@@ -19,11 +19,11 @@
 
 | Feature | Priority | Status at meeting |
 |---|---|---|
-| Compliance dashboard: hard gaps vs best-practice gaps shown separately | P1 | ✅ Done |
-| Amendment tracking: link amendments to parent contracts, superseded docs archived but retained | P0 | ✅ Done |
-| Multi-dimensional search: filter by department / contract type / expiry date | P1 | ✅ Done |
-| Expiry tickler: reminders for termination & renewal dates, color-coded by urgency | P1 | ✅ Done |
-| Precise clause location: cross-page identification accuracy | P1 | ⚠️ Needs validation with OCR |
+| Compliance dashboard: hard gaps vs best-practice gaps shown separately | P1 |  |
+| Amendment tracking: link amendments to parent contracts, superseded docs archived but retained | P0 |  |
+| Multi-dimensional search: filter by department / contract type / expiry date | P1 |  |
+| Expiry tickler: reminders for termination & renewal dates, color-coded by urgency | P1 |  |
+| Precise clause location: cross-page identification accuracy | P1 |  |
 
 ### 3. Deployment & Handover
 
@@ -93,6 +93,87 @@
 - 6 cross-ref links (2 synced, 3 gap, 1 unknown)
 - 3 amendments (1 on MOU, 1 on DSA, 1 standalone amendment doc)
 - All data in `web-dashboard/src/data.ts` (static, no API needed for demo)
+
+---
+
+## New Features — What We Need to Build (from meeting)
+
+These are the specific new features the client requested that are **not yet in the prototype**. Each one has a clear scope and acceptance criteria.
+
+### N1. Multi-Dimensional Search (需新增)
+- **What**: Filter the risk register and contract list by **department**, **contract type**, and **expiry date window** simultaneously
+- **Where**: Left sidebar (persistent across all tabs) + quick filters above the Risk Register table
+- **Acceptance**: Selecting "Department = IT" + "Expiry = <90d" + "Type = NDA" returns only matching flags. 4-level cascade: Severity → HEROC Category → Subcategory → Clinical Dept (each level narrows the next)
+- **Data needed**: Every `ContractDoc` has `department` + `expiryDate` + `renewalNoticeDays`. Every `Flag` has `risk_category` + `subcategory` + `department`
+
+### N2. Expiry Tickler (需新增)
+- **What**: A **Deadlines tab** that lists all contracts sorted by urgency, with color-coded urgency bars
+- **Where**: 5th tab in the main navigation
+- **Acceptance**: 
+  - 4 KPI cards at top: Expired count / <30d count / <90d count / Active count
+  - Each row shows: contract name, expiry date, days remaining, renewal notice deadline, urgency color bar
+  - Expired = red bg, <30d = orange, <90d = yellow, >90d = green
+  - Sorted ascending by days remaining (most urgent first)
+- **Data needed**: `expiryDate` (ISO date) + `renewalNoticeDays` (int) on every `ContractDoc`
+
+### N3. Precise Clause Location — Cross-Page Validation (需验证)
+- **What**: Verify that when a clause spans a page break in a PDF, the system correctly identifies the clause boundary and doesn't truncate or mis-attribute
+- **Where**: Testing/verification task, not a UI feature
+- **Acceptance**: 
+  - Take 3 real PDFs with clauses spanning page breaks
+  - Run the OCR + extraction pipeline
+  - Confirm the extracted clause text is complete and attributed to the correct section number
+  - Document any failures with page numbers
+- **Blocker**: Needs OCR engine running. Currently uses Agnes OCR (`agnes_ocr.py`)
+
+### N4. Pre-set Risk Triggers (P0, 需新增)
+- **What**: 4 specific risk triggers that the client explicitly named, pre-loaded into the rules engine
+- **Triggers**:
+  1. **Dual signature check** — flag if fewer than 2 VP-level signatures on contracts that require it
+  2. **Governing law mismatch** — flag if the contract's governing law doesn't match Southlake's default (Ontario)
+  3. **Auto-renewal clause** — flag if the contract auto-renews without explicit opt-out mechanism
+  4. **Cybersecurity gap** — flag if data security / encryption / breach notification clauses are missing or below standard
+- **Where**: `test_framework.py` (Python rules engine) + `data.ts` (demo data)
+- **Acceptance**: Each trigger produces a `Flag` with correct `severity`, `likelihood`, `impact`, `risk_category`, `subcategory`, `department`
+
+### N5. Document Impact Cascades — Cross-Refs (需新增)
+- **What**: When a contract is amended, automatically detect which OTHER documents reference the changed clauses and flag them as needing updates
+- **Where**: 6th tab (Cross-Refs) + data model
+- **Acceptance**:
+  - `DocLink` model: `sourceNum` → `targetName` + `targetClause` + `status` (synced/gap/unknown)
+  - Each link shows `beforeText` / `afterText` / `keyChanges`
+  - 5-step workflow: detected → acknowledged → fixing → verified → closed
+  - Modal confirmation on every status change (shows before/after + key changes)
+  - At least 6 demo cross-refs in the data
+
+### N6. Amendment Closed-Loop (需新增)
+- **What**: Track amendments through a 5-step lifecycle with human verification
+- **Where**: 5th tab (Amendments)
+- **Acceptance**:
+  - 5-step workflow: pending → reviewed → executed → verified → archived
+  - Parent → child visual link (amendment doc card shows which parent it belongs to)
+  - Expandable detail cards: risk flags, key fields, status buttons
+  - Bidirectional status changes (can go backward to prevent mis-taps)
+  - Modal confirmation showing before/after content + key changes + verification checklist
+- **Data needed**: `Amendment` interface + `ContractDoc.baseContractId` + `ContractDoc.amendments[]`
+
+### N7. Compliance Dashboard — Hard vs Best Practice (需增强)
+- **What**: Separate view showing hard compliance gaps (mandatory requirements not met) vs best-practice gaps (should-haves, not legally required)
+- **Where**: Could be a section within the Risk Register tab or a standalone KPI panel
+- **Acceptance**:
+  - Two columns or side-by-side cards: "Hard Gaps" (red) vs "Best Practice" (yellow)
+  - Each gap shows: contract name, specific clause, what's missing, severity
+  - Compliance rate % per contract (hard gaps only)
+  - Remediation list: ordered by risk_score descending
+
+### N8. Test with Fabricated Documents (client request)
+- **What**: Client explicitly requested: "The project team will test the platform with completed documents containing fabricated information"
+- **Acceptance**:
+  - Create 5–8 synthetic "completed" contracts (fully signed, no gaps)
+  - Run through the pipeline
+  - Confirm: zero flags, 100% compliance rate, no false positives
+  - Document the test results
+- **Purpose**: Show the client the system doesn't cry wolf on clean documents
 
 ---
 
