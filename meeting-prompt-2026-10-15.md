@@ -1,187 +1,275 @@
-# Client Meeting #3 — Action Prompt
-## Southlake Health · 2026-10-15
+# Prototype Action Prompt — Southlake Health Document Management
+## 2026-10-15
 
-**Attendees:** Sam Fielding (CIO), Sonia Pagura (CPO), Matthew Meyer, Tanya Howell (Legal), Nicole (demo) — client side. Wenjun (Ivy) — host + demo.
+You are building a **Critical Corporate Document Management** prototype for Southlake Health (400→500 bed tertiary referral hospital, Newmarket ON). The system ingests contracts, amendments, and policies via a **local LLM** (no cloud, PHI stays on-site), extracts key fields, runs rule checks, scores risks, and presents findings in a web dashboard.
 
----
-
-## Decisions Made
-
-### 1. Risk Taxonomy → HEROC (P0, confirmed)
-
-- Client confirmed the risk framework is **HEROC**, not ROCK (which was discussed earlier but rejected)
-- 4 top-level categories: **Operational / Financial / Reputational / Continuity**
-- Every risk flag must carry both `category` and `subcategory`
-- Scoring: **Likelihood (1–5) × Impact (1–5)** = score 1–25. Replaces the old Low/Med/High scale
-- Labels must be short, plain-language (hospital staff audience, not risk analysts)
-
-### 2. System Features (P0–P1, confirmed)
-
-| Feature | Priority | Status at meeting |
-|---|---|---|
-| Compliance dashboard: hard gaps vs best-practice gaps shown separately | P1 |  |
-| Amendment tracking: link amendments to parent contracts, superseded docs archived but retained | P0 |  |
-| Multi-dimensional search: filter by department / contract type / expiry date | P1 |  |
-| Expiry tickler: reminders for termination & renewal dates, color-coded by urgency | P1 |  |
-| Precise clause location: cross-page identification accuracy | P1 |  |
-
-### 3. Deployment & Handover
-
-- **Local Llama model** deployment unchanged (no cloud, data stays on-site)
-- Need to confirm deployment environment with **Wilson (EA)**
-- 400 real documents transition plan: TBD
-- Phase 2 (admin role + AD/LDAP integration): **out of scope for this phase**
-
-### 4. Cross-Referencing (new, from client)
-
-- Client explicitly requested: "The project team will incorporate cross-referencing between original contracts and associated amendments into the prototype"
-- Purpose: discover document impact cascades — if Doc A changes, which parts of Doc B/C need updating?
-- Goal: find gaps the hospital hasn't noticed yet
+All current data is synthetic (11 contracts, 39 risk flags, 6 cross-ref links, 3 amendments). Real de-identified contracts will replace these later.
 
 ---
 
-## Action Items (Ivy Team)
+## Constraints
 
-| # | Task | Priority |
-|---|---|---|
-| 1 | Align HEROC categories + add `subcategory` field to every flag | P0 |
-| 2 | Implement L×I scoring (1–25) in UI, color-coded, with Risk Matrix tab | P0 |
-| 3 | Pre-set risk triggers: dual signature / governing law / auto-renewal / cybersecurity | P0 |
-| 4 | Amendment tracking: data model (parent↔child) + closed-loop UI workflow | P0 |
-| 5 | Document impact cascades: cross-ref detection + status tracking | P0 |
-| 6 | Compliance dashboard: hard vs best-practice gap view | P1 |
-| 7 | Multi-dimensional search: department / type / expiry filters | P1 |
-| 8 | Expiry tickler: urgency-colored deadline reminders | P1 |
-| 9 | Precise clause cross-page validation (OCR) | P1 |
-| 10 | Confirm deployment environment with Wilson (EA) | P1 |
+- **No cloud**: all LLM inference runs locally (Ollama + Llama). No PHI leaves the hospital boundary.
+- **PHIPA**: any data handling must support audit logging (who did what, when).
+- **HEROC is the client's risk taxonomy** (Operational / Financial / Reputational / Continuity), not generic "risk categories".
+- **Labels must be short, plain-language** — hospital staff audience, not risk analysts.
+- **Flat professional UI**: teal/white, no gradients, no animations.
 
 ---
 
-## Constraints (from client)
+## What to Build
 
-- **No cloud**: all LLM inference must run locally (Ollama + Llama). No PHI to US cloud.
-- **PHIPA**: any data handling must support audit logging (who did what, when)
-- **400 real docs**: transition plan needed, but Phase 1 uses synthetic demo data
-- **De-identified contracts**: Alicia will provide; use to replace current synthetic data
+### 1. HEROC Risk Taxonomy (P0)
 
----
+3-level structure, every risk flag carries all three:
 
-## What to Build / Verify
+**Level 1 — 4 HEROC categories:**
+```
+Operational · Financial · Reputational · Continuity
+```
 
-### P0 (must be done before next client meeting)
+**Level 2 — 14 subcategories:**
+```
+Operational:
+  Clinical Practice · Staffing & HR · IT Systems & Security ·
+  Procurement & Vendors · Facilities & Safety
 
-1. **HEROC alignment** — every flag has `risk_category` (4 values) + `subcategory` (14 values). UI shows both.
-2. **L×I scoring** — 5×5 matrix, score = L×I, color bands (red ≥20, orange 12–19, yellow 6–11, green <6). Risk Matrix tab with methodology panel.
-3. **Amendment closed-loop** — 5-step workflow (pending→reviewed→executed→verified→archived), human verification at `verified`, bidirectional status changes, modal confirmation showing before/after content.
-4. **Cross-ref impact cascades** — 5-step workflow (detected→acknowledged→fixing→verified→closed), each cross-ref shows `beforeText` / `afterText` / `keyChanges`, status = synced/gap/unknown.
-5. **Pre-set risk triggers** — at minimum: dual signature check, governing law mismatch, auto-renewal clause, cybersecurity gap.
+Financial:
+  Budget & Licensing · Contract Pricing · IP & Indemnity
 
-### P1 (nice to have, can be next sprint)
+Reputational:
+  Data Privacy & PHIPA · Public Relations · Patient Experience
 
-6. **Compliance dashboard** — separate view for hard compliance gaps vs best-practice gaps, with compliance rate %.
-7. **Multi-dimensional search** — 4-level context-aware filters: Severity → HEROC Category → Subcategory → Clinical Department.
-8. **Expiry tickler** — Deadlines tab sorted by urgency (expired→<30d→<90d→>90d), color-coded, shows renewal notice deadline.
-9. **Cross-page clause validation** — verify that the system can accurately locate a clause that spans page breaks in a PDF. Needs OCR engine.
-10. **Deployment confirmation** — meet with Wilson (EA) to confirm: Ollama host, Llama model size, disk requirements, network isolation.
+Continuity:
+  Access & Availability · Termination & Exit · Data Migration & Audit
+```
 
----
+**Level 3 — 15 Southlake clinical departments mapped to subcategories:**
 
-## Demo Data (current state)
-
-- 11 synthetic contracts in `research/contracts/` (NDA, MOU, IT MSA, DSA, Procurement, Marketing, Clinical Trial, Lease, + amendments)
-- 39 risk flags across all contracts
-- 6 cross-ref links (2 synced, 3 gap, 1 unknown)
-- 3 amendments (1 on MOU, 1 on DSA, 1 standalone amendment doc)
-- All data in `web-dashboard/src/data.ts` (static, no API needed for demo)
-
----
-
-## New Features — What We Need to Build (from meeting)
-
-These are the specific new features the client requested that are **not yet in the prototype**. Each one has a clear scope and acceptance criteria.
-
-### N1. Multi-Dimensional Search (需新增)
-- **What**: Filter the risk register and contract list by **department**, **contract type**, and **expiry date window** simultaneously
-- **Where**: Left sidebar (persistent across all tabs) + quick filters above the Risk Register table
-- **Acceptance**: Selecting "Department = IT" + "Expiry = <90d" + "Type = NDA" returns only matching flags. 4-level cascade: Severity → HEROC Category → Subcategory → Clinical Dept (each level narrows the next)
-- **Data needed**: Every `ContractDoc` has `department` + `expiryDate` + `renewalNoticeDays`. Every `Flag` has `risk_category` + `subcategory` + `department`
-
-### N2. Expiry Tickler (需新增)
-- **What**: A **Deadlines tab** that lists all contracts sorted by urgency, with color-coded urgency bars
-- **Where**: 5th tab in the main navigation
-- **Acceptance**: 
-  - 4 KPI cards at top: Expired count / <30d count / <90d count / Active count
-  - Each row shows: contract name, expiry date, days remaining, renewal notice deadline, urgency color bar
-  - Expired = red bg, <30d = orange, <90d = yellow, >90d = green
-  - Sorted ascending by days remaining (most urgent first)
-- **Data needed**: `expiryDate` (ISO date) + `renewalNoticeDays` (int) on every `ContractDoc`
-
-### N3. Precise Clause Location — Cross-Page Validation (需验证)
-- **What**: Verify that when a clause spans a page break in a PDF, the system correctly identifies the clause boundary and doesn't truncate or mis-attribute
-- **Where**: Testing/verification task, not a UI feature
-- **Acceptance**: 
-  - Take 3 real PDFs with clauses spanning page breaks
-  - Run the OCR + extraction pipeline
-  - Confirm the extracted clause text is complete and attributed to the correct section number
-  - Document any failures with page numbers
-- **Blocker**: Needs OCR engine running. Currently uses Agnes OCR (`agnes_ocr.py`)
-
-### N4. Pre-set Risk Triggers (P0, 需新增)
-- **What**: 4 specific risk triggers that the client explicitly named, pre-loaded into the rules engine
-- **Triggers**:
-  1. **Dual signature check** — flag if fewer than 2 VP-level signatures on contracts that require it
-  2. **Governing law mismatch** — flag if the contract's governing law doesn't match Southlake's default (Ontario)
-  3. **Auto-renewal clause** — flag if the contract auto-renews without explicit opt-out mechanism
-  4. **Cybersecurity gap** — flag if data security / encryption / breach notification clauses are missing or below standard
-- **Where**: `test_framework.py` (Python rules engine) + `data.ts` (demo data)
-- **Acceptance**: Each trigger produces a `Flag` with correct `severity`, `likelihood`, `impact`, `risk_category`, `subcategory`, `department`
-
-### N5. Document Impact Cascades — Cross-Refs (需新增)
-- **What**: When a contract is amended, automatically detect which OTHER documents reference the changed clauses and flag them as needing updates
-- **Where**: 6th tab (Cross-Refs) + data model
-- **Acceptance**:
-  - `DocLink` model: `sourceNum` → `targetName` + `targetClause` + `status` (synced/gap/unknown)
-  - Each link shows `beforeText` / `afterText` / `keyChanges`
-  - 5-step workflow: detected → acknowledged → fixing → verified → closed
-  - Modal confirmation on every status change (shows before/after + key changes)
-  - At least 6 demo cross-refs in the data
-
-### N6. Amendment Closed-Loop (需新增)
-- **What**: Track amendments through a 5-step lifecycle with human verification
-- **Where**: 5th tab (Amendments)
-- **Acceptance**:
-  - 5-step workflow: pending → reviewed → executed → verified → archived
-  - Parent → child visual link (amendment doc card shows which parent it belongs to)
-  - Expandable detail cards: risk flags, key fields, status buttons
-  - Bidirectional status changes (can go backward to prevent mis-taps)
-  - Modal confirmation showing before/after content + key changes + verification checklist
-- **Data needed**: `Amendment` interface + `ContractDoc.baseContractId` + `ContractDoc.amendments[]`
-
-### N7. Compliance Dashboard — Hard vs Best Practice (需增强)
-- **What**: Separate view showing hard compliance gaps (mandatory requirements not met) vs best-practice gaps (should-haves, not legally required)
-- **Where**: Could be a section within the Risk Register tab or a standalone KPI panel
-- **Acceptance**:
-  - Two columns or side-by-side cards: "Hard Gaps" (red) vs "Best Practice" (yellow)
-  - Each gap shows: contract name, specific clause, what's missing, severity
-  - Compliance rate % per contract (hard gaps only)
-  - Remediation list: ordered by risk_score descending
-
-### N8. Test with Fabricated Documents (client request)
-- **What**: Client explicitly requested: "The project team will test the platform with completed documents containing fabricated information"
-- **Acceptance**:
-  - Create 5–8 synthetic "completed" contracts (fully signed, no gaps)
-  - Run through the pipeline
-  - Confirm: zero flags, 100% compliance rate, no false positives
-  - Document the test results
-- **Purpose**: Show the client the system doesn't cry wolf on clean documents
+| Subcategory | Departments |
+|---|---|
+| Clinical Practice | Emergency, Cardiac/CICU, Critical Care/ICU, Surgery, Paediatrics, Maternal Child |
+| Staffing & HR | Mental Health, Geriatrics, Palliative Care |
+| IT Systems & Security | Diagnostics, Cancer (Stronach), Rehabilitation, Restorative Care |
+| Procurement & Vendors | Family Medicine, Anesthesiology |
+| Facilities & Safety | Cancer (Stronach), Surgery |
+| Budget & Licensing | Cancer (Stronach), Cardiac/CICU, Critical Care/ICU |
+| Contract Pricing | Surgery, Diagnostics |
+| IP & Indemnity | Cancer (Stronach), Paediatrics |
+| Data Privacy & PHIPA | Maternal Child, Mental Health, Paediatrics |
+| Public Relations | Cancer (Stronach), Emergency |
+| Patient Experience | Palliative Care, Geriatrics, Restorative Care |
+| Access & Availability | Emergency, Cardiac/CICU, Critical Care/ICU, Cancer (Stronach) |
+| Termination & Exit | Surgery, Anesthesiology |
+| Data Migration & Audit | Diagnostics, Paediatrics, Research |
 
 ---
 
-## UI Requirements
+### 2. L×I Quantitative Scoring (P0)
 
-- 6 tabs: Risk Register · Risk Matrix · Contracts · Deadlines · Amendments · Cross-Refs
-- Left sidebar: settings (repo, expiry date, local AI toggle, model, signing authority) + filters
-- Flat professional design: teal/white, no gradients, no animations
-- Expandable detail cards for contracts, amendments, cross-refs
-- In-page modal (not `window.confirm()`) for all status changes
-- KPI row: document count · critical flags · expired/expiring · avg compliance %
+**5×5 Likelihood × Impact matrix.** Score = L × I, range 1–25.
+
+**Labels (short, plain-language):**
+```
+Likelihood:  1=Rare · 2=Unlikely · 3=Might happen · 4=Likely · 5=Will happen
+Impact:      1=Tiny · 2=Small · 3=Noticeable · 4=Major · 5=Severe
+```
+
+**Color bands:**
+```
+Score ≥20 → red       12–19 → orange       6–11 → yellow       <6 → green
+```
+
+Build:
+- A **Risk Matrix tab** (5×5 grid, color-coded, with methodology panel explaining scoring)
+- L, I, Score columns in the risk register table with color coding
+- Every flag carries `likelihood` (1–5), `impact` (1–5), `risk_score` (L×I)
+
+---
+
+### 3. Pre-set Risk Triggers (P0)
+
+4 specific triggers the client explicitly named:
+
+1. **Dual signature check** — flag if fewer than 2 VP-level signatures on contracts that require it
+2. **Governing law mismatch** — flag if the contract's governing law doesn't match Southlake's default (Ontario)
+3. **Auto-renewal clause** — flag if the contract auto-renews without explicit opt-out mechanism
+4. **Cybersecurity gap** — flag if data security / encryption / breach notification clauses are missing or below standard
+
+Each trigger produces a risk flag with: severity, likelihood, impact, risk_score, HEROC category, subcategory, department.
+
+---
+
+### 4. Amendment Closed-Loop (P0)
+
+Track amendments through a 5-step lifecycle:
+```
+pending → reviewed → executed → verified → archived
+```
+
+Requirements:
+- **Parent → child visual link**: amendment doc card shows which parent contract it belongs to
+- **Expandable detail cards**: click to reveal risk flags, key fields, status buttons
+- **Human verification at `verified`**: show checklist (signatures collected, effective date correct, cross-referenced docs updated)
+- **Bidirectional status changes**: user can move forward OR backward to prevent mis-taps
+- **Modal confirmation on every status change**: in-page modal (not `window.confirm()`) showing:
+  - Document name + target
+  - Before/after content (red/green boxes)
+  - Key changes list
+  - Status transition (from → to)
+  - Verification checklist if moving to `verified`
+
+**Data model:**
+```typescript
+interface Amendment {
+  id: number
+  label: string
+  effectiveDate: string
+  keyChanges: string[]
+  supersedesOriginal: boolean
+}
+
+interface ContractDoc {
+  baseContractId: number | null  // null = not an amendment; N = parent contract #
+  amendments?: Amendment[]
+}
+```
+
+---
+
+### 5. Document Impact Cascades — Cross-Refs (P0)
+
+When Doc A changes, detect which parts of Doc B/C need updating. Goal: find gaps the hospital hasn't noticed.
+
+**5-step workflow:**
+```
+detected → acknowledged → fixing → verified → closed
+```
+
+**Data model:**
+```typescript
+interface DocLink {
+  sourceNum: number          // contract # that changed
+  sourceClause: string       // e.g. "§3.2"
+  targetName: string         // affected document
+  targetClause: string       // e.g. "§4.1"
+  changeDescription: string
+  status: string             // 'synced' | 'gap' | 'unknown'
+  riskIfNotUpdated: string
+  beforeText: string         // what target currently says
+  afterText: string         // what it should say
+  keyChanges: string[]       // specific clause-level changes
+}
+```
+
+**Status colors:** synced=green, gap=red, unknown=yellow.
+
+**Modal confirmation** on every status change (same pattern as amendments: before/after + key changes + verification checklist on `verified`).
+
+**Include at least 6 demo cross-refs in the data.**
+
+---
+
+### 6. Multi-Dimensional Search (P1)
+
+**4-level context-aware filters** (risk register tab):
+```
+Severity (All / Critical / High / Medium / Low)
+  → HEROC Category (All / Operational / Financial / Reputational / Continuity)
+    → Subcategory (context-aware: options narrow to selected category)
+      → Clinical Dept (context-aware: options narrow to selected subcategory)
+```
+
+**Sidebar filters (persistent across all tabs):**
+- Contract Type: NDA / MOU / Procurement / Data_Sharing
+- Risk Level: Low / Critical
+- Department: 22 Southlake departments (15 clinical + 7 admin)
+- Expiry: Expired / <30d / <90d / >90d
+
+**Data model:**
+```typescript
+interface ContractDoc {
+  department: string        // Southlake department
+  expiryDate: string        // ISO date
+  renewalNoticeDays: number // days before expiry to send renewal notice
+}
+
+interface Flag {
+  risk_category: string     // HEROC 4 categories
+  subcategory: string       // 14 subcategories
+  department: string        // Southlake department
+}
+```
+
+---
+
+### 7. Expiry Tickler (P1)
+
+A **Deadlines tab** listing all contracts sorted by urgency:
+- 4 KPI cards at top: Expired count / <30d count / <90d count / Active count
+- Each row: contract name, expiry date, days remaining, renewal notice deadline, color-coded urgency bar
+- Expired = red, <30d = orange, <90d = yellow, >90d = green
+- Sorted ascending by days remaining (most urgent first)
+
+---
+
+### 8. Compliance Dashboard — Hard vs Best Practice (P1)
+
+Separate view showing:
+- Two columns: "Hard Gaps" (red) vs "Best Practice Gaps" (yellow)
+- Each gap: contract name, specific clause, what's missing, severity
+- Compliance rate % per contract (hard gaps only)
+- Remediation list ordered by risk_score descending
+
+---
+
+### 9. Cross-Page Clause Validation (P1)
+
+Verify that when a clause spans a page break in a PDF, the system correctly identifies the clause boundary without truncation or mis-attribution.
+
+Acceptance:
+- Test with 3 PDFs that have clauses spanning page breaks
+- Confirm extracted clause text is complete and attributed to the correct section number
+- Document any failures with page numbers
+
+---
+
+### 10. Test with Fabricated Documents (client request)
+
+The client explicitly requested: "The project team will test the platform with completed documents containing fabricated information."
+
+- Create 5–8 synthetic "completed" contracts (fully signed, no gaps, all fields present)
+- Run through the pipeline
+- Confirm: **zero flags, 100% compliance rate, no false positives**
+- Document results to show the client the system doesn't cry wolf on clean documents
+
+---
+
+## UI Spec
+
+- **6 tabs**: Risk Register · Risk Matrix · Contracts · Deadlines · Amendments · Cross-Refs
+- **Left sidebar**: settings (repo path, expiry date, local AI toggle, model selector, signing authority) + filters
+- **Flat professional design**: teal/white, no gradients, no animations, no heavy shadows
+- **Expandable detail cards** for contracts, amendments, cross-refs
+- **In-page modal** (not `window.confirm()`) for all status changes
+- **KPI row** at top: document count · critical flags · expired/expiring · avg compliance %
+
+---
+
+## P0 vs P1
+
+| Priority | Items |
+|----------|-------|
+| **P0** (before next client meeting) | HEROC taxonomy · L×I scoring · Pre-set triggers · Amendment closed-loop · Cross-ref cascades |
+| **P1** (next sprint) | Compliance dashboard · Multi-dim search · Expiry tickler · Cross-page validation · Fabricated doc test · Deployment confirmation |
+
+---
+
+## Client Action Items (for tracking, not our build scope)
+
+- Sam Fielding: provide legacy contracts + recurring problems
+- Tanya Howell: guide Alicia on redaction sensitivity
+- Sonia Pagura: share updated operational/financial/reputational contacts
+- Alicia: prepare anonymized contract documents
+- Matthew Meyer + Sam Fielding: coordinate with Warren on technical transfer
+- Ivy Team: define hosting/infrastructure/handover requirements, meet with EA manager on deployment environment
