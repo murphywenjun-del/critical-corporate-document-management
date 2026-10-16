@@ -72,7 +72,6 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'risk-register', label: 'Risk Register' },
   { id: 'contracts', label: 'Documents' },
   { id: 'deadlines', label: 'Deadlines' },
-  { id: 'cross-refs', label: 'Workflows' },
   { id: 'smart-filing', label: 'Filing' },
   { id: 'insights', label: 'Insights' },
 ]
@@ -2214,7 +2213,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
 
 
 // ── Risk Prevention Insights: cross-file pattern detection + actionable recommendations ──
-function InsightsView({ contracts: allContracts, onJumpToContract }: { contracts: ContractDoc[]; onJumpToContract?: (c: ContractDoc) => void }) {
+function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab }: { contracts: ContractDoc[]; onJumpToContract?: (c: ContractDoc) => void; onSwitchTab?: (tab: string) => void }) {
   const allFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
   
   // 1. Systemic pattern detection: group flags by field across contracts
@@ -2325,6 +2324,12 @@ function InsightsView({ contracts: allContracts, onJumpToContract }: { contracts
               <span className="font-bold text-teal-600">{flagsToEliminate}</span>
               <span className="text-slate-400">of {allFlags.length}</span>
             </div>
+            <button
+              onClick={() => { if (top3[0]) { const c = allContracts.find((cc) => cc.num === top3[0].contractNums[0]); if (c) onJumpToContract?.(c) } }}
+              className="mt-3 w-full text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg py-2 transition"
+            >
+              Start Fixing Top 3 →
+            </button>
           </div>
         </div>
 
@@ -2366,6 +2371,7 @@ function InsightsView({ contracts: allContracts, onJumpToContract }: { contracts
                   <button key={n} onClick={() => { const c = allContracts.find((cc) => cc.num === n); if (c) onJumpToContract?.(c) }} className="bg-slate-100 hover:bg-teal-100 text-teal-700 rounded px-1.5 text-[10px] font-medium cursor-pointer transition">#{n}</button>
                 ))}
                 {p.contractNums.length > 6 && <span>+{p.contractNums.length - 6} more</span>}
+                <button onClick={() => onSwitchTab?.('risk-register')} className="ml-2 text-[10px] font-bold text-teal-600 hover:text-teal-800 hover:underline">View All →</button>
               </div>
             </div>
           ))}
@@ -2392,6 +2398,20 @@ function InsightsView({ contracts: allContracts, onJumpToContract }: { contracts
                 <div className="flex items-center gap-3 mt-1.5">
                   <span className="text-[10px] text-teal-600 font-medium">Impact: {item.impact}</span>
                   <span className="text-[10px] text-slate-400">Affects: {item.affected} contracts</span>
+                </div>
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    onClick={() => { const c = allContracts.find((cc) => cc.num === item.contracts[0]); if (c) onJumpToContract?.(c) }}
+                    className="text-[10px] font-medium text-white bg-teal-600 hover:bg-teal-700 rounded px-2.5 py-1 transition"
+                  >
+                    Start Fixing →
+                  </button>
+                  <button
+                    onClick={() => onSwitchTab?.('work-queue')}
+                    className="text-[10px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded px-2.5 py-1 transition"
+                  >
+                    + Create Task
+                  </button>
                 </div>
               </div>
             </div>
@@ -2686,7 +2706,7 @@ export default function App() {
                   <SmartFilingView contracts={filtered} />
                 )}
                 {activeTab === 'insights' && (
-                  <InsightsView contracts={contracts} onJumpToContract={(c) => { setSelected(c); }} />
+                  <InsightsView contracts={contracts} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} />
                 )}
               </>
             </div>
