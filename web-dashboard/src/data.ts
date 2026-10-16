@@ -848,6 +848,42 @@ export const docLinks: DocLink[] = [
     afterText: "Step 3: Within 24 hours of confirming a breach under the amended DSA, the Privacy Office shall notify the affected party in writing, including: nature of breach, data types affected, estimated record count, contact person, and immediate CIO notification. For all other breaches: 48 hours.",
     keyChanges: ["Dual timeline: 24h for amended DSA breaches, 48h for all others", "New: immediate CIO notification required", "Written notification content: unchanged"],
   },
+  {
+    sourceNum: 9,
+    sourceClause: "§5.2 Cybersecurity Requirements",
+    targetName: "IT Operations Runbook v4",
+    targetClause: "Appendix B: Vendor Security Controls",
+    changeDescription: "MSA §5.2 now requires zero-trust access for all vendor personnel",
+    status: "gap",
+    riskIfNotUpdated: "Runbook still documents legacy VPN-based access for vendor staff. If audited, Southlake cannot demonstrate zero-trust compliance for MSA-covered vendors.",
+    beforeText: "Vendor access: Standard VPN with MFA. Access granted per onboarding form. Review annually.",
+    afterText: "Vendor access: Zero-trust architecture per MSA §5.2. Device attestation required. Conditional access policies enforced. Review quarterly + on any role change.",
+    keyChanges: ["Zero-trust access model", "Device attestation requirement", "Quarterly review cadence"]
+  },
+  {
+    sourceNum: 10,
+    sourceClause: "§3.4 PHI De-identification Standard",
+    targetName: "Research Data Governance Policy",
+    targetClause: "§4.1 De-identification Methods",
+    changeDescription: "DSA #10 now mandates HIPAA Safe Harbor de-identification (18-field removal)",
+    status: "gap",
+    riskIfNotUpdated: "Research policy still references k-anonymity (k=5). Safe Harbor is stricter — current method would not meet the DSA requirement. Risk of re-identification in research outputs.",
+    beforeText: "De-identification: k-anonymity model, k≥5. Minimum cell size 5. Expert determination per HIPAA §164.514(b)(2).",
+    afterText: "De-identification: HIPAA Safe Harbor method per DSA §3.4. All 18 identifiers removed. No re-identification attempts. Validation: quarterly sampling (n=100) by Privacy Officer.",
+    keyChanges: ["Safe Harbor method (not k-anonymity)", "18-field removal mandate", "Quarterly validation sampling"]
+  },
+  {
+    sourceNum: 13,
+    sourceClause: "§7.1 Environmental Liability & Indemnification",
+    targetName: "Risk Register (Enterprise)",
+    targetClause: "Entry #ENV-2024-03",
+    changeDescription: "Waste management contract adds Southlake as indemnified party for hazardous material spills",
+    status: "gap",
+    riskIfNotUpdated: "Enterprise risk register still lists waste vendor liability under 'Operational' (low). Per new contract §7.1, spill liability transfers to Southlake. Risk score must be upgraded to 'High' and insurance rider required.",
+    beforeText: "Risk: Vendor handles all environmental liability. Southlake exposure: None. Category: Operational (Low).",
+    afterText: "Risk: Per Contract #13 §7.1, Southlake indemnifies vendor for hazardous material spills on-site. Southlake exposure: Unlimited. Category: Environmental (High). Action: Add insurance rider within 30 days.",
+    keyChanges: ["Liability transfer to Southlake", "Unlimited exposure", "Insurance rider required within 30 days"]
+  }
 ]
 
 // Map contract name → flags for the detail panel
