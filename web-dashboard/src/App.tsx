@@ -197,12 +197,14 @@ function RiskRegisterTable({
   onSwitchTab,
   onFix,
   onConfirmAction,
+  resolvedFlags,
 }: {
   contracts: ContractDoc[]
   onSelectContract: (c: ContractDoc) => void
   onSwitchTab?: (tab: TabId) => void
   onFix?: (flagId: string) => void
-  onConfirmAction?: (title: string, message: string, action: () => void) => void // used in insights hint
+  onConfirmAction?: (title: string, message: string, action: () => void) => void
+  resolvedFlags?: Set<string> // used in insights hint
 }) {
   const [selSev, setSelSev] = useState('All')
   const [selCat, setSelCat] = useState('All')
@@ -435,6 +437,8 @@ function RiskRegisterTable({
                       <span className="text-[9px] text-emerald-600 font-bold">✓ Done</span>
                     ) : statusOverrides[`${f.contract.num}_${f.field}_${i}`] === 'accepted' ? (
                       <span className="text-[9px] text-slate-500">Accepted</span>
+                    ) : resolvedFlags?.has(`f-${f.contract.num}-${f.field}`) ? (
+                      <span className="text-[9px] text-emerald-600 font-bold">✓ Resolved</span>
                     ) : (
                       <button onClick={(e) => { e.stopPropagation(); onConfirmAction?.(`Mark as Fixed`, `Mark "${f.field}" on Contract #${f.contract.num} as Fixed?\n\nThis removes it from Work Queue.`, () => { setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })); onFix?.(`f-${f.contract.num}-${f.field}`) }) }} className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition">Fix</button>
                     )}
@@ -1911,19 +1915,19 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           <div className="text-2xl font-bold text-emerald-600">{totalResolved}</div>
           <div className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide mt-0.5">Resolved</div>
           {totalResolved > 0 && (
-            <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); window.location.reload() }} className="mt-1 text-[9px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
+            <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); window.location.reload() }} className="mt-1 text-[9px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
           )}
         </div>
       </div>
 
       {/* Filter chips */}
       <div className="flex items-center gap-2 mb-4">
-        <button onClick={() => setFilter('all')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>All ({items.length})</button>
+        <button onClick={() => setFilter('all')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>All ({allItems.length})</button>
         <button onClick={() => setFilter('critical')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'critical' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-600 border-red-200 hover:border-red-400'}`}>Critical</button>
         <button onClick={() => setFilter('high')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'high' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-amber-600 border-amber-200 hover:border-amber-400'}`}>High</button>
         <button onClick={() => setFilter('crossref')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'crossref' ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-teal-600 border-teal-200 hover:border-teal-400'}`}>Cross-Ref</button>
         <button onClick={() => setFilter('expiring')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'expiring' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-200 hover:border-blue-400'}`}>Expiring</button>
-        <span className="ml-auto text-[10px] text-slate-400">Showing {filtered.length} of {items.length}</span>
+        <span className="ml-auto text-[10px] text-slate-400">Showing {filtered.length} of {allItems.length}</span>
       </div>
 
       {/* Task Table */}
@@ -1971,6 +1975,10 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                         })
                       } else if (item.action === 'Renew' || item.action === 'Schedule') {
                         onConfirmAction?.(`Schedule Renewal`, `Schedule renewal for ${item.docLabel} (#${item.docNum})?\n\nExpiry: ${item.due || 'unknown'}\nThis removes the expiring alert.`, () => {
+                          onResolveFlag?.(item.id)
+                        })
+                      } else if (item.id.startsWith('t-')) {
+                        onConfirmAction?.(`Complete Task`, `Mark "${item.what}" as complete?\n\nThis removes it from Work Queue.`, () => {
                           onResolveFlag?.(item.id)
                         })
                       } else {
@@ -2885,6 +2893,7 @@ function App() {
                     onSwitchTab={(tab) => setActiveTab(tab)}
                     onFix={(flagId) => markFlagResolved(flagId)}
                     onConfirmAction={(title, msg, action) => setConfirmState({ title, message: msg, onConfirm: action })}
+                    resolvedFlags={resolvedFlags}
                   />
                 )}
                 {activeTab === 'contracts' && (
