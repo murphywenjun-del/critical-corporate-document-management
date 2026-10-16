@@ -409,10 +409,10 @@ function RiskRegisterTable({
                     ) : statusOverrides[`${f.contract.num}_${f.field}_${i}`] === 'accepted' ? (
                       <span className="text-[9px] text-slate-500">Accepted</span>
                     ) : (
-                      <button onClick={(e) => { e.stopPropagation(); setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })); onFix?.(`f-${f.contract.num}-${f.field}`) }} className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition">Fix</button>
+                      <button onClick={(e) => { e.stopPropagation(); if (confirm(`Mark "${f.field}" on Contract #${f.contract.num} as Fixed?\n\nThis removes it from Work Queue.`)) { setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })); onFix?.(`f-${f.contract.num}-${f.field}`) } }} className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition">Fix</button>
                     )}
                     {!statusOverrides[`${f.contract.num}_${f.field}_${i}`] && (
-                      <button onClick={(e) => { e.stopPropagation(); setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'accepted' })) }} className="text-[9px] px-1.5 py-0.5 bg-slate-50 text-slate-500 border border-slate-200 rounded hover:bg-slate-100 transition">Accept</button>
+                      <button onClick={(e) => { e.stopPropagation(); if (confirm(`Accept risk "${f.field}" on Contract #${f.contract.num}?\n\nThis closes it permanently. It will no longer appear in Work Queue.`)) { setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'accepted' })); onFix?.(`f-${f.contract.num}-${f.field}`) } }} className="text-[9px] px-1.5 py-0.5 bg-slate-50 text-slate-500 border border-slate-200 rounded hover:bg-slate-100 transition">Accept</button>
                     )}
                   </div>
                 </td>
