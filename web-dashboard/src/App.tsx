@@ -170,10 +170,12 @@ function RiskRegisterTable({
   contracts: allContracts,
   onSelectContract,
   onSwitchTab,
+  onFix,
 }: {
   contracts: ContractDoc[]
   onSelectContract: (c: ContractDoc) => void
-  onSwitchTab?: (tab: TabId) => void // used in insights hint
+  onSwitchTab?: (tab: TabId) => void
+  onFix?: (flagId: string) => void // used in insights hint
 }) {
   const [selSev, setSelSev] = useState('All')
   const [selCat, setSelCat] = useState('All')
@@ -407,7 +409,7 @@ function RiskRegisterTable({
                     ) : statusOverrides[`${f.contract.num}_${f.field}_${i}`] === 'accepted' ? (
                       <span className="text-[9px] text-slate-500">Accepted</span>
                     ) : (
-                      <button onClick={(e) => { e.stopPropagation(); setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })) }} className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition">Fix</button>
+                      <button onClick={(e) => { e.stopPropagation(); setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })); onFix?.(`f-${f.contract.num}-${f.field}`) }} className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition">Fix</button>
                     )}
                     {!statusOverrides[`${f.contract.num}_${f.field}_${i}`] && (
                       <button onClick={(e) => { e.stopPropagation(); setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'accepted' })) }} className="text-[9px] px-1.5 py-0.5 bg-slate-50 text-slate-500 border border-slate-200 rounded hover:bg-slate-100 transition">Accept</button>
@@ -2413,23 +2415,12 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
                 ✓ All top patterns resolved ({resolvedFlags.size} flags fixed)
               </div>
             )}
-            <div className="mt-3">
-              <button
-                onClick={() => {
-                  const specificTasks = top3.map((p) => ({
-                    id: Date.now().toString() + '_' + p.field,
-                    label: `Fix: ${p.field.replace(/_/g, ' ')} → Contract #${p.contractNums[0]}`,
-                    contractNum: p.contractNums[0],
-                    time: new Date().toLocaleTimeString(),
-                  }))
-                  onCreateTasks?.(specificTasks)
-                  onSwitchTab?.('work-queue')
-                }}
-                className="w-full text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg py-2.5 transition"
-              >
-                + Create {top3.length} Tasks in Work Queue
-              </button>
-            </div>
+            <button
+              onClick={() => onSwitchTab?.('work-queue')}
+              className="mt-3 w-full text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg py-2.5 transition"
+            >
+              Address {allFlags.length} open flags in Work Queue →
+            </button>
           </div>
         </div>
 
@@ -2499,29 +2490,12 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
                   <span className="text-[10px] text-teal-600 font-medium">Impact: {item.impact}</span>
                   <span className="text-[10px] text-slate-400">Affects: {item.affected} contracts</span>
                 </div>
-                <div className="flex items-center gap-2 mt-2">
-                  <button
-                    onClick={() => { const c = allContracts.find((cc) => cc.num === item.contracts[0]); if (c) onJumpToContract?.(c) }}
-                    className="text-[10px] font-medium text-white bg-teal-600 hover:bg-teal-700 rounded px-2.5 py-1 transition"
-                  >
-                    Open #&lt;first&gt; →
-                  </button>
-                  <button
-                    onClick={() => {
-                      const specificTasks = item.contracts.map((num) => ({
-                        id: Date.now().toString() + '_' + num,
-                        label: `Fix: ${item.pattern?.slice(0, 30) || 'Pattern'} → Contract #${num}`,
-                        contractNum: num,
-                        time: new Date().toLocaleTimeString(),
-                      }))
-                      onCreateTasks?.(specificTasks)
-                      onSwitchTab?.('work-queue')
-                    }}
-                    className="text-[10px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded px-2.5 py-1 transition"
-                  >
-                    + Create {item.affected} Task(s)
-                  </button>
-                </div>
+                <button
+                  onClick={() => onSwitchTab?.('work-queue')}
+                  className="mt-2 text-[10px] font-medium text-teal-600 hover:text-teal-800"
+                >
+                  → Address in Work Queue
+                </button>
               </div>
             </div>
           ))}
@@ -2875,6 +2849,7 @@ function App() {
                     contracts={filtered}
                     onSelectContract={(c) => { setSelected(c); }}
                     onSwitchTab={(tab) => setActiveTab(tab)}
+                    onFix={(flagId) => markFlagResolved(flagId)}
                   />
                 )}
                 {activeTab === 'contracts' && (
