@@ -2284,7 +2284,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
 
 
 // ── Risk Prevention Insights: cross-file pattern detection + actionable recommendations ──
-function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, resolvedFlags, completedLinks }: { contracts: ContractDoc[]; onJumpToContract?: (c: ContractDoc) => void; onSwitchTab?: (tab: string) => void; resolvedFlags?: Set<string>; completedLinks?: Set<string> }) {
+function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, resolvedFlags, completedLinks, onCreateTasks }: { contracts: ContractDoc[]; onJumpToContract?: (c: ContractDoc) => void; onSwitchTab?: (tab: string) => void; resolvedFlags?: Set<string>; completedLinks?: Set<string>; onCreateTasks?: (tasks: { id: string; label: string; contractNum: number; time: string }[]) => void }) {
   void completedLinks
   const rawFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
   const allFlags = rawFlags.filter((f) => {
@@ -2413,31 +2413,21 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
                 ✓ All top patterns resolved ({resolvedFlags.size} flags fixed)
               </div>
             )}
-            <div className="mt-3 flex gap-2">
-              <button
-                onClick={() => { if (top3[0]) { const c = allContracts.find((cc) => cc.num === top3[0].contractNums[0]); if (c) onJumpToContract?.(c) } }}
-                className="flex-1 text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg py-2 transition"
-              >
-                Open #{top3[0]?.contractNums[0] || '?'} ({top3[0]?.field?.slice(0, 20) || ''}…) →
-              </button>
+            <div className="mt-3">
               <button
                 onClick={() => {
-                  // Create specific tasks: for each top-3 pattern, find the first affected contract
                   const specificTasks = top3.map((p) => ({
-                    id: Date.now().toString() + p.field,
-                    label: `Fix: ${p.field} → Contract #${p.contractNums[0]}`,
+                    id: Date.now().toString() + '_' + p.field,
+                    label: `Fix: ${p.field.replace(/_/g, ' ')} → Contract #${p.contractNums[0]}`,
                     contractNum: p.contractNums[0],
                     time: new Date().toLocaleTimeString(),
-                    flagField: p.field,
                   }))
-                  const existing = JSON.parse(localStorage.getItem('createdTasks') || '[]')
-                  localStorage.setItem('createdTasks', JSON.stringify([...specificTasks, ...existing]))
-                  alert(`✓ 3 specific tasks created:\n\n${specificTasks.map((t) => '• ' + t.label).join('\n')}\n\nCheck Work Queue →`)
+                  onCreateTasks?.(specificTasks)
                   onSwitchTab?.('work-queue')
                 }}
-                className="flex-1 text-[11px] font-bold text-white bg-slate-700 hover:bg-slate-800 rounded-lg py-2 transition"
+                className="w-full text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg py-2.5 transition"
               >
-                + Create 3 Specific Tasks
+                + Create {top3.length} Tasks in Work Queue
               </button>
             </div>
           </div>
@@ -2524,9 +2514,7 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
                         contractNum: num,
                         time: new Date().toLocaleTimeString(),
                       }))
-                      const existing = JSON.parse(localStorage.getItem('createdTasks') || '[]')
-                      localStorage.setItem('createdTasks', JSON.stringify([...specificTasks, ...existing]))
-                      alert('✓ ' + specificTasks.length + ' specific task(s) created:\n' + specificTasks.map((t) => '• ' + t.label).join('\n'))
+                      onCreateTasks?.(specificTasks)
                       onSwitchTab?.('work-queue')
                     }}
                     className="text-[10px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded px-2.5 py-1 transition"
@@ -2914,7 +2902,7 @@ function App() {
                   <SmartFilingView contracts={filtered} />
                 )}
                 {activeTab === 'insights' && (
-                  <InsightsView contracts={contracts} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} resolvedFlags={resolvedFlags} completedLinks={completedLinks} />
+                  <InsightsView contracts={contracts} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} resolvedFlags={resolvedFlags} completedLinks={completedLinks} onCreateTasks={(tasks) => { setCreatedTasks((prev) => { const next = [...tasks, ...prev]; localStorage.setItem('createdTasks', JSON.stringify(next)); return next }) }} />
                 )}
               </>
             </div>
