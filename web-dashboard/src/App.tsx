@@ -1564,32 +1564,32 @@ function ContractDetail({
               </div>
             ))}
           </div>
+
+          {/* Related Documents (below JEV, in right column) */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Related Documents</h3>
+            <div className="space-y-2">
+              {s.amendments && s.amendments.length > 0 ? (
+                s.amendments.map((a) => (
+                  <div key={a.id} className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <div className="text-xs font-bold text-amber-800">{a.label}</div>
+                    <div className="text-[11px] text-amber-700 mt-0.5">Effective: {a.effectiveDate} {a.supersedesOriginal && '· supersedes original'}</div>
+                    {a.keyChanges.length > 0 && <div className="text-[10px] text-amber-600 mt-0.5">{a.keyChanges.join(' · ')}</div>}
+                  </div>
+                ))
+              ) : (
+                <div className="text-xs text-slate-400">No amendments linked to this contract</div>
+              )}
+              {allDocLinks.filter((l: DocLink) => l.sourceNum === s.num).map((l: DocLink, i: number) => (
+                <div key={`dl-${i}`} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                  <div className="text-xs font-medium text-slate-700">→ {l.targetName}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">{l.changeDescription}</div>
+                </div>
+              ))}
+            </div>
+          </div>
         </section>
       </div>
-
-      {/* Related Documents */}
-      <section className="mb-5">
-        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Related Documents</h3>
-        <div className="space-y-2">
-          {s.amendments && s.amendments.length > 0 ? (
-            s.amendments.map((a) => (
-              <div key={a.id} className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                <div className="text-xs font-bold text-amber-800">{a.label}</div>
-                <div className="text-[11px] text-amber-700 mt-0.5">Effective: {a.effectiveDate} {a.supersedesOriginal && '· supersedes original'}</div>
-                {a.keyChanges.length > 0 && <div className="text-[10px] text-amber-600 mt-0.5">{a.keyChanges.join(' · ')}</div>}
-              </div>
-            ))
-          ) : (
-            <div className="text-xs text-slate-400">No amendments linked to this contract</div>
-          )}
-          {allDocLinks.filter((l: DocLink) => l.sourceNum === s.num).map((l: DocLink, i: number) => (
-            <div key={`dl-${i}`} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-              <div className="text-xs font-medium text-slate-700">→ {l.targetName}</div>
-              <div className="text-[11px] text-slate-500 mt-0.5">{l.changeDescription}</div>
-            </div>
-          ))}
-        </div>
-      </section>
 
       {/* Amendments */}
       {s.amendments && s.amendments.length > 0 && (
