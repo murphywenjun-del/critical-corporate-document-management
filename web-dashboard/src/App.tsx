@@ -1696,7 +1696,7 @@ function SettingsSidebar({
 
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
-function WorkQueueView({ contracts: allContracts, onSelectContract }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void }) {
+function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void }) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref'>('all')
 
   // Compute work items
@@ -1871,7 +1871,15 @@ function WorkQueueView({ contracts: allContracts, onSelectContract }: { contract
                 <td className="px-4 py-2.5 text-xs text-slate-500">{item.status}</td>
                 <td className="px-4 py-2.5 text-right">
                   <button
-                    onClick={(e) => { e.stopPropagation(); onSelectContract(item.contract) }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (item.id.startsWith('x-') && onProcess) {
+                        const link = docLinks.find((d) => d.sourceNum === item.docNum && d.status !== 'synced')
+                        if (link) onProcess(link)
+                      } else {
+                        onSelectContract(item.contract)
+                      }
+                    }}
                     className="text-[11px] font-medium text-teal-600 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 rounded px-2 py-1 transition"
                   >
                     {item.action} →
@@ -2324,12 +2332,24 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab }
               <span className="font-bold text-teal-600">{flagsToEliminate}</span>
               <span className="text-slate-400">of {allFlags.length}</span>
             </div>
-            <button
-              onClick={() => { if (top3[0]) { const c = allContracts.find((cc) => cc.num === top3[0].contractNums[0]); if (c) onJumpToContract?.(c) } }}
-              className="mt-3 w-full text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg py-2 transition"
-            >
-              Start Fixing Top 3 →
-            </button>
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={() => { if (top3[0]) { const c = allContracts.find((cc) => cc.num === top3[0].contractNums[0]); if (c) onJumpToContract?.(c) } }}
+                className="flex-1 text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg py-2 transition"
+              >
+                Open First →
+              </button>
+              <button
+                onClick={() => {
+                  localStorage.setItem('insightsActioned_top3', JSON.stringify(top3.map((x) => x.id)))
+                  alert('✓ 3 tasks created in Work Queue. Check the Work Queue tab.')
+                  onSwitchTab?.('work-queue')
+                }}
+                className="flex-1 text-[11px] font-bold text-white bg-slate-700 hover:bg-slate-800 rounded-lg py-2 transition"
+              >
+                + Create 3 Tasks
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2404,13 +2424,17 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab }
                     onClick={() => { const c = allContracts.find((cc) => cc.num === item.contracts[0]); if (c) onJumpToContract?.(c) }}
                     className="text-[10px] font-medium text-white bg-teal-600 hover:bg-teal-700 rounded px-2.5 py-1 transition"
                   >
-                    Start Fixing →
+                    Open #&lt;first&gt; →
                   </button>
                   <button
-                    onClick={() => onSwitchTab?.('work-queue')}
+                    onClick={() => {
+                      localStorage.setItem('insightsActioned_' + item.id, JSON.stringify(item.contracts))
+                      alert('✓ ' + item.affected + ' task(s) added to Work Queue')
+                      onSwitchTab?.('work-queue')
+                    }}
                     className="text-[10px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded px-2.5 py-1 transition"
                   >
-                    + Create Task
+                    + Create {item.affected} Task(s)
                   </button>
                 </div>
               </div>
@@ -2433,7 +2457,72 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab }
 }
 
 
-export default function App() {
+export default 
+// ── Process Wizard (standalone, used from Work Queue) ──────────────────────
+function ProcessWizardInner({ link, onDone }: { link: DocLink; onDone: () => void }) {
+  const [step, setStep] = useState(() => {
+    const steps = ['Detected', 'Acknowledged', 'Fixing', 'Verified', 'Closed']
+    return Math.max(0, steps.indexOf(link.status || 'Detected'))
+  })
+  const STEPS = ['Detected', 'Acknowledged', 'Fixing', 'Verified', 'Closed']
+
+  return (
+    <div>
+      {/* 5 step boxes */}
+      <div className="flex items-center gap-1 mb-5">
+        {STEPS.map((s, i) => (
+          <button key={s} onClick={() => setStep(i)}
+            className={`flex-1 px-2 py-2.5 rounded-md text-[11px] font-bold text-center border transition-all ${
+              i === step ? 'bg-teal-100 text-teal-800 border-teal-300 ring-2 ring-teal-200' :
+              i < step ? 'bg-teal-50 text-teal-600 border-teal-200' :
+              'bg-white text-slate-400 border-slate-200'
+            }`}>
+            {i + 1}. {s}
+          </button>
+        ))}
+      </div>
+
+      {/* Current step detail */}
+      <div className="bg-slate-50 rounded-lg p-4 mb-4">
+        <div className="text-xs font-bold text-slate-700 mb-2">{STEPS[step]} — {link.riskIfNotUpdated}</div>
+        {step === 0 && <div className="text-xs text-slate-500">System detected a gap between <b>{link.sourceClause}</b> and <b>{link.targetName}</b>. Review the before/after below.</div>}
+        {step === 1 && <div className="text-xs text-slate-500">You acknowledge this gap exists. Proceed to fix.</div>}
+        {step === 2 && <div className="text-xs text-slate-500">Update the target document to match the source change.</div>}
+        {step === 3 && <div className="text-xs text-emerald-600">Verify the fix. Both documents are now in sync.</div>}
+        {step === 4 && <div className="text-xs text-slate-500">Workflow complete. No further action needed.</div>}
+      </div>
+
+      {/* Before / After */}
+      {step >= 1 && step <= 3 && (
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+            <div className="text-[10px] font-bold text-red-600 uppercase mb-1">Before (current)</div>
+            <div className="text-[11px] text-slate-700">{link.beforeText || "No prior text"}</div>
+          </div>
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+            <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">After (required)</div>
+            <div className="text-[11px] text-slate-700">{link.afterText || "Update to match source"}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Nav buttons */}
+      <div className="flex items-center justify-between">
+        <button onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}
+          className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-200 transition">
+          ← Back
+        </button>
+        <button
+          onClick={() => { if (step < 4) setStep(step + 1); else onDone() }}
+          className="px-5 py-2 text-sm font-bold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition">
+          {step < 4 ? `${STEPS[step + 1]} →` : '✓ Complete'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function App() {
   const [activeTab, setActiveTab] = useState<TabId>('work-queue')
   const [selected, setSelected] = useState<ContractDoc | null>(null)
   const [filterType, setFilterType] = useState('All')
@@ -2447,6 +2536,7 @@ export default function App() {
   void setUseAgnes // toggle removed from UI; kept for API param
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [processLink, setProcessLink] = useState<DocLink | null>(null)
 
   useEffect(() => {
     fetch('/api/results')
@@ -2672,7 +2762,8 @@ export default function App() {
             <div className="flex-1 min-w-0">
               <>
                 {activeTab === 'work-queue' && (
-                  <WorkQueueView contracts={contracts} onSelectContract={(c) => setSelected(c)} />
+                  <WorkQueueView contracts={contracts} onSelectContract={(c) => setSelected(c)}
+                    onProcess={(link) => { setProcessLink(link); const c = contracts.find((cc) => cc.num === link.sourceNum); if (c) setSelected(c) }} />
                 )}
                 {activeTab === 'risk-register' && (
                   <RiskRegisterTable
@@ -2725,6 +2816,23 @@ export default function App() {
           </main>
         </div>
       </div>
+
+      {/* Cross-Ref Workflow Wizard (from Work Queue) */}
+      {processLink && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setProcessLink(null)} />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="text-lg font-bold text-slate-900">Cross-Ref Workflow</div>
+                <div className="text-xs text-slate-500 mt-0.5">{processLink.sourceClause} → {processLink.targetName}</div>
+              </div>
+              <button onClick={() => setProcessLink(null)} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 text-lg">✕</button>
+            </div>
+            <ProcessWizardInner link={processLink} onDone={() => setProcessLink(null)} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
