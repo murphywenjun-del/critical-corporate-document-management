@@ -412,7 +412,7 @@ function RiskRegisterTable({
                       <button onClick={(e) => { e.stopPropagation(); if (confirm(`Mark "${f.field}" on Contract #${f.contract.num} as Fixed?\n\nThis removes it from Work Queue.`)) { setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })); onFix?.(`f-${f.contract.num}-${f.field}`) } }} className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition">Fix</button>
                     )}
                     {!statusOverrides[`${f.contract.num}_${f.field}_${i}`] && (
-                      <button onClick={(e) => { e.stopPropagation(); if (confirm(`Accept risk "${f.field}" on Contract #${f.contract.num}?\n\nThis closes it permanently. It will no longer appear in Work Queue.`)) { setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'accepted' })); onFix?.(`f-${f.contract.num}-${f.field}`) } }} className="text-[9px] px-1.5 py-0.5 bg-slate-50 text-slate-500 border border-slate-200 rounded hover:bg-slate-100 transition">Accept</button>
+                      
                     )}
                   </div>
                 </td>
@@ -1731,7 +1731,7 @@ function SettingsSidebar({
 
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
-function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[] }) {
+function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void }) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref'>('all')
 
   // Compute work items
@@ -1941,6 +1941,14 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                       if (item.id.startsWith('x-') && onProcess) {
                         const link = docLinks.find((d) => d.sourceNum === item.docNum && d.status !== 'synced' && item.id.includes(d.targetName))
                         if (link) onProcess(link)
+                      } else if (item.action === 'Fix' || item.action === 'Review') {
+                        if (confirm(`Confirm: Resolve "${item.what}" on ${item.docLabel} (#${item.docNum})?\n\nThis will mark it as fixed and remove from Work Queue.`)) {
+                          onResolveFlag?.(`f-${item.docNum}-${item.what.slice(0, 30)}`)
+                        }
+                      } else if (item.action === 'Renew' || item.action === 'Schedule') {
+                        if (confirm(`Confirm: Schedule renewal for ${item.docLabel} (#${item.docNum})?\n\nExpiry: ${item.due || 'unknown'}\nThis will remove the expiring alert.`)) {
+                          onResolveFlag?.(`e-${item.docNum}`)
+                        }
                       } else {
                         onSelectContract(item.contract)
                       }
@@ -2842,7 +2850,7 @@ function App() {
                 {activeTab === 'work-queue' && (
                   <WorkQueueView contracts={contracts} onSelectContract={(c) => setSelected(c)}
                     onProcess={(link) => { setProcessLink(link); setSelected(null) }}
-                    resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} />
+                    resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} onResolveFlag={(id) => markFlagResolved(id)} />
                 )}
                 {activeTab === 'risk-register' && (
                   <RiskRegisterTable
