@@ -1694,145 +1694,205 @@ function SettingsSidebar({
 
 
 
-// ── Work Queue View (action-oriented workspace) ─────────────────────────────
+// ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
 function WorkQueueView({ contracts: allContracts, onSelectContract }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void }) {
-  // Gather actionable items
-  const criticalFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c }))).filter((f) => f.severity === 'Critical')
-  const pendingAmendments = allContracts.filter((c) => c.amendments && c.amendments.length > 0).flatMap((c) => c.amendments!.map((a) => ({ ...a, contract: c })))
-  const expiringSoon = allContracts.filter((c) => c.expiryDate && (new Date(c.expiryDate).getTime() - Date.now()) < 90 * 24 * 3600 * 1000)
+  const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref'>('all')
 
+  // Compute work items
   type WorkItem = {
-    priority: 'critical' | 'high' | 'medium'
-    icon: string
-    title: string
-    detail: string
-    contract?: ContractDoc
+    id: string
+    what: string
+    docLabel: string
+    docNum: number
+    contract: ContractDoc
+    severity: 'critical' | 'high' | 'medium' | 'low'
+    status: string
     action: string
+    due?: string
   }
 
   const items: WorkItem[] = []
+  const now = new Date().getTime()
 
-  // Critical flags → top priority
-  for (const f of criticalFlags.slice(0, 5)) {
-    items.push({
-      priority: 'critical',
-      icon: '🚨',
-      title: `${f.flag_if}`,
-      detail: `#${f.contract.num} ${f.contract.displayName}`,
-      contract: f.contract,
-      action: 'Review & Fix',
-    })
+  // Critical flags
+  for (const c of allContracts) {
+    for (const f of c.flags) {
+      if (f.severity === 'Critical' && f.status === 'open') {
+        items.push({
+          id: `f-${c.num}-${f.field}`,
+          what: f.flag_if,
+          docLabel: c.displayName,
+          docNum: c.num,
+          contract: c,
+          severity: 'critical',
+          status: f.status,
+          action: 'Fix',
+        })
+      } else if (f.severity === 'High' && f.status === 'open') {
+        items.push({
+          id: `f-${c.num}-${f.field}`,
+          what: f.flag_if,
+          docLabel: c.displayName,
+          docNum: c.num,
+          contract: c,
+          severity: 'high',
+          status: f.status,
+          action: 'Review',
+        })
+      }
+    }
   }
 
-  // Open cross-refs → high
-  const openCrossRefs = docLinks.filter((d) => d.status !== 'synced')
-  for (const d of openCrossRefs.slice(0, 3)) {
-    items.push({
-      priority: 'high',
-      icon: '🔗',
-      title: `#${d.sourceNum} ${d.sourceClause} → ${d.targetName}`,
-      detail: d.changeDescription,
-      contract: allContracts.find((c) => c.num === d.sourceNum),
-      action: `Process (${d.status})`,
-    })
+  // Cross-refs
+  for (const d of docLinks) {
+    if (d.status !== 'synced') {
+      const src = allContracts.find((c) => c.num === d.sourceNum)
+      if (src) {
+        items.push({
+          id: `x-${d.sourceNum}`,
+          what: `${d.sourceClause} → ${d.targetName}`,
+          docLabel: src.displayName,
+          docNum: src.num,
+          contract: src,
+          severity: 'high',
+          status: d.status,
+          action: 'Process',
+        })
+      }
+    }
   }
 
-  // Pending amendments → high
-  for (const a of pendingAmendments.slice(0, 2)) {
-    items.push({
-      priority: 'high',
-      icon: '📝',
-      title: a.label,
-      detail: `Affects #${a.contract.num} ${a.contract.displayName}`,
-      contract: a.contract,
-      action: 'Review',
-    })
+  // Expiring
+  for (const c of allContracts) {
+    if (c.expiryDate) {
+      const days = Math.ceil((new Date(c.expiryDate).getTime() - now) / (24 * 3600 * 1000))
+      if (days <= 90) {
+        items.push({
+          id: `e-${c.num}`,
+          what: c.type,
+          docLabel: c.displayName,
+          docNum: c.num,
+          contract: c,
+          severity: days < 0 ? 'critical' : days < 30 ? 'high' : 'medium',
+          status: days < 0 ? 'Expired' : `${days}d left`,
+          action: days < 0 ? 'Renew' : 'Schedule',
+          due: c.expiryDate,
+        })
+      }
+    }
   }
 
-  // Expiring soon → medium
-  for (const c of expiringSoon.slice(0, 2)) {
-    items.push({
-      priority: 'medium',
-      icon: '⏰',
-      title: `${c.displayName} expiring`,
-      detail: `Expiry: ${c.expiryDate} · ${c.type}`,
-      contract: c,
-      action: 'Renew / Escalate',
-    })
-  }
+  // Sort: critical > high > medium > low, then by docNum
+  const sevOrder = { critical: 0, high: 1, medium: 2, low: 3 }
+  items.sort((a, b) => sevOrder[a.severity] - sevOrder[b.severity] || a.docNum - b.docNum)
 
-  // Sort by priority
-  const prioOrder: Record<string, number> = { critical: 0, high: 1, medium: 2 }
-  items.sort((a, b) => prioOrder[a.priority] - prioOrder[b.priority])
+  // Filter
+  const filtered = items.filter((i) => {
+    if (filter === 'all') return true
+    if (filter === 'critical') return i.severity === 'critical'
+    if (filter === 'high') return i.severity === 'high'
+    if (filter === 'expiring') return i.id.startsWith('e-')
+    if (filter === 'crossref') return i.id.startsWith('x-')
+    return true
+  })
+
+  // Summary counts
+  const counts = {
+    critical: items.filter((i) => i.severity === 'critical').length,
+    high: items.filter((i) => i.severity === 'high').length,
+    expiring: items.filter((i) => i.id.startsWith('e-')).length,
+    crossref: items.filter((i) => i.id.startsWith('x-')).length,
+  }
 
   return (
     <div>
-      {/* Header */}
-      <div className="mb-6">
-        <h2 className="text-lg font-bold text-slate-900">Work Queue</h2>
-        <p className="text-xs text-slate-500 mt-0.5">{items.filter((i) => i.priority === 'critical').length} critical · {items.filter((i) => i.priority === 'high').length} high · {items.filter((i) => i.priority === 'medium').length} medium</p>
+      {/* Summary Tiles */}
+      <div className="grid grid-cols-4 gap-3 mb-5">
+        <button onClick={() => setFilter('critical')} className={`text-left p-3 rounded-lg border transition ${filter === 'critical' ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+          <div className="text-2xl font-bold text-red-600">{counts.critical}</div>
+          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Critical</div>
+        </button>
+        <button onClick={() => setFilter('high')} className={`text-left p-3 rounded-lg border transition ${filter === 'high' ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+          <div className="text-2xl font-bold text-amber-600">{counts.high}</div>
+          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">High</div>
+        </button>
+        <button onClick={() => setFilter('crossref')} className={`text-left p-3 rounded-lg border transition ${filter === 'crossref' ? 'border-teal-300 bg-teal-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+          <div className="text-2xl font-bold text-teal-600">{counts.crossref}</div>
+          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Cross-Refs</div>
+        </button>
+        <button onClick={() => setFilter('expiring')} className={`text-left p-3 rounded-lg border transition ${filter === 'expiring' ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+          <div className="text-2xl font-bold text-blue-600">{counts.expiring}</div>
+          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Expiring</div>
+        </button>
       </div>
 
-      {/* Action cards */}
-      <div className="space-y-3">
-        {items.map((item, i) => (
-          <div
-            key={i}
-            className={`border rounded-lg p-4 flex items-start gap-3 cursor-pointer transition hover:shadow-sm ${
-              item.priority === 'critical' ? 'border-red-200 bg-red-50/40' :
-              item.priority === 'high' ? 'border-amber-200 bg-amber-50/30' :
-              'border-slate-200 bg-white'
-            }`}
-            onClick={() => item.contract && onSelectContract(item.contract)}
-          >
-            <span className="text-lg shrink-0 mt-0.5">{item.icon}</span>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-slate-800 truncate">{item.title}</div>
-              <div className="text-xs text-slate-500 mt-0.5 truncate">{item.detail}</div>
-            </div>
-            <div className="shrink-0 flex items-center gap-2">
-              <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                item.priority === 'critical' ? 'bg-red-100 text-red-700' :
-                item.priority === 'high' ? 'bg-amber-100 text-amber-700' :
-                'bg-slate-100 text-slate-500'
-              }`}>
-                {item.priority}
-              </span>
-              <button
-                onClick={(e) => { e.stopPropagation(); item.contract && onSelectContract(item.contract) }}
-                className="text-xs font-medium text-teal-600 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 rounded px-2.5 py-1 transition"
-              >
-                {item.action} →
-              </button>
-            </div>
-          </div>
-        ))}
+      {/* Filter chips */}
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={() => setFilter('all')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>All ({items.length})</button>
+        <button onClick={() => setFilter('critical')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'critical' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-600 border-red-200 hover:border-red-400'}`}>Critical</button>
+        <button onClick={() => setFilter('high')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'high' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-amber-600 border-amber-200 hover:border-amber-400'}`}>High</button>
+        <button onClick={() => setFilter('crossref')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'crossref' ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-teal-600 border-teal-200 hover:border-teal-400'}`}>Cross-Ref</button>
+        <button onClick={() => setFilter('expiring')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'expiring' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-200 hover:border-blue-400'}`}>Expiring</button>
+        <span className="ml-auto text-[10px] text-slate-400">Showing {filtered.length} of {items.length}</span>
+      </div>
 
-        {items.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-3xl mb-2">✅</div>
-            <div className="text-sm font-semibold text-slate-700">All clear</div>
-            <div className="text-xs text-slate-400 mt-1">No pending actions. Check back after new uploads.</div>
+      {/* Task Table */}
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="border-b border-slate-100 bg-slate-50/50">
+              <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wide w-8"></th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wide">Issue</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wide">Document</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wide">Severity</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wide">Status</th>
+              <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wide text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {filtered.slice(0, 15).map((item) => (
+              <tr key={item.id} className="hover:bg-slate-50/50 cursor-pointer transition" onClick={() => onSelectContract(item.contract)}>
+                <td className="px-4 py-2.5">
+                  <span className={`inline-block w-2 h-2 rounded-full ${item.severity === 'critical' ? 'bg-red-500' : item.severity === 'high' ? 'bg-amber-500' : 'bg-blue-400'}`} />
+                </td>
+                <td className="px-4 py-2.5 text-xs text-slate-700 font-medium max-w-[200px] truncate">{item.what}</td>
+                <td className="px-4 py-2.5 text-xs text-slate-500">
+                  <span className="font-mono text-[10px] text-slate-400">#{item.docNum}</span>
+                  <span className="ml-1.5">{item.docLabel}</span>
+                </td>
+                <td className="px-4 py-2.5">
+                  <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                    item.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                    item.severity === 'high' ? 'bg-amber-100 text-amber-700' :
+                    'bg-blue-100 text-blue-700'
+                  }`}>{item.severity}</span>
+                </td>
+                <td className="px-4 py-2.5 text-xs text-slate-500">{item.status}</td>
+                <td className="px-4 py-2.5 text-right">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onSelectContract(item.contract) }}
+                    className="text-[11px] font-medium text-teal-600 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 rounded px-2 py-1 transition"
+                  >
+                    {item.action} →
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filtered.length === 0 && (
+          <div className="text-center py-8 text-xs text-slate-400">No items in this view</div>
+        )}
+        {filtered.length > 15 && (
+          <div className="px-4 py-2 text-center text-[11px] text-slate-400 border-t border-slate-100">
+            Showing 15 of {filtered.length} · Use filters to narrow down
           </div>
         )}
-      </div>
-
-      {/* Quick stats footer */}
-      <div className="mt-8 pt-4 border-t border-slate-100">
-        <div className="flex items-center gap-4 text-[11px] text-slate-400">
-          <span>📄 {allContracts.length} documents</span>
-          <span>🚨 {allContracts.flatMap((c) => c.flags).filter((f) => f.severity === 'Critical').length} critical flags</span>
-          <span>🔗 {docLinks.filter((d) => d.status !== 'synced').length} open cross-refs</span>
-          <span>⏰ {expiringSoon.length} expiring &lt;90d</span>
-        </div>
       </div>
     </div>
   )
 }
-
-// ── Main App ─────────────────────────────────────────────────────────────────
-
 
 // ── Smart Filing View (AI Upload + Auto-Classification + Folder Archive) ─────────
 interface UploadedDoc {
