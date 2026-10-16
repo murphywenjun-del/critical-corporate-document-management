@@ -924,23 +924,41 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contrac
         </div>
       </div>
 
-      {/* HEROC Category breakdown */}
+      {/* HEROC Taxonomy — full 4→14→22 hierarchy */}
       <div className="bg-white border border-slate-200 rounded-lg p-5">
-        <h3 className="text-sm font-bold text-slate-800 mb-3">HEROC Taxonomy — Flag Distribution</h3>
+        <h3 className="text-sm font-bold text-slate-800 mb-1">HEROC Taxonomy — 4 Categories · 14 Subcategories · 22 Departments</h3>
+        <p className="text-[11px] text-slate-400 mb-4">Each flag is classified into a category → subcategory → affected department.</p>
         <div className="grid grid-cols-4 gap-3">
-          {['Operational','Financial','Reputational','Continuity'].map((cat) => {
+          {Object.entries(HEROC_SUBCATS).map(([cat, subcats]) => {
             const catFlags = allFlags.filter((f) => f.risk_category === cat)
-            const subcats = Array.from(new Set(catFlags.map((f) => f.subcategory).filter(Boolean)))
             const avgScore = catFlags.length ? Math.round(catFlags.reduce((s,f) => s+f.risk_score, 0) / catFlags.length) : 0
             return (
               <div key={cat} className="border border-slate-200 rounded-lg p-3">
-                <div className="text-xs font-bold text-slate-700 mb-1">{cat}</div>
-                <div className="text-2xl font-bold text-slate-900">{catFlags.length}</div>
-                <div className="text-[10px] text-slate-400">avg score {avgScore}/25</div>
-                <div className="mt-2 space-y-0.5">
-                  {subcats.map((s) => (
-                    <div key={s} className="text-[10px] text-slate-500">· {s}</div>
-                  ))}
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-700">{cat}</span>
+                  <span className="text-[10px] text-slate-400">{catFlags.length} flags</span>
+                </div>
+                {catFlags.length > 0 && <div className="text-[10px] text-slate-400 mb-2">avg {avgScore}/25</div>}
+                <div className="space-y-1.5">
+                  {subcats.map((s) => {
+                    const dept = SUBCAT_DEPTS[s] || []
+                    const sFlags = catFlags.filter((f) => f.subcategory === s)
+                    return (
+                      <div key={s} className="pl-1">
+                        <div className="text-[11px] text-slate-600 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-300 inline-block" />
+                          {s}
+                          {sFlags.length > 0 && <span className="text-[9px] text-slate-400">({sFlags.length})</span>}
+                        </div>
+                        <div className="pl-3 mt-0.5 space-y-px">
+                          {dept.slice(0, 3).map((d) => (
+                            <div key={d} className="text-[10px] text-slate-400">→ {d}</div>
+                          ))}
+                          {dept.length > 3 && <div className="text-[10px] text-slate-300">+{dept.length - 3} more</div>}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )
@@ -2363,6 +2381,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
                               <span>📂</span>
                               <span>{sub.replace(/_/g, ' ')}</span>
                               <span className="text-[9px] text-slate-400">({files.length})</span>
+                              {(() => { const d = SUBCAT_DEPTS[sub.replace(/_/g, ' ')]; return d ? <span className="text-[9px] text-slate-300">→ {d.slice(0,2).join(', ')}{d.length>2?` +${d.length-2}`:''}</span> : null })()}
                             </div>
                             <div className="ml-5 space-y-0.5">
                               {files.map((f) => (
