@@ -30,7 +30,7 @@ function ToastContainer({ toasts }: { toasts: { id: number; msg: string; type: s
 
 
 // ── Confirm Modal (in-page, replaces native confirm) ─────────────────────────
-function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Confirm', danger = false, showNote = false }: {
+function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Confirm', danger = false, showNote = false, defaultNote = '' }: {
   title: string
   message: string
   onConfirm: (note?: string) => void
@@ -38,8 +38,9 @@ function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Con
   confirmLabel?: string
   danger?: boolean
   showNote?: boolean
+  defaultNote?: string
 }) {
-  const [note, setNote] = useState('')
+  const [note, setNote] = useState(defaultNote)
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
@@ -48,7 +49,10 @@ function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Con
         <div className="text-xs text-slate-600 mb-3 whitespace-pre-line">{message}</div>
         {showNote && (
           <div className="mb-3">
-            <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Resolution note (optional)</label>
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-[10px] font-bold text-teal-600 uppercase">AI Proposed Resolution</span>
+              <span className="text-[9px] text-slate-400">(editable)</span>
+            </div>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -218,7 +222,7 @@ function RiskRegisterTable({
   onSelectContract: (c: ContractDoc) => void
   onSwitchTab?: (tab: TabId) => void
   onFix?: (flagId: string) => void
-  onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean) => void
+  onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string) => void
   resolvedFlags?: Set<string> // used in insights hint
 }) {
   const [selSev, setSelSev] = useState('All')
@@ -455,7 +459,7 @@ function RiskRegisterTable({
                     ) : resolvedFlags?.has(`f-${f.contract.num}-${f.field}`) ? (
                       <span className="text-[9px] text-emerald-600 font-bold">✓ Resolved</span>
                     ) : (
-                      <button onClick={(e) => { e.stopPropagation(); onConfirmAction?.(`Resolve Flag`, `"${f.field}"\n\nDocument: ${f.contract.displayName} (#${f.contract.num})\nSeverity: ${f.severity}\nL×I: ${f.likelihood}×${f.impact} = ${f.risk_score}`, () => { setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })); onFix?.(`f-${f.contract.num}-${f.field}`) }, true) }} className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition">Fix</button>
+                      <button onClick={(e) => { e.stopPropagation(); onConfirmAction?.(`Resolve Flag`, `"${f.field}"\n\nDocument: ${f.contract.displayName} (#${f.contract.num})\nSeverity: ${f.severity}\nL×I: ${f.likelihood}×${f.impact} = ${f.risk_score}`, () => { setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })); onFix?.(`f-${f.contract.num}-${f.field}`) }, true, getAIProposal(f.field, f.contract.displayName)) }} className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition">Fix</button>
                     )}
                   </div>
                 </td>
@@ -1774,7 +1778,7 @@ function SettingsSidebar({
 
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
-function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean) => void; resolvedLog?: { id: string; label: string; time: string; type: string }[]; focusFields?: string[] }) {
+function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string) => void; resolvedLog?: { id: string; label: string; time: string; type: string }[]; focusFields?: string[] }) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref'>('all')
   const [showResolved, setShowResolved] = useState(false)
   const [search, setSearch] = useState('')
@@ -1808,6 +1812,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           severity: 'critical',
           status: f.status,
           action: 'Fix',
+          aiSuggestion: f.ai_suggestion,
         })
       } else if (f.severity === 'High' && f.status === 'open') {
         items.push({
@@ -1819,6 +1824,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           severity: 'high',
           status: f.status,
           action: 'Review',
+          aiSuggestion: f.ai_suggestion,
         })
       }
     }
@@ -2004,7 +2010,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                       } else if (item.action === 'Fix' || item.action === 'Review') {
                         onConfirmAction?.(`Resolve Flag`, `"${item.what}"\n\nDocument: ${item.docLabel} (#${item.docNum})\nSeverity: ${item.severity}`, () => {
                           onResolveFlag?.(item.id)
-                        }, true)
+                        }, true, getAIProposal(item.what, item.docLabel))
                       } else if (item.action === 'Renew' || item.action === 'Schedule') {
                         onConfirmAction?.(`Schedule Renewal`, `${item.docLabel} (#${item.docNum})\nExpiry: ${item.due || 'unknown'}\n\nConfirm renewal has been scheduled with the counterparty.`, () => {
                           onResolveFlag?.(item.id)
@@ -2608,6 +2614,24 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
 }
 
 
+
+// ── AI Resolution Proposals (simulated LLM output) ──────────────────────────
+function getAIProposal(field: string, contractName: string): string {
+  const proposals: Record<string, string> = {
+    'expiry_date': `Add explicit termination clause:\n"This agreement shall expire on [DATE] unless renewed in writing 60 days prior to expiry. Failure to renew constitutes automatic termination."\n\n[Ref: ${contractName} §8.2]`,
+    'no_phi_clause': `Insert PHI protection clause per HIPAA §164.502:\n"Neither party shall disclose, use, or permit access to protected health information except as required by law or as expressly authorized in writing by the other party."\n\n[Ref: ${contractName} - New §12]`,
+    'breach_notification': `Add data breach notification requirement:\n"In the event of a security incident or data breach, the receiving party shall notify the disclosing party within 48 hours of discovery, including nature of breach, records affected, and remediation steps taken."\n\n[Ref: ${contractName} §15.3]`,
+    'signatures': `Execute missing signature block:\n"Second signatory: [Name, Title] — to be obtained from [Department] within 5 business days.\n\n[Ref: ${contractName} signature page]`,
+    'auto_renewal': `Add auto-renewal safeguard:\n"Either party may opt out of auto-renewal by written notice no fewer than 90 days prior to the renewal date. Absent such notice, the agreement renews for successive 1-year terms."\n\n[Ref: ${contractName} §10.1]`,
+  }
+  // Match by substring
+  for (const [key, val] of Object.entries(proposals)) {
+    if (field.includes(key) || key.includes(field)) return val
+  }
+  // Generic fallback
+  return `Update ${contractName} to address: "${field}"\n\nProposed clause:\n"[To be drafted by Legal — reference HEROC category and applicable regulatory requirement]"\n\n[Ref: ${contractName} — pending legal review]`
+}
+
 // ── Process Wizard (standalone, used from Work Queue) ──────────────────────
 function ProcessWizardInner({ link, onDone, onComplete }: { link: DocLink; onDone: () => void; onComplete?: (linkId: string) => void }) {
   const [step, setStep] = useState(() => {
@@ -2709,7 +2733,7 @@ function App() {
   const [resolvedLog, setResolvedLog] = useState<{ id: string; label: string; time: string; type: string }[]>(() => {
     try { const r = localStorage.getItem('resolvedLog'); return r ? JSON.parse(r) : [] } catch { return [] }
   })
-  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: (note?: string) => void; showNote?: boolean } | null>(null)
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: (note?: string) => void; showNote?: boolean; defaultNote?: string } | null>(null)
   const [focusFields, setFocusFields] = useState<string[]>([])
   // Persisted state
   const [resolvedFlags, setResolvedFlags] = useState<Set<string>>(() => {
@@ -2968,7 +2992,7 @@ function App() {
                     resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} onResolveFlag={(id) => markFlagResolved(id)}
                     resolvedLog={resolvedLog}
                     focusFields={focusFields}
-                    onConfirmAction={(title, msg, action, showNote) => setConfirmState({ title, message: msg, onConfirm: action, showNote })} />
+                    onConfirmAction={(title, msg, action, showNote, defaultNote) => setConfirmState({ title, message: msg, onConfirm: action, showNote, defaultNote })} />
                 )}
                 {activeTab === 'risk-register' && (
                   <RiskRegisterTable
@@ -2976,7 +3000,7 @@ function App() {
                     onSelectContract={(c) => { setSelected(c); }}
                     onSwitchTab={(tab) => setActiveTab(tab)}
                     onFix={(flagId) => markFlagResolved(flagId)}
-                    onConfirmAction={(title, msg, action, showNote) => setConfirmState({ title, message: msg, onConfirm: action, showNote })}
+                    onConfirmAction={(title, msg, action, showNote, defaultNote) => setConfirmState({ title, message: msg, onConfirm: action, showNote, defaultNote })}
                     resolvedFlags={resolvedFlags}
                   />
                 )}
@@ -3035,6 +3059,7 @@ function App() {
           onConfirm={(note) => { confirmState.onConfirm(note); setConfirmState(null) }}
           onCancel={() => setConfirmState(null)}
           showNote={confirmState.showNote}
+          defaultNote={confirmState.defaultNote || ''}
           confirmLabel="Confirm"
         />
       )}
