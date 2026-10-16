@@ -29,6 +29,31 @@ function ToastContainer({ toasts }: { toasts: { id: number; msg: string; type: s
 }
 
 
+// ── Confirm Modal (in-page, replaces native confirm) ─────────────────────────
+function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Confirm', danger = false }: {
+  title: string
+  message: string
+  onConfirm: () => void
+  onCancel: () => void
+  confirmLabel?: string
+  danger?: boolean
+}) {
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-5">
+        <div className="text-sm font-bold text-slate-900 mb-2">{title}</div>
+        <div className="text-xs text-slate-600 mb-4 whitespace-pre-line">{message}</div>
+        <div className="flex gap-2">
+          <button onClick={onCancel} className="flex-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg py-2 transition">Cancel</button>
+          <button onClick={onConfirm} className={`flex-1 text-xs font-bold text-white rounded-lg py-2 transition ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-teal-600 hover:bg-teal-700'}`}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
 // ── Design tokens ──────────────────────────────────────────────────────────────
 
 const SEV_TEXT: Record<Flag['severity'], string> = {
@@ -175,7 +200,8 @@ function RiskRegisterTable({
   contracts: ContractDoc[]
   onSelectContract: (c: ContractDoc) => void
   onSwitchTab?: (tab: TabId) => void
-  onFix?: (flagId: string) => void // used in insights hint
+  onFix?: (flagId: string) => void
+  onConfirmAction?: (title: string, message: string, action: () => void) => void // used in insights hint
 }) {
   const [selSev, setSelSev] = useState('All')
   const [selCat, setSelCat] = useState('All')
@@ -409,7 +435,7 @@ function RiskRegisterTable({
                     ) : statusOverrides[`${f.contract.num}_${f.field}_${i}`] === 'accepted' ? (
                       <span className="text-[9px] text-slate-500">Accepted</span>
                     ) : (
-                      <button onClick={(e) => { e.stopPropagation(); if (confirm(`Mark "${f.field}" on Contract #${f.contract.num} as Fixed?\n\nThis removes it from Work Queue.`)) { setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })); onFix?.(`f-${f.contract.num}-${f.field}`) } }} className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition">Fix</button>
+                      <button onClick={(e) => { e.stopPropagation(); onConfirmAction?.(`Mark as Fixed`, `Mark "${f.field}" on Contract #${f.contract.num} as Fixed?\n\nThis removes it from Work Queue.`, () => { setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })); onFix?.(`f-${f.contract.num}-${f.field}`) }) }} className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition">Fix</button>
                     )}
                   </div>
                 </td>
@@ -1728,7 +1754,7 @@ function SettingsSidebar({
 
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
-function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void }) {
+function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void) => void }) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref'>('all')
 
   // Compute work items
@@ -1939,13 +1965,13 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                         const link = docLinks.find((d) => d.sourceNum === item.docNum && d.status !== 'synced' && item.id.includes(d.targetName))
                         if (link) onProcess(link)
                       } else if (item.action === 'Fix' || item.action === 'Review') {
-                        if (confirm(`Confirm: Resolve "${item.what}" on ${item.docLabel} (#${item.docNum})?\n\nThis will mark it as fixed and remove from Work Queue.`)) {
+                        onConfirmAction?.(`Resolve Flag`, `Mark "${item.what}" on ${item.docLabel} (#${item.docNum}) as Fixed?\n\nThis removes it from Work Queue.`, () => {
                           onResolveFlag?.(`f-${item.docNum}-${item.what.slice(0, 30)}`)
-                        }
+                        })
                       } else if (item.action === 'Renew' || item.action === 'Schedule') {
-                        if (confirm(`Confirm: Schedule renewal for ${item.docLabel} (#${item.docNum})?\n\nExpiry: ${item.due || 'unknown'}\nThis will remove the expiring alert.`)) {
+                        onConfirmAction?.(`Schedule Renewal`, `Schedule renewal for ${item.docLabel} (#${item.docNum})?\n\nExpiry: ${item.due || 'unknown'}\nThis removes the expiring alert.`, () => {
                           onResolveFlag?.(`e-${item.docNum}`)
-                        }
+                        })
                       } else {
                         onSelectContract(item.contract)
                       }
@@ -2601,6 +2627,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [processLink, setProcessLink] = useState<DocLink | null>(null)
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
   // Persisted state
   const [resolvedFlags, setResolvedFlags] = useState<Set<string>>(() => {
     try { const r = localStorage.getItem('resolvedFlags'); return r ? new Set(JSON.parse(r)) : new Set() } catch { return new Set() }
@@ -2847,7 +2874,8 @@ function App() {
                 {activeTab === 'work-queue' && (
                   <WorkQueueView contracts={contracts} onSelectContract={(c) => setSelected(c)}
                     onProcess={(link) => { setProcessLink(link); setSelected(null) }}
-                    resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} onResolveFlag={(id) => markFlagResolved(id)} />
+                    resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} onResolveFlag={(id) => markFlagResolved(id)}
+                    onConfirmAction={(title, msg, action) => setConfirmState({ title, message: msg, onConfirm: action })} />
                 )}
                 {activeTab === 'risk-register' && (
                   <RiskRegisterTable
@@ -2855,6 +2883,7 @@ function App() {
                     onSelectContract={(c) => { setSelected(c); }}
                     onSwitchTab={(tab) => setActiveTab(tab)}
                     onFix={(flagId) => markFlagResolved(flagId)}
+                    onConfirmAction={(title, msg, action) => setConfirmState({ title, message: msg, onConfirm: action })}
                   />
                 )}
                 {activeTab === 'contracts' && (
@@ -2903,6 +2932,16 @@ function App() {
       </div>
 
       <ToastContainer toasts={toasts} />
+
+      {/* Confirm Modal */}
+      {confirmState && (
+        <ConfirmModal
+          title={confirmState.title}
+          message={confirmState.message}
+          onConfirm={() => { confirmState.onConfirm(); setConfirmState(null) }}
+          onCancel={() => setConfirmState(null)}
+        />
+      )}
 
       {/* Cross-Ref Workflow Wizard (from Work Queue) */}
       {processLink && (
