@@ -1519,10 +1519,10 @@ function ContractDetail({
         )}
       </section>
 
-      {/* Extracted fields + Jev side by side */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      {/* Extracted fields + Jev + Related Docs (stacked in panel width) */}
+      <div className="grid grid-cols-1 gap-5 mb-6">
         <section>
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Extracted Fields</h3>
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Extracted Fields</h3>
           <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
             {s.extractedFields.map((f) => (
               <div key={f.label} className="flex items-start gap-3 px-4 py-2.5">
@@ -1539,7 +1539,7 @@ function ContractDetail({
         </section>
 
         <section>
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Jev AI Assessment</h3>
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Jev AI Assessment</h3>
           <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
             {[
               { label: 'Risk Severity', value: s.jev.riskSeverity.choice, conf: s.jev.riskSeverity.confidence },
@@ -1565,31 +1565,30 @@ function ContractDetail({
             ))}
           </div>
         </section>
-      </div>
 
-      {/* Related Documents */}
-      <section className="mb-5">
-        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Related Documents</h3>
-        <div className="space-y-2">
-          {s.amendments && s.amendments.length > 0 ? (
-            s.amendments.map((a) => (
-              <div key={a.id} className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                <div className="text-xs font-bold text-amber-800">{a.label}</div>
-                <div className="text-[11px] text-amber-700 mt-0.5">Effective: {a.effectiveDate} {a.supersedesOriginal && '· supersedes original'}</div>
-                {a.keyChanges.length > 0 && <div className="text-[10px] text-amber-600 mt-0.5">{a.keyChanges.join(' · ')}</div>}
+        <section>
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Related Documents</h3>
+          <div className="space-y-2">
+            {s.amendments && s.amendments.length > 0 ? (
+              s.amendments.map((a) => (
+                <div key={a.id} className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  <div className="text-xs font-bold text-amber-800">{a.label}</div>
+                  <div className="text-[11px] text-amber-700 mt-0.5">Effective: {a.effectiveDate} {a.supersedesOriginal && '· supersedes original'}</div>
+                  {a.keyChanges.length > 0 && <div className="text-[10px] text-amber-600 mt-0.5">{a.keyChanges.join(' · ')}</div>}
+                </div>
+              ))
+            ) : (
+              <div className="text-xs text-slate-400">No amendments linked to this contract</div>
+            )}
+            {allDocLinks.filter((l: DocLink) => l.sourceNum === s.num).map((l: DocLink, i: number) => (
+              <div key={`dl-${i}`} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                <div className="text-xs font-medium text-slate-700">→ {l.targetName}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">{l.changeDescription}</div>
               </div>
-            ))
-          ) : (
-            <div className="text-xs text-slate-400">No amendments linked to this contract</div>
-          )}
-          {allDocLinks.filter((l: DocLink) => l.sourceNum === s.num).map((l: DocLink, i: number) => (
-            <div key={`dl-${i}`} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-              <div className="text-xs font-medium text-slate-700">→ {l.targetName}</div>
-              <div className="text-[11px] text-slate-500 mt-0.5">{l.changeDescription}</div>
-            </div>
-          ))}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      </div>
 
       {/* Amendments */}
       {s.amendments && s.amendments.length > 0 && (
