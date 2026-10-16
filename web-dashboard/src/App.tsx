@@ -2341,7 +2341,7 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab }
               </button>
               <button
                 onClick={() => {
-                  localStorage.setItem('insightsActioned_top3', JSON.stringify(top3.map((x) => x.id)))
+                  localStorage.setItem('insightsActioned_top3', JSON.stringify(top3.map((x) => x.field)))
                   alert('✓ 3 tasks created in Work Queue. Check the Work Queue tab.')
                   onSwitchTab?.('work-queue')
                 }}
