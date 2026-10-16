@@ -411,9 +411,6 @@ function RiskRegisterTable({
                     ) : (
                       <button onClick={(e) => { e.stopPropagation(); if (confirm(`Mark "${f.field}" on Contract #${f.contract.num} as Fixed?\n\nThis removes it from Work Queue.`)) { setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })); onFix?.(`f-${f.contract.num}-${f.field}`) } }} className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition">Fix</button>
                     )}
-                    {!statusOverrides[`${f.contract.num}_${f.field}_${i}`] && (
-                      
-                    )}
                   </div>
                 </td>
               </tr>
