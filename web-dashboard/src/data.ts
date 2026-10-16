@@ -308,7 +308,7 @@ export const contracts: ContractDoc[] = [
     ai_suggestion: 'Review and update signatories per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
   },
       { severity: "High", field: "expiry_date", flag_if: "Contract expired 119 days ago (May 31, 2026)", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule",
-    ai_suggestion: `Add clause: `,
+    ai_suggestion: 'Add clause: This agreement expires on [DATE]. Either party may terminate with 60 days written notice.',
   },
       { severity: "High", field: "binding_language", flag_if: "Both binding and non-binding language present — creates legal ambiguity", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Financial", subcategory: "Contract Pricing", department: "Finance & Procurement", status: "open", source: "rule",
     ai_suggestion: 'Review and update binding language per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
@@ -336,7 +336,7 @@ export const contracts: ContractDoc[] = [
     filePath: "research/contracts/03_Procurement_HealthIT_Service_Agreement_2023.md",
     riskScore: 21.0, riskLevel: "Critical", flagsCount: 3, flags: [
       { severity: "High", field: "expiry_date", flag_if: "Contract expired 270 days ago (Dec 31, 2025)", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule",
-    ai_suggestion: `Add clause: `,
+    ai_suggestion: 'Add clause: This agreement expires on [DATE]. Either party may terminate with 60 days written notice.',
   },
       { severity: "High", field: "indemnity_cap", highlightField: "a monetary cap", flag_if: "Indemnity clause has no monetary cap", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance", status: "open", source: "rule",
     ai_suggestion: 'Review and update indemnity cap per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
@@ -421,7 +421,7 @@ export const contracts: ContractDoc[] = [
     filePath: "research/contracts/05_NDA_Old_Vendor_2022.md",
     riskScore: 21.5, riskLevel: "Critical", flagsCount: 4, flags: [
       { severity: "High", field: "expiry_date", flag_if: "Contract expired 956 days ago", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule",
-    ai_suggestion: `Add clause: `,
+    ai_suggestion: 'Add clause: This agreement expires on [DATE]. Either party may terminate with 60 days written notice.',
   },
       { severity: "Critical", field: "phia_compliance", flag_if: "Missing PHIPA compliance declaration entirely", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office", status: "open", source: "rule",
     ai_suggestion: 'Review and update phia compliance per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
@@ -461,7 +461,7 @@ export const contracts: ContractDoc[] = [
     filePath: "research/contracts/06_Procurement_Security_Services_2024.md",
     riskScore: 20.5, riskLevel: "Critical", flagsCount: 2, flags: [
       { severity: "High", field: "expiry_date", flag_if: "Contract expired 545 days ago (March 31, 2025)", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule",
-    ai_suggestion: `Add clause: `,
+    ai_suggestion: 'Add clause: This agreement expires on [DATE]. Either party may terminate with 60 days written notice.',
   },
       { severity: "High", field: "indemnity_clause", flag_if: "Missing indemnity clause entirely", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance", status: "open", source: "rule",
     ai_suggestion: 'Review and update indemnity clause per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
@@ -491,7 +491,7 @@ export const contracts: ContractDoc[] = [
     filePath: "research/contracts/07_MOU_Partnership_Duplicate_Versions.md",
     riskScore: 22.0, riskLevel: "Critical", flagsCount: 5, flags: [
       { severity: "High", field: "expiry_date", flag_if: "Contract expired 423 days ago (July 31, 2025)", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule",
-    ai_suggestion: `Add clause: `,
+    ai_suggestion: 'Add clause: This agreement expires on [DATE]. Either party may terminate with 60 days written notice.',
   },
       { severity: "High", field: "binding_language", flag_if: "V1 non-binding vs V2 partially binding — creates legal ambiguity", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Financial", subcategory: "Contract Pricing", department: "Finance & Procurement" , status: "open", source: "rule",
     ai_suggestion: 'Review and update binding language per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
@@ -565,7 +565,7 @@ export const contracts: ContractDoc[] = [
     ai_suggestion: 'Review and update ocr quality per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
   },
       { severity: "Medium", field: "expiry_date", flag_if: "Missing expiry date — cannot determine from scan", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule",
-    ai_suggestion: `Add clause: `,
+    ai_suggestion: 'Add clause: This agreement expires on [DATE]. Either party may terminate with 60 days written notice.',
   
     ],
     textHighlights: [
@@ -596,7 +596,7 @@ export const contracts: ContractDoc[] = [
       { severity: "High", field: "indemnity_cap", highlightField: "not subject to a monetary cap", flag_if: "Indemnity clause explicitly states no monetary cap", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance", status: "open", source: "rule",
     ai_suggestion: 'Review and update indemnity cap per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
   },
-      { severity: "High", field: "conflicting_finance", flag_if: "Detected different annual fee amounts: 320,000 vs 45,000", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "hard", risk_category: "Financial", subcategory: "Budget & Licensing", department: "Finance & Procurement", status: "open", source: "ai_scan" 
+      { severity: "High", field: "conflicting_finance", flag_if: "Detected different annual fee amounts: 320,000 vs 45,000", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "hard", risk_category: "Financial", subcategory: "Budget & Licensing", department: "Finance & Procurement", status: "open", source: "ai_scan",
     ai_suggestion: 'Review and update conflicting finance per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
   },
           { severity: "Medium", field: "auto_renewal", flag_if: "Contract auto-renews for 1-year periods — no explicit opt-out mechanism beyond 60-day notice window", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule",
@@ -632,7 +632,7 @@ export const contracts: ContractDoc[] = [
     filePath: "research/contracts/10_Health_Data_Sharing_Services_2024.md",
     riskScore: 21.0, riskLevel: "Critical", flagsCount: 3, flags: [
       { severity: "High", field: "expiry_date", flag_if: "Base contract expired 45 days ago (Aug 1, 2026) — amendment not yet executed", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule",
-    ai_suggestion: `Add clause: `,
+    ai_suggestion: 'Add clause: This agreement expires on [DATE]. Either party may terminate with 60 days written notice.',
   },
       { severity: "High", field: "breach_timeline", flag_if: "No breach notification timeline specified", likelihood: 4, impact: 4, risk_score: 16, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office", status: "open", source: "rule",
     ai_suggestion: 'Review and update breach timeline per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
