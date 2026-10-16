@@ -2063,37 +2063,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
                       </div>
                     )}
 
-                    {Object.keys(computedSubs).length > 0 && (
-                      <div>
-                        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">
-                          Virtual + Uploaded ({Object.keys(computedSubs).length} subcategories)
-                        </div>
-                        {Object.entries(computedSubs).map(([sub, items]) => (
-                          <div key={sub} className="ml-3 mb-1.5">
-                            <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-medium">
-                              <span>📂</span>
-                              <span>{sub}</span>
-                              <span className="text-[9px] text-slate-400">({items.docs.length})</span>
-                            </div>
-                            <div className="ml-5 space-y-0.5">
-                              {items.docs.map((doc, i) => (
-                                <div key={i} className="flex items-center gap-2 text-[11px]">
-                                  <span className="text-slate-300">📄</span>
-                                  <span className="text-slate-600 flex-1 truncate">{doc.label}</span>
-                                  {doc.isUploaded ? (
-                                    <span className="text-[9px] text-purple-600 bg-purple-50 border border-purple-200 rounded px-1">uploaded</span>
-                                  ) : (
-                                    <span className="text-[9px] text-slate-500 bg-slate-50 border border-slate-200 rounded px-1">virtual</span>
-                                  )}
-                                  <span className={`text-[10px] font-bold ${doc.riskLevel === 'Critical' ? 'text-red-600' : doc.riskLevel === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>{doc.riskLevel}</span>
-                                  <span className="text-[9px] text-slate-400">{doc.flagsCount}F</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+
 
                     {totalVisible === 0 && diskSubsWithFiles.length === 0 && (
                       <div className="text-[11px] text-slate-300 ml-4 py-2">No documents in this category yet.</div>

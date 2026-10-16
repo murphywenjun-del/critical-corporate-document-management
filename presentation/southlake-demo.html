@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Critical Document Management · Southlake Health</title>
+<style>
+  :root {
+    --teal: #0d9488;
+    --teal-light: #ccfbf1;
+    --teal-dark: #115e59;
+    --slate-50: #f8fafc;
+    --slate-100: #f1f5f9;
+    --slate-200: #e2e8f0;
+    --slate-400: #94a3b8;
+    --slate-500: #64748b;
+    --slate-700: #334155;
+    --slate-900: #0f172a;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --emerald: #10b981;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--slate-900); color: white; }
+  
+  .slide {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 60px 80px;
+    position: relative;
+    page-break-after: always;
+  }
+  .slide-number {
+    position: absolute;
+    bottom: 30px;
+    right: 40px;
+    font-size: 11px;
+    color: var(--slate-400);
+    letter-spacing: 2px;
+  }
+  
+  /* Slide 1 - Title */
+  .slide-1 { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); }
+  .slide-1 h1 { font-size: 52px; font-weight: 700; letter-spacing: -1px; line-height: 1.1; }
+  .slide-1 h1 span { color: var(--teal); }
+  .slide-1 .subtitle { font-size: 18px; color: var(--slate-400); margin-top: 16px; font-weight: 400; }
+  .slide-1 .meta { margin-top: 48px; display: flex; gap: 32px; font-size: 13px; color: var(--slate-500); }
+  .slide-1 .meta div { display: flex; align-items: center; gap: 8px; }
+  .slide-1 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); }
+  
+  /* Content slides */
+  .slide-content { background: var(--slate-50); color: var(--slate-900); }
+  .slide-content h2 { font-size: 32px; font-weight: 700; color: var(--slate-900); margin-bottom: 8px; letter-spacing: -0.5px; }
+  .slide-content .h2-sub { font-size: 15px; color: var(--slate-500); margin-bottom: 32px; }
+  
+  /* Grid layouts */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+  .grid-6 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  
+  .card { background: white; border: 1px solid var(--slate-200); border-radius: 12px; padding: 20px; }
+  .card .icon { font-size: 24px; margin-bottom: 12px; }
+  .card h3 { font-size: 14px; font-weight: 700; color: var(--slate-900); margin-bottom: 6px; }
+  .card p { font-size: 12px; color: var(--slate-500); line-height: 1.5; }
+  .card .metric { font-size: 28px; font-weight: 700; color: var(--teal); margin-bottom: 4px; }
+  
+  /* Flow */
+  .flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  .flow-step { background: white; border: 1px solid var(--slate-200); border-radius: 10px; padding: 12px 16px; text-align: center; min-width: 120px; }
+  .flow-step .num { font-size: 10px; font-weight: 700; color: var(--teal); margin-bottom: 4px; }
+  .flow-step .label { font-size: 12px; font-weight: 600; color: var(--slate-900); }
+  .flow-step .desc { font-size: 10px; color: var(--slate-400); margin-top: 2px; }
+  .flow-arrow { color: var(--slate-300); font-size: 16px; }
+  
+  /* Stats row */
+  .stats { display: flex; gap: 16px; margin: 24px 0; }
+  .stat { text-align: center; flex: 1; }
+  .stat .val { font-size: 36px; font-weight: 700; }
+  .stat .val.red { color: var(--red); }
+  .stat .val.amber { color: var(--amber); }
+  .stat .val.teal { color: var(--teal); }
+  .stat .val.green { color: var(--emerald); }
+  .stat .lbl { font-size: 11px; color: var(--slate-500); margin-top: 4px; }
+  
+  /* List */
+  .list { list-style: none; }
+  .list li { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 14px; font-size: 14px; color: var(--slate-700); line-height: 1.4; }
+  .list li .marker { width: 6px; height: 6px; border-radius: 50%; background: var(--teal); margin-top: 6px; flex-shrink: 0; }
+  .list li .marker.red { background: var(--red); }
+  .list li .marker.amber { background: var(--amber); }
+  
+  /* Tag */
+  .tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 4px; margin-right: 4px; }
+  .tag.teal { background: var(--teal-light); color: var(--teal-dark); }
+  .tag.red { background: #fee2e2; color: #991b1b; }
+  .tag.amber { background: #fef3c7; color: #92400e; }
+  
+  /* Next steps */
+  .next-step { display: flex; align-items: center; gap: 16px; padding: 14px 18px; background: white; border: 1px solid var(--slate-200); border-radius: 10px; margin-bottom: 10px; }
+  .next-step .n { font-size: 11px; font-weight: 700; color: var(--teal); width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; background: var(--teal-light); border-radius: 50%; flex-shrink: 0; }
+  .next-step .t { font-size: 13px; font-weight: 600; color: var(--slate-800); }
+  .next-step .d { font-size: 11px; color: var(--slate-500); margin-top: 2px; }
+  .next-step .owner { font-size: 10px; color: var(--slate-400); margin-left: auto; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<!-- SLIDE 1: Title -->
+<div class="slide slide-1">
+  <h1>Critical Corporate<br>Document <span>Management</span></h1>
+  <div class="subtitle">Prototype Demo & Roadmap · Southlake Health</div>
+  <div class="meta">
+    <div><div class="dot"></div> Ivy Team Prototype</div>
+    <div><div class="dot"></div> October 2026</div>
+    <div><div class="dot"></div> Confidential</div>
+  </div>
+  <div class="slide-number">01 / 07</div>
+</div>
+
+<!-- SLIDE 2: Problem -->
+<div class="slide slide-content">
+  <h2>Why This Matters</h2>
+  <div class="h2-sub">Southlake Health manages critical contracts across 22 departments. Compliance gaps in these documents create operational, financial, and legal exposure.</div>
+  
+  <div class="stats">
+    <div class="stat"><div class="val red">41</div><div class="lbl">Compliance Flags</div></div>
+    <div class="stat"><div class="val amber">7</div><div class="lbl">Critical Gaps</div></div>
+    <div class="stat"><div class="val teal">13</div><div class="lbl">Contracts Monitored</div></div>
+    <div class="stat"><div class="val green">58%</div><div class="lbl">Compliance Rate</div></div>
+  </div>
+  
+  <div class="grid-3">
+    <div class="card">
+      <div class="icon">🔴</div>
+      <h3>Reactive, Not Proactive</h3>
+      <p>Current process finds gaps <i>after</i> they cause issues. No system scans contracts for missing clauses, expiring terms, or cross-reference conflicts.</p>
+    </div>
+    <div class="card">
+      <div class="icon">🔀</div>
+      <h3>Disconnected Documents</h3>
+      <p>An NDA references a master agreement that was amended 2 years ago. Nobody tracks the dependency. Version conflicts go undetected.</p>
+    </div>
+    <div class="card">
+      <div class="icon">📂</div>
+      <h3>Manual Filing</h3>
+      <p>13 contracts across 22 departments, 14 subcategories. Sorting and tracking is done by hand in spreadsheets. New documents have no automated intake.</p>
+    </div>
+  </div>
+  <div class="slide-number">02 / 07</div>
+</div>
+
+<!-- SLIDE 3: What We Built -->
+<div class="slide slide-content">
+  <h2>What We Built</h2>
+  <div class="h2-sub">A six-capability prototype that covers the full lifecycle: intake → analysis → filing → monitoring → prevention.</div>
+  
+  <div class="grid-6">
+    <div class="card">
+      <h3>📋 Risk Register</h3>
+      <p>41 flags across 13 contracts, scored L×I (Likelihood × Impact). Filter by severity, HEROC category, status, source.</p>
+    </div>
+    <div class="card">
+      <h3>🤖 Smart Filing</h3>
+      <p>Upload → AI classifies → auto-files to HEROC folder tree. No manual sorting. Real on-disk storage.</p>
+    </div>
+    <div class="card">
+      <h3>🔗 Cross-Reference</h3>
+      <p>Tracks document dependencies. 5-step workflow: Detected → Acknowledged → Fixing → Verified → Closed.</p>
+    </div>
+    <div class="card">
+      <h3>📅 Deadline Tracking</h3>
+      <p>Expiry + renewal notice deadlines. Timeline visualization. Urgency color-coding (expired / critical / warning / ok).</p>
+    </div>
+    <div class="card">
+      <h3>💡 Prevention Insights</h3>
+      <p>Scans ALL monitored docs, detects systemic patterns (same issue in 3+ contracts), generates prioritized prevention playbook.</p>
+    </div>
+    <div class="card">
+      <h3>🏥 Department View</h3>
+      <p>Filter by any of 22 Southlake departments. See exactly which contracts and flags belong to each team.</p>
+    </div>
+  </div>
+  <div class="slide-number">03 / 07</div>
+</div>
+
+<!-- SLIDE 4: System Flow -->
+<div class="slide slide-content">
+  <h2>System Flow</h2>
+  <div class="h2-sub">From document intake to risk prevention — one continuous pipeline.</div>
+  
+  <div class="flow">
+    <div class="flow-step"><div class="num">STEP 1</div><div class="label">Upload</div><div class="desc">PDF / DOCX / TXT</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="num">STEP 2</div><div class="label">AI Classify</div><div class="desc">Ollama · Llama 3.1</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="num">STEP 3</div><div class="label">Rule Engine</div><div class="desc">22 compliance checks</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="num">STEP 4</div><div class="label">Auto-File</div><div class="desc">HEROC → Subcategory</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="num">STEP 5</div><div class="label">Monitor</div><div class="desc">Flags + Deadlines</div></div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step"><div class="num">STEP 6</div><div class="label">Prevent</div><div class="desc">Systemic Patterns</div></div>
+  </div>
+  
+  <div class="grid-2" style="margin-top: 32px;">
+    <div class="card">
+      <h3>🔒 Data Stays Local</h3>
+      <p>All LLM inference runs on-site via Ollama (Llama 3.1 8B). No PHI or contract data leaves the Southlake boundary. No US cloud.</p>
+      <div style="margin-top: 8px;"><span class="tag teal">Local Ollama</span><span class="tag teal">No Cloud</span><span class="tag teal">PHI On-Site</span></div>
+    </div>
+    <div class="card">
+      <h3>📐 HEROC Taxonomy</h3>
+      <p>4 risk categories → 14 subcategories → 22 Southlake departments. Every document is classified into this hierarchy.</p>
+      <div style="margin-top: 8px;"><span class="tag red">Operational</span><span class="tag amber">Financial</span><span class="tag teal">Reputational</span><span class="tag teal">Continuity</span></div>
+    </div>
+  </div>
+  <div class="slide-number">04 / 07</div>
+</div>
+
+<!-- SLIDE 5: Key Capabilities Deep-Dive -->
+<div class="slide slide-content">
+  <h2>Prevention, Not Just Detection</h2>
+  <div class="h2-sub">The Insights engine goes beyond "this contract has a problem" to "here's the process gap causing 7 problems."</div>
+  
+  <div class="grid-2">
+    <div>
+      <div class="card" style="border-left: 3px solid var(--red);">
+        <h3>Systemic Pattern Detection</h3>
+        <p>Scans all 41 flags, groups by field. When 3+ contracts share the same gap → it's a <b>process failure</b>, not a document error.</p>
+        <div style="margin-top: 12px; font-size: 12px; color: var(--slate-600);">
+          <div style="margin-bottom: 8px;"><span class="tag red">CRITICAL</span> <b>signatories</b> — 7 flags · 7 contracts</div>
+          <div style="margin-bottom: 8px;"><span class="tag amber">HIGH</span> <b>breach_notification</b> — 4 flags · 4 contracts</div>
+          <div><span class="tag amber">HIGH</span> <b>governing_law</b> — 3 flags · 3 contracts</div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="border-left: 3px solid var(--emerald);">
+        <h3>Prevention Playbook</h3>
+        <p>For each pattern, generates an actionable recommendation targeting the <b>control</b>, not the document.</p>
+        <div style="margin-top: 12px; font-size: 12px; color: var(--slate-600); line-height: 1.6;">
+          <div><b>① signatories</b> → "Implement pre-execution dual-signature verification gate"</div>
+          <div><b>② breach_notification</b> → "Standardize to 24h (PHIPA s.33(3))"</div>
+          <div><b>③ governing_law</b> → "Enforce Ontario law in all templates"</div>
+        </div>
+        <div style="margin-top: 12px; padding: 10px; background: var(--teal-light); border-radius: 8px; font-size: 11px; color: var(--teal-dark);">
+          <b>Impact:</b> Fixing top 3 patterns eliminates 14 of 41 flags (34%). Portfolio risk score drops from 14.2 → 8.7.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-number">05 / 07</div>
+</div>
+
+<!-- SLIDE 6: Cross-Ref Workflow -->
+<div class="slide slide-content">
+  <h2>Closed-Loop Document Tracking</h2>
+  <div class="h2-sub">When a document changes, every document that references it must be updated. This system tracks that chain.</div>
+  
+  <div style="display: flex; align-items: center; gap: 4px; margin: 24px 0;">
+    <div style="text-align: center; flex: 1;">
+      <div style="width: 36px; height: 36px; border-radius: 50%; background: #fee2e2; display: flex; align-items: center; justify-content: center; margin: 0 auto; font-size: 14px;">🔍</div>
+      <div style="font-size: 11px; font-weight: 700; color: #991b1b; margin-top: 6px;">Detected</div>
+    </div>
+    <div style="width: 24px; height: 2px; background: var(--slate-200);"></div>
+    <div style="text-align: center; flex: 1;">
+      <div style="width: 36px; height: 36px; border-radius: 50%; background: #fef3c7; display: flex; align-items: center; justify-content: center; margin: 0 auto; font-size: 14px;">👁</div>
+      <div style="font-size: 11px; font-weight: 700; color: #92400e; margin-top: 6px;">Acknowledged</div>
+    </div>
+    <div style="width: 24px; height: 2px; background: var(--slate-200);"></div>
+    <div style="text-align: center; flex: 1;">
+      <div style="width: 36px; height: 36px; border-radius: 50%; background: #dbeafe; display: flex; align-items: center; justify-content: center; margin: 0 auto; font-size: 14px;">🔧</div>
+      <div style="font-size: 11px; font-weight: 700; color: #1e40af; margin-top: 6px;">Fixing</div>
+    </div>
+    <div style="width: 24px; height: 2px; background: var(--slate-200);"></div>
+    <div style="text-align: center; flex: 1;">
+      <div style="width: 36px; height: 36px; border-radius: 50%; background: #d1fae5; display: flex; align-items: center; justify-content: center; margin: 0 auto; font-size: 14px;">✓</div>
+      <div style="font-size: 11px; font-weight: 700; color: #065f46; margin-top: 6px;">Verified</div>
+    </div>
+    <div style="width: 24px; height: 2px; background: var(--slate-200);"></div>
+    <div style="text-align: center; flex: 1;">
+      <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--slate-100); display: flex; align-items: center; justify-content: center; margin: 0 auto; font-size: 14px;">📁</div>
+      <div style="font-size: 11px; font-weight: 700; color: var(--slate-500); margin-top: 6px;">Closed</div>
+    </div>
+  </div>
+  
+  <div class="grid-2">
+    <div class="card">
+      <h3>How It Works</h3>
+      <p>Each cross-reference shows <b>Before</b> (current text in target doc) vs <b>After</b> (required by source doc). A wizard guides the user through all 5 steps in one session — with human verification at each stage.</p>
+    </div>
+    <div class="card">
+      <h3>Current State</h3>
+      <p>6 cross-references tracked between 13 contracts. 2 currently in "Fixing" state, 3 in "Detected" (awaiting acknowledgment), 1 already "Closed". Bidirectional: fixing a target auto-updates the source.</p>
+    </div>
+  </div>
+  <div class="slide-number">06 / 07</div>
+</div>
+
+<!-- SLIDE 7: Next Steps -->
+<div class="slide slide-content">
+  <h2>Next Steps & What We Need</h2>
+  <div class="h2-sub">From prototype to production-ready pilot.</div>
+  
+  <div class="next-step">
+    <div class="n">1</div>
+    <div><div class="t">Replace synthetic data with real contracts</div><div class="d">Alicia to provide 5-10 de-identified contracts for testing the rule engine against actual Southlake documents</div></div>
+    <div class="owner">Alicia · Redaction</div>
+  </div>
+  <div class="next-step">
+    <div class="n">2</div>
+    <div><div class="t">Validate HEROC mapping with Risk team</div><div class="d">Confirm 14 subcategories → 22 departments mapping matches Southlake's actual org structure</div></div>
+    <div class="owner">Sam · CIO</div>
+  </div>
+  <div class="next-step">
+    <div class="n">3</div>
+    <div><div class="t">Legal review of compliance criteria</div><div class="d">Tanya to confirm the 22 rule-engine checks align with actual PHIPA / Southlake policy requirements</div></div>
+    <div class="owner">Tanya · Legal</div>
+  </div>
+  <div class="next-step">
+    <div class="n">4</div>
+    <div><div class="t">Ollama deployment on Southlake hardware</div><div class="d">Warren / IT to confirm GPU specs for Llama 3.1 8B inference. Target: &lt;3s per document classification.</div></div>
+    <div class="owner">Warren · IT</div>
+  </div>
+  <div class="next-step">
+    <div class="n">5</div>
+    <div><div class="t">Usability testing with stakeholders</div><div class="d">Sonia to coordinate 30-min observation sessions with Risk, Legal, and IT users on the dashboard</div></div>
+    <div class="owner">Sonia · CPO</div>
+  </div>
+  
+  <div style="margin-top: 24px; padding: 16px; background: var(--teal-light); border-radius: 10px; font-size: 13px; color: var(--teal-dark);">
+    <b>Timeline:</b> Prototype review → 2 weeks stakeholder validation → 4 weeks pilot with real data → 8 weeks decision on production build
+  </div>
+  <div class="slide-number">07 / 07</div>
+</div>
+
+</body>
+</html>
