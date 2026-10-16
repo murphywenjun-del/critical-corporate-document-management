@@ -1,6 +1,34 @@
 import { useState, useEffect, useRef } from 'react'
 import { contracts, portfolioStats, docLinks, HEROC_SUBCATS, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type ContractDoc, type Amendment, type DocLink } from './data'
 
+
+// ── Toast Notification System ──────────────────────────────────────────────
+function useToast() {
+  const [toasts, setToasts] = useState<{ id: number; msg: string; type: 'success' | 'info' | 'warn' }[]>([])
+  const show = (msg: string, type: 'success' | 'info' | 'warn' = 'success') => {
+    const id = Date.now() + Math.random()
+    setToasts((t) => [...t, { id, msg, type }])
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3000)
+  }
+  return { toasts, show }
+}
+
+function ToastContainer({ toasts }: { toasts: { id: number; msg: string; type: string }[] }) {
+  if (toasts.length === 0) return null
+  return (
+    <div className="fixed top-16 right-4 z-[999] space-y-2">
+      {toasts.map((t) => (
+        <div key={t.id} className={`px-4 py-3 rounded-lg shadow-lg text-sm font-medium text-white transition-all animate-slideIn ${
+          t.type === 'success' ? 'bg-emerald-600' : t.type === 'warn' ? 'bg-amber-500' : 'bg-slate-700'
+        }`}>
+          {t.type === 'success' ? '✓' : t.type === 'warn' ? '⚠' : 'ℹ'} {t.msg}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+
 // ── Design tokens ──────────────────────────────────────────────────────────────
 
 const SEV_TEXT: Record<Flag['severity'], string> = {
@@ -1445,12 +1473,18 @@ function AmendmentsView({ contracts: allContracts, onSelect }: { contracts: Cont
 function ContractDetail({
   selected,
   docLinks: allDocLinks,
+  onStatusOverride,
 }: {
   selected: ContractDoc
   onBack?: () => void
   docLinks: DocLink[]
+  onStatusOverride?: (flagId: string) => void
 }) {
   const s = selected
+  const handleStatus = (field: string, _status: string) => {
+    const flagId = `f-${s.num}-${field}`
+    onStatusOverride?.(flagId)
+  }
   return (
     <div>
       {/* Title */}
@@ -1696,7 +1730,7 @@ function SettingsSidebar({
 
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
-function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void }) {
+function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[] }) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref'>('all')
 
   // Compute work items
@@ -1750,7 +1784,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess }:
       const src = allContracts.find((c) => c.num === d.sourceNum)
       if (src) {
         items.push({
-          id: `x-${d.sourceNum}`,
+          id: `x-${d.sourceNum}-${d.targetName}`,
           what: `${d.sourceClause} → ${d.targetName}`,
           docLabel: src.displayName,
           docNum: src.num,
@@ -1783,23 +1817,45 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess }:
     }
   }
 
+  // Filter out resolved flags and completed cross-refs
+  const active = items.filter((i) => {
+    if (resolvedFlags.has(i.id)) return false
+    if (completedLinks.has(i.id)) return false
+    return true
+  })
+
+  // Add created tasks from Insights
+  const taskItems: WorkItem[] = createdTasks.map((t) => ({
+    id: `t-${t.id}`,
+    what: t.label,
+    docLabel: allContracts.find((c) => c.num === t.contractNum)?.displayName || 'Task',
+    docNum: t.contractNum,
+    contract: allContracts.find((c) => c.num === t.contractNum) || allContracts[0],
+    severity: 'high' as const,
+    status: 'New',
+    action: 'Work',
+  }))
+
+  const allItems = [...active, ...taskItems]
+
   // Sort: critical > high > medium > low, then by docNum
   const sevOrder = { critical: 0, high: 1, medium: 2, low: 3 }
-  items.sort((a, b) => sevOrder[a.severity] - sevOrder[b.severity] || a.docNum - b.docNum)
+  allItems.sort((a, b) => sevOrder[a.severity] - sevOrder[b.severity] || a.docNum - b.docNum)
 
   // Filter
-  const filtered = items.filter((i) => {
+  const filtered = allItems.filter((i) => {
     if (filter === 'all') return true
     if (filter === 'critical') return i.severity === 'critical'
     if (filter === 'high') return i.severity === 'high'
     if (filter === 'expiring') return i.id.startsWith('e-')
     if (filter === 'crossref') return i.id.startsWith('x-')
+    if (filter === 'tasks') return i.id.startsWith('t-')
     return true
   })
 
   // Summary counts
   const counts = {
-    critical: items.filter((i) => i.severity === 'critical').length,
+    critical: allItems.filter((i) => i.severity === 'critical').length,
     high: items.filter((i) => i.severity === 'high').length,
     expiring: items.filter((i) => i.id.startsWith('e-')).length,
     crossref: items.filter((i) => i.id.startsWith('x-')).length,
@@ -1874,7 +1930,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess }:
                     onClick={(e) => {
                       e.stopPropagation()
                       if (item.id.startsWith('x-') && onProcess) {
-                        const link = docLinks.find((d) => d.sourceNum === item.docNum && d.status !== 'synced')
+                        const link = docLinks.find((d) => d.sourceNum === item.docNum && d.status !== 'synced' && item.id.includes(d.targetName))
                         if (link) onProcess(link)
                       } else {
                         onSelectContract(item.contract)
@@ -2458,7 +2514,7 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab }
 
 
 // ── Process Wizard (standalone, used from Work Queue) ──────────────────────
-function ProcessWizardInner({ link, onDone }: { link: DocLink; onDone: () => void }) {
+function ProcessWizardInner({ link, onDone, onComplete }: { link: DocLink; onDone: () => void; onComplete?: (linkId: string) => void }) {
   const [step, setStep] = useState(() => {
     const steps = ['Detected', 'Acknowledged', 'Fixing', 'Verified', 'Closed']
     return Math.max(0, steps.indexOf(link.status || 'Detected'))
@@ -2512,7 +2568,7 @@ function ProcessWizardInner({ link, onDone }: { link: DocLink; onDone: () => voi
           ← Back
         </button>
         <button
-          onClick={() => { if (step < 4) setStep(step + 1); else onDone() }}
+          onClick={() => { if (step < 4) setStep(step + 1); else { onComplete?.('x-' + link.sourceNum + '-' + link.targetName); onDone() } }}
           className="px-5 py-2 text-sm font-bold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition">
           {step < 4 ? `${STEPS[step + 1]} →` : '✓ Complete'}
         </button>
@@ -2522,6 +2578,7 @@ function ProcessWizardInner({ link, onDone }: { link: DocLink; onDone: () => voi
 }
 
 function App() {
+  const { toasts, show } = useToast()
   const [activeTab, setActiveTab] = useState<TabId>('work-queue')
   const [selected, setSelected] = useState<ContractDoc | null>(null)
   const [filterType, setFilterType] = useState('All')
@@ -2536,6 +2593,29 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [processLink, setProcessLink] = useState<DocLink | null>(null)
+  // Persisted state
+  const [resolvedFlags, setResolvedFlags] = useState<Set<string>>(() => {
+    try { const r = localStorage.getItem('resolvedFlags'); return r ? new Set(JSON.parse(r)) : new Set() } catch { return new Set() }
+  })
+  const [completedLinks, setCompletedLinks] = useState<Set<string>>(() => {
+    try { const r = localStorage.getItem('completedLinks'); return r ? new Set(JSON.parse(r)) : new Set() } catch { return new Set() }
+  })
+  const [createdTasks, setCreatedTasks] = useState<{ id: string; label: string; contractNum: number; time: string }[]>(() => {
+    try { const r = localStorage.getItem('createdTasks'); return r ? JSON.parse(r) : [] } catch { return [] }
+  })
+  const markFlagResolved = (flagId: string) => {
+    setResolvedFlags((prev) => { const next = new Set(prev); next.add(flagId); localStorage.setItem('resolvedFlags', JSON.stringify([...next])); return next })
+    show('Flag resolved ✓', 'success')
+  }
+  const completeLink = (linkId: string) => {
+    setCompletedLinks((prev) => { const next = new Set(prev); next.add(linkId); localStorage.setItem('completedLinks', JSON.stringify([...next])) return next })
+    show('Workflow completed ✓', 'success')
+  }
+  const addTask = (label: string, contractNum: number) => {
+    const task = { id: Date.now().toString(), label, contractNum, time: new Date().toLocaleTimeString() }
+    setCreatedTasks((prev) => { const next = [task, ...prev]; localStorage.setItem('createdTasks', JSON.stringify(next)); return next })
+    show('Task created in Work Queue', 'info')
+  }
 
   useEffect(() => {
     fetch('/api/results')
@@ -2762,7 +2842,8 @@ function App() {
               <>
                 {activeTab === 'work-queue' && (
                   <WorkQueueView contracts={contracts} onSelectContract={(c) => setSelected(c)}
-                    onProcess={(link) => { setProcessLink(link); const c = contracts.find((cc) => cc.num === link.sourceNum); if (c) setSelected(c) }} />
+                    onProcess={(link) => { setProcessLink(link); const c = contracts.find((cc) => cc.num === link.sourceNum); if (c) setSelected(c) }}
+                    resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} onAddTask={addTask} />
                 )}
                 {activeTab === 'risk-register' && (
                   <RiskRegisterTable
@@ -2808,13 +2889,15 @@ function App() {
                   <button onClick={() => setSelected(null)} className="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition text-sm">✕</button>
                 </div>
                 <div className="px-5 py-4">
-                  <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} />
+                  <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} onStatusOverride={(flagId) => { markFlagResolved(flagId) }} />
                 </div>
               </aside>
             )}
           </main>
         </div>
       </div>
+
+      <ToastContainer toasts={toasts} />
 
       {/* Cross-Ref Workflow Wizard (from Work Queue) */}
       {processLink && (
@@ -2828,7 +2911,7 @@ function App() {
               </div>
               <button onClick={() => setProcessLink(null)} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 text-lg">✕</button>
             </div>
-            <ProcessWizardInner link={processLink} onDone={() => setProcessLink(null)} />
+            <ProcessWizardInner link={processLink} onDone={() => setProcessLink(null)} onComplete={completeLink} />
           </div>
         </div>
       )}
