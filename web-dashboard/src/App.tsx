@@ -1759,8 +1759,11 @@ function SettingsSidebar({
 
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
-function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void) => void }) {
-  const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref'>('all')
+function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void) => void; resolvedLog?: { id: string; label: string; time: string; type: string }[]; focusFields?: string[] }) {
+  const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref' | 'pattern'>('all')
+  const [showResolved, setShowResolved] = useState(false)
+  const [patternFilter, setPatternFilter] = useState<string[]>([])
+  const [search, setSearch] = useState('')
 
   // Compute work items
   type WorkItem = {
@@ -1850,6 +1853,11 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
   const active = items.filter((i) => {
     if (resolvedFlags.has(i.id)) return false
     if (completedLinks.has(i.id)) return false
+    // If focusFields is set (from Insights), only show matching flags
+    if (focusFields && focusFields.length > 0 && i.id.startsWith('f-')) {
+      const field = i.id.split('-').slice(2).join('-')
+      if (!focusFields.some((f) => field.includes(f) || f.includes(field))) return false
+    }
     return true
   })
 
@@ -1862,7 +1870,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
     contract: allContracts.find((c) => c.num === t.contractNum) || allContracts[0],
     severity: 'high' as const,
     status: 'New',
-    action: 'Work',
+    action: 'Complete',
   }))
 
   const allItems = [...active, ...taskItems]
@@ -1873,6 +1881,10 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
 
   // Filter
   const filtered = allItems.filter((i) => {
+    if (search) {
+      const q = search.toLowerCase()
+      if (!i.what.toLowerCase().includes(q) && !i.docLabel.toLowerCase().includes(q) && !String(i.docNum).includes(q)) return false
+    }
     if (filter === 'all') return true
     if (filter === 'critical') return i.severity === 'critical'
     if (filter === 'high') return i.severity === 'high'
@@ -1920,8 +1932,15 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
         </div>
       </div>
 
-      {/* Filter chips */}
-      <div className="flex items-center gap-2 mb-4">
+      {/* Search + Filter */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <input
+          type="text"
+          placeholder="Search flags, docs…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 w-48 focus:outline-none focus:ring-2 focus:ring-teal-300"
+        />
         <button onClick={() => setFilter('all')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>All ({allItems.length})</button>
         <button onClick={() => setFilter('critical')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'critical' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-600 border-red-200 hover:border-red-400'}`}>Critical</button>
         <button onClick={() => setFilter('high')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'high' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-amber-600 border-amber-200 hover:border-amber-400'}`}>High</button>
@@ -2326,7 +2345,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
 
 
 // ── Risk Prevention Insights: cross-file pattern detection + actionable recommendations ──
-function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, resolvedFlags, completedLinks }: { contracts: ContractDoc[]; onJumpToContract?: (c: ContractDoc) => void; onSwitchTab?: (tab: string) => void; resolvedFlags?: Set<string>; completedLinks?: Set<string> }) {
+function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, resolvedFlags, completedLinks, onSetFocusFields }: { contracts: ContractDoc[]; onJumpToContract?: (c: ContractDoc) => void; onSwitchTab?: (tab: string) => void; resolvedFlags?: Set<string>; completedLinks?: Set<string>; onSetFocusFields?: (fields: string[]) => void }) {
   void completedLinks
   const rawFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
   const allFlags = rawFlags.filter((f) => {
@@ -2456,10 +2475,10 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
               </div>
             )}
             <button
-              onClick={() => onSwitchTab?.('work-queue')}
+              onClick={() => { onSetFocusFields?.(top3.map((p) => p.field)); onSwitchTab?.('work-queue') }}
               className="mt-3 w-full text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg py-2.5 transition"
             >
-              Address {allFlags.length} open flags in Work Queue →
+              Address top patterns in Work Queue →
             </button>
           </div>
         </div>
@@ -2585,13 +2604,31 @@ function ProcessWizardInner({ link, onDone, onComplete }: { link: DocLink; onDon
         <div className="text-xs font-bold text-slate-700 mb-2">{STEPS[step]} — {link.riskIfNotUpdated}</div>
         {step === 0 && <div className="text-xs text-slate-500">System detected a gap between <b>{link.sourceClause}</b> and <b>{link.targetName}</b>. Review the before/after below.</div>}
         {step === 1 && <div className="text-xs text-slate-500">You acknowledge this gap exists. Proceed to fix.</div>}
-        {step === 2 && <div className="text-xs text-slate-500">Update the target document to match the source change.</div>}
+        {step === 2 && (
+          <div className="space-y-3">
+            <div>
+              <div className="text-[10px] font-bold text-red-500 uppercase mb-1">Current text (target doc)</div>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-slate-700 font-mono whitespace-pre-wrap">
+                {link.beforeText || "No prior text recorded"}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Required text (after amendment)</div>
+              <textarea
+                defaultValue={link.afterText || link.changeDescription || "Update to match source clause..."}
+                rows={3}
+                className="w-full bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              />
+            </div>
+            <div className="text-[10px] text-slate-400">Edit the required text above, then advance to Verify.</div>
+          </div>
+        )}
         {step === 3 && <div className="text-xs text-emerald-600">Verify the fix. Both documents are now in sync.</div>}
         {step === 4 && <div className="text-xs text-slate-500">Workflow complete. No further action needed.</div>}
       </div>
 
-      {/* Before / After */}
-      {step >= 1 && step <= 3 && (
+      {/* Before / After (hidden during Fixing step which has its own editor) */}
+      {step >= 1 && step !== 3 && step <= 4 && (
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="bg-red-50 border border-red-200 rounded-lg p-3">
             <div className="text-[10px] font-bold text-red-600 uppercase mb-1">Before (current)</div>
@@ -2636,7 +2673,11 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [processLink, setProcessLink] = useState<DocLink | null>(null)
+  const [resolvedLog, setResolvedLog] = useState<{ id: string; label: string; time: string; type: string }[]>(() => {
+    try { const r = localStorage.getItem('resolvedLog'); return r ? JSON.parse(r) : [] } catch { return [] }
+  })
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
+  const [focusFields, setFocusFields] = useState<string[]>([])
   // Persisted state
   const [resolvedFlags, setResolvedFlags] = useState<Set<string>>(() => {
     try { const r = localStorage.getItem('resolvedFlags'); return r ? new Set(JSON.parse(r)) : new Set() } catch { return new Set() }
@@ -2649,6 +2690,14 @@ function App() {
   })
   const markFlagResolved = (flagId: string) => {
     setResolvedFlags((prev) => { const next = new Set(prev); next.add(flagId); localStorage.setItem('resolvedFlags', JSON.stringify([...next])); return next })
+    const parts = flagId.split('-')
+    const label = parts.length > 2 ? parts.slice(2).join('-').replace(/_/g, ' ') : flagId
+    setResolvedLog((prev) => {
+      const entry = { id: flagId, label, time: new Date().toLocaleTimeString(), type: flagId.startsWith('x-') ? 'workflow' : 'flag' }
+      const next = [entry, ...prev]
+      localStorage.setItem('resolvedLog', JSON.stringify(next))
+      return next
+    })
     show('Flag resolved ✓', 'success')
   }
   const completeLink = (linkId: string) => {
@@ -2884,6 +2933,8 @@ function App() {
                   <WorkQueueView contracts={contracts} onSelectContract={(c) => setSelected(c)}
                     onProcess={(link) => { setProcessLink(link); setSelected(null) }}
                     resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} onResolveFlag={(id) => markFlagResolved(id)}
+                    resolvedLog={resolvedLog}
+                    focusFields={focusFields}
                     onConfirmAction={(title, msg, action) => setConfirmState({ title, message: msg, onConfirm: action })} />
                 )}
                 {activeTab === 'risk-register' && (
@@ -2921,7 +2972,7 @@ function App() {
                   <SmartFilingView contracts={filtered} />
                 )}
                 {activeTab === 'insights' && (
-                  <InsightsView contracts={contracts} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} resolvedFlags={resolvedFlags} completedLinks={completedLinks} />
+                  <InsightsView contracts={contracts} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} resolvedFlags={resolvedFlags} completedLinks={completedLinks} onSetFocusFields={setFocusFields} />
                 )}
               </>
             </div>
