@@ -2428,7 +2428,7 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab }
                   </button>
                   <button
                     onClick={() => {
-                      localStorage.setItem('insightsActioned_' + item.id, JSON.stringify(item.contracts))
+                      localStorage.setItem('insightsActioned_pb' + item.contracts[0], JSON.stringify(item.contracts))
                       alert('✓ ' + item.affected + ' task(s) added to Work Queue')
                       onSwitchTab?.('work-queue')
                     }}
@@ -2457,7 +2457,6 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab }
 }
 
 
-export default 
 // ── Process Wizard (standalone, used from Work Queue) ──────────────────────
 function ProcessWizardInner({ link, onDone }: { link: DocLink; onDone: () => void }) {
   const [step, setStep] = useState(() => {
@@ -2836,3 +2835,5 @@ function App() {
     </div>
   )
 }
+
+export default App
