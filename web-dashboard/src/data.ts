@@ -312,6 +312,7 @@ export const contracts: ContractDoc[] = [
   },
       { severity: "High", field: "binding_language", flag_if: "Both binding and non-binding language present — creates legal ambiguity", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Financial", subcategory: "Contract Pricing", department: "Finance & Procurement", status: "open", source: "rule",
     ai_suggestion: 'Review and update binding language per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+  }
   
 
     ],
@@ -344,6 +345,7 @@ export const contracts: ContractDoc[] = [
 
       { severity: "Medium", field: "termination_conv", highlightField: "ninety", flag_if: "Convenience termination notice period of 90 days is excessive", likelihood: 2, impact: 2, risk_score: 4, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule",
     ai_suggestion: 'Review and update termination conv per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+  }
   
     ],
     textHighlights: [
@@ -394,6 +396,7 @@ export const contracts: ContractDoc[] = [
   },
       { severity: "Medium", field: "data_minimization", flag_if: "No data minimization principle stated", likelihood: 2, impact: 3, risk_score: 6, compliance_type: "best_practice", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office", status: "open", source: "rule",
     ai_suggestion: 'Review and update data minimization per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+  }
   
 
     ],
@@ -465,6 +468,7 @@ export const contracts: ContractDoc[] = [
   },
       { severity: "High", field: "indemnity_clause", flag_if: "Missing indemnity clause entirely", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance", status: "open", source: "rule",
     ai_suggestion: 'Review and update indemnity clause per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+  }
   
 
     ],
@@ -506,6 +510,7 @@ export const contracts: ContractDoc[] = [
   },
       { severity: "Medium", field: "termination_clause", flag_if: "Missing termination clause in both versions", likelihood: 2, impact: 3, risk_score: 6, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule",
     ai_suggestion: 'Review and update termination clause per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+  }
   
 
     ],
@@ -566,6 +571,7 @@ export const contracts: ContractDoc[] = [
   },
       { severity: "Medium", field: "expiry_date", flag_if: "Missing expiry date — cannot determine from scan", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule",
     ai_suggestion: 'Add clause: This agreement expires on [DATE]. Either party may terminate with 60 days written notice.',
+  }
   
     ],
     textHighlights: [
@@ -639,6 +645,7 @@ export const contracts: ContractDoc[] = [
   },
       { severity: "Medium", field: "audit_rights", flag_if: "No audit rights clause in base or amendment", likelihood: 2, impact: 3, risk_score: 6, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule",
     ai_suggestion: 'Review and update audit rights per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+  }
   
 
     ],

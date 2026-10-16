@@ -1812,7 +1812,6 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           severity: 'critical',
           status: f.status,
           action: 'Fix',
-          aiSuggestion: f.ai_suggestion,
         })
       } else if (f.severity === 'High' && f.status === 'open') {
         items.push({
@@ -1824,7 +1823,6 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           severity: 'high',
           status: f.status,
           action: 'Review',
-          aiSuggestion: f.ai_suggestion,
         })
       }
     }
