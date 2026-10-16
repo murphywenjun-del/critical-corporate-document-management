@@ -1481,10 +1481,7 @@ function ContractDetail({
   onStatusOverride?: (flagId: string) => void
 }) {
   const s = selected
-  const handleStatus = (field: string, _status: string) => {
-    const flagId = `f-${s.num}-${field}`
-    onStatusOverride?.(flagId)
-  }
+  void onStatusOverride
   return (
     <div>
       {/* Title */}
@@ -2611,11 +2608,7 @@ function App() {
     setCompletedLinks((prev) => { const next = new Set(prev); next.add(linkId); localStorage.setItem('completedLinks', JSON.stringify([...next])); return next })
     show('Workflow completed ✓', 'success')
   }
-  const addTask = (label: string, contractNum: number) => {
-    const task = { id: Date.now().toString(), label, contractNum, time: new Date().toLocaleTimeString() }
-    setCreatedTasks((prev) => { const next = [task, ...prev]; localStorage.setItem('createdTasks', JSON.stringify(next)); return next })
-    show('Task created in Work Queue', 'info')
-  }
+  void setCreatedTasks
 
   useEffect(() => {
     fetch('/api/results')
@@ -2843,7 +2836,7 @@ function App() {
                 {activeTab === 'work-queue' && (
                   <WorkQueueView contracts={contracts} onSelectContract={(c) => setSelected(c)}
                     onProcess={(link) => { setProcessLink(link); const c = contracts.find((cc) => cc.num === link.sourceNum); if (c) setSelected(c) }}
-                    resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} onAddTask={addTask} />
+                    resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} />
                 )}
                 {activeTab === 'risk-register' && (
                   <RiskRegisterTable
