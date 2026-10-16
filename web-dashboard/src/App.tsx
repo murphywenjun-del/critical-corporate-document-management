@@ -196,6 +196,7 @@ function RiskRegisterTable({
   onSelectContract,
   onSwitchTab,
   onFix,
+  onConfirmAction,
 }: {
   contracts: ContractDoc[]
   onSelectContract: (c: ContractDoc) => void
