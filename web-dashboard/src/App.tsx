@@ -1644,7 +1644,6 @@ function SettingsSidebar({
   selectedDept, onSelectDept,
   selectedExpiry, onSelectExpiry,
   onUpload, isUploading,
-  useAgnes, onUseAgnesChange,
   uploadError,
 }: {
   selectedType: string; onSelectType: (v: string) => void
@@ -1653,7 +1652,6 @@ function SettingsSidebar({
   selectedExpiry: string; onSelectExpiry: (v: string) => void
   onUpload: (files: FileList) => void
   isUploading: boolean
-  useAgnes: boolean; onUseAgnesChange: (v: boolean) => void
   uploadError: string | null
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
@@ -1663,74 +1661,6 @@ function SettingsSidebar({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Settings */}
-      <div>
-        <h3 className="text-sm font-bold text-slate-800 mb-3">Settings</h3>
-        <div className="space-y-4">
-          <div>
-            <label className="text-[11px] font-medium text-slate-400 block mb-1">Repository folder</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                defaultValue="research/contracts/"
-                readOnly
-                className="flex-1 text-xs bg-slate-50 border border-slate-200 rounded px-3 py-2 text-slate-500 cursor-not-allowed"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[11px] font-medium text-slate-400 block mb-1">Check expiry as of</label>
-            <input
-              type="date"
-              defaultValue="2026-10-14"
-              className="w-full text-xs bg-white border border-slate-200 rounded px-3 py-2 text-slate-700"
-            />
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-[11px] font-medium text-slate-400">Use local AI model</label>
-              <button
-                onClick={() => onUseAgnesChange(!useAgnes)}
-                className={`w-9 h-5 rounded-full transition-colors relative ${useAgnes ? 'bg-teal-500' : 'bg-slate-200'}`}
-              >
-                <span
-                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all ${
-                    useAgnes ? 'left-4.5' : 'left-0.5'
-                  }`}
-                />
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[11px] font-medium text-slate-400 block mb-1">Ollama address</label>
-            <input
-              type="text"
-              defaultValue="http://localhost:11434"
-              className="w-full text-xs bg-white border border-slate-200 rounded px-3 py-2 text-slate-700"
-            />
-          </div>
-
-          <div>
-            <label className="text-[11px] font-medium text-slate-400 block mb-1">Model</label>
-            <select className="w-full text-xs bg-white border border-slate-200 rounded px-3 py-2 text-slate-700">
-              <option>Llama 3.1 8B</option>
-              <option>Llama 3.1 70B</option>
-              <option>Llama 3 70B</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-[11px] font-medium text-slate-400 block mb-1">Signing authority</label>
-            <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded px-3 py-2">
-              VP or above required
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Filters */}
       <div>
         <h3 className="text-sm font-bold text-slate-800 mb-3">Filters</h3>
@@ -1761,27 +1691,7 @@ function SettingsSidebar({
 
 // ── Pipeline (small footer strip) ───────────────────────────────────────────
 
-function PipelineStrip() {
-  const stages = [
-    { icon: '📄', label: 'Input' },
-    { icon: '👁️', label: 'OCR' },
-    { icon: '⚙️', label: 'Rules' },
-    { icon: '🎯', label: 'Jev' },
-    { icon: '📋', label: 'Evidence' },
-    { icon: '👤', label: 'Review' },
-  ]
-  return (
-    <div className="flex items-center gap-1 text-[11px] text-slate-400">
-      {stages.map((s, i) => (
-        <span key={i} className="flex items-center gap-1">
-          <span>{s.icon}</span>
-          <span>{s.label}</span>
-          {i < stages.length - 1 && <span className="text-slate-300">→</span>}
-        </span>
-      ))}
-    </div>
-  )
-}
+
 
 // ── Main App ─────────────────────────────────────────────────────────────────
 
@@ -2315,6 +2225,7 @@ export default function App() {
   const [isUploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [useAgnes, setUseAgnes] = useState(true)
+  void setUseAgnes // toggle removed from UI; kept for API param
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
@@ -2366,12 +2277,20 @@ export default function App() {
       {/* ── Top Bar ─────────────────────────────────────────────────────────── */}
       <header className="bg-white border-b border-slate-200">
         <div className="flex items-center justify-between px-4 sm:px-6 py-3">
-          <div>
-            <h1 className="text-base font-bold text-slate-900">Southlake Health</h1>
-            <p className="text-xs text-slate-400">Document Risk Dashboard · AI-assisted contract compliance & risk assessment</p>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-teal-600 flex items-center justify-center shrink-0">
+              <span className="text-white text-xs font-bold">S</span>
+            </div>
+            <div>
+              <h1 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                Document Risk Management
+                <span className="text-[9px] font-bold text-amber-700 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5 uppercase tracking-wide">Pilot</span>
+              </h1>
+              <p className="text-[11px] text-slate-400">Southlake Health</p>
+            </div>
           </div>
           <div className="flex items-center gap-4">
-            <PipelineStrip />
+            <span className="text-[10px] text-slate-400 hidden lg:block">13 contracts · 41 flags · 58% compliance</span>
             {/* Mobile sidebar toggle */}
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -2519,8 +2438,6 @@ export default function App() {
                 selectedExpiry={filterExpiry} onSelectExpiry={setFilterExpiry}
                 onUpload={handleFileUpload}
                 isUploading={isUploading}
-                useAgnes={useAgnes}
-                onUseAgnesChange={setUseAgnes}
                 uploadError={uploadError}
               />
             )}
