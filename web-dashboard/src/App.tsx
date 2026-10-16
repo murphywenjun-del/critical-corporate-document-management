@@ -1599,28 +1599,7 @@ function ContractDetail({
             ))}
           </div>
         </section>
-        <section>
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Compliance Summary</h3>
-          <div className="bg-white border border-slate-200 rounded-lg p-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="text-center">
-                <div className="text-xl font-bold text-red-500">{s.compliance.hardGaps}</div>
-                <div className="text-[10px] text-slate-400 uppercase">Hard Gaps</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xl font-bold text-amber-500">{s.compliance.bpGaps}</div>
-                <div className="text-[10px] text-slate-400 uppercase">BP Gaps</div>
-              </div>
-            </div>
-            <div className="mt-3">
-              <div className="text-[10px] text-slate-400 mb-1">Compliance Rate</div>
-              <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full ${s.compliance.complianceRate >= 0.8 ? 'bg-emerald-500' : s.compliance.complianceRate >= 0.5 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${s.compliance.complianceRate * 100}%` }} />
-              </div>
-              <div className="text-[10px] text-slate-500 mt-1">{Math.round(s.compliance.complianceRate * 100)}% · Top risk: {s.compliance.topRiskField}</div>
-            </div>
-          </div>
-        </section>
+
       </div>
     </div>
   )
