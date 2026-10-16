@@ -2608,7 +2608,7 @@ function App() {
     show('Flag resolved ✓', 'success')
   }
   const completeLink = (linkId: string) => {
-    setCompletedLinks((prev) => { const next = new Set(prev); next.add(linkId); localStorage.setItem('completedLinks', JSON.stringify([...next])) return next })
+    setCompletedLinks((prev) => { const next = new Set(prev); next.add(linkId); localStorage.setItem('completedLinks', JSON.stringify([...next])); return next })
     show('Workflow completed ✓', 'success')
   }
   const addTask = (label: string, contractNum: number) => {
