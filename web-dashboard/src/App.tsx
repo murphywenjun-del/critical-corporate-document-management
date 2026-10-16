@@ -773,11 +773,14 @@ const L_LABELS = ['', 'Rare', 'Unlikely', 'Might happen', 'Likely', 'Will happen
 const I_LABELS = ['', 'Tiny', 'Small', 'Noticeable', 'Major', 'Severe']
 
 // @ts-ignore - inlined into Risk Register collapsible
-function RiskMatrixView({ contracts: allContracts }: { contracts: ContractDoc[] }) {
+function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contracts: ContractDoc[]; onSelectContract?: (c: ContractDoc) => void }) {
   // Collect all flags with L and I
   const rawFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
   const allFlags = rawFlags
-  
+
+  // Cell click state: [l, i] or null
+  const [selectedCell, setSelectedCell] = useState<[number, number] | null>(null)
+
   // Build the 5×5 grid
   const grid: number[][] = Array.from({ length: 5 }, () => Array(5).fill(0))
   allFlags.forEach((f) => {
@@ -801,6 +804,13 @@ function RiskMatrixView({ contracts: allContracts }: { contracts: ContractDoc[] 
     if (score >= 6) return 'text-yellow-700'
     return 'text-emerald-700'
   }
+
+  // Flags in selected cell
+  const cellFlags = selectedCell ? allFlags.filter((f) => {
+    const l = Math.min(5, Math.max(1, f.likelihood))
+    const i = Math.min(5, Math.max(1, f.impact))
+    return l === selectedCell[0] && i === selectedCell[1]
+  }) : []
 
   return (
     <div className="space-y-6">
@@ -839,9 +849,10 @@ function RiskMatrixView({ contracts: allContracts }: { contracts: ContractDoc[] 
         </div>
       </div>
 
-      {/* 5×5 Grid */}
+      {/* 5×5 Grid — clickable cells */}
       <div className="bg-white border border-slate-200 rounded-lg p-5">
-        <h3 className="text-sm font-bold text-slate-800 mb-4">Risk Matrix (flags plotted)</h3>
+        <h3 className="text-sm font-bold text-slate-800 mb-1">Risk Matrix</h3>
+        <p className="text-[11px] text-slate-400 mb-4">Click a cell to see which documents/flags fall in that risk band.</p>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px]">
             <thead>
@@ -864,8 +875,9 @@ function RiskMatrixView({ contracts: allContracts }: { contracts: ContractDoc[] 
                   </td>
                   {[1,2,3,4,5].map((i) => {
                     const count = grid[5-l][i-1]
+                    const isActive = selectedCell?.[0] === l && selectedCell?.[1] === i
                     return (
-                      <td key={i} className={`border border-slate-200 p-2 text-center ${cellColor(l,i)}`}>
+                      <td key={i} onClick={() => count > 0 && setSelectedCell(isActive ? null : [l, i])} className={`border p-2 text-center cursor-pointer transition ${cellColor(l,i)} ${isActive ? 'ring-2 ring-teal-500 ring-inset' : ''} ${count > 0 ? 'hover:brightness-95' : 'opacity-50 cursor-default'}`}>
                         <div className={`text-lg font-bold ${cellText(l,i)}`}>{l*i}</div>
                         {count > 0 && (
                           <div className="text-[10px] font-medium text-slate-600 mt-0.5">{count} flag{count>1?'s':''}</div>
@@ -878,6 +890,32 @@ function RiskMatrixView({ contracts: allContracts }: { contracts: ContractDoc[] 
             </tbody>
           </table>
         </div>
+
+        {/* Cell detail panel — shows flags in selected cell */}
+        {selectedCell && cellFlags.length > 0 && (
+          <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden">
+            <div className="px-4 py-2 bg-slate-50 border-b flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700">
+                L={selectedCell[0]} × I={selectedCell[1]} = {selectedCell[0]*selectedCell[1]} · {cellFlags.length} flag{cellFlags.length>1?'s':''}
+              </span>
+              <button onClick={() => setSelectedCell(null)} className="text-[10px] text-slate-400 hover:text-slate-600">✕ Close</button>
+            </div>
+            <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto">
+              {cellFlags.map((f, idx) => (
+                <div key={idx} onClick={() => onSelectContract?.(f.contract)} className="px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-medium text-slate-700">
+                      Contract #{f.contract.num} · {f.contract.displayName}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{f.field} · {f.flag_if?.slice(0, 60)}</div>
+                  </div>
+                  <span className="text-[10px] text-teal-600 font-medium whitespace-nowrap ml-3">Open →</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-4 mt-4 text-[10px] text-slate-500">
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100 border border-red-300"/>Critical (20–25)</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-50 border border-orange-200"/>High (12–19)</span>
@@ -3061,7 +3099,7 @@ function App() {
                       <span className="text-[10px] text-slate-400">Showing {filtered.length} contracts · {filtered.flatMap((c) => c.flags).filter((f) => f.status === 'open').length} open flags</span>
                       <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); window.location.reload() }} className="text-[9px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
                     </div>
-                    <RiskMatrixView contracts={filtered} />
+                    <RiskMatrixView contracts={filtered} onSelectContract={(c) => { setSelected(c); }} />
                     <RiskRegisterTable
                     contracts={filtered}
                     onSelectContract={(c) => { setSelected(c); }}
