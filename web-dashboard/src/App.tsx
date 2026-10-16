@@ -188,7 +188,14 @@ function RiskRegisterTable({
     return {}
   })
   useEffect(() => { localStorage.setItem('southlake_status_overrides', JSON.stringify(statusOverrides)) }, [statusOverrides])
-  const allFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
+  const rawFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
+  const allFlags = rawFlags.filter((f) => {
+    if (resolvedFlags) {
+      const flagId = `f-${f.contract.num}-${f.field}`
+      if (resolvedFlags.has(flagId)) return false
+    }
+    return true
+  })
   const filtered = allFlags.filter((f) => {
     if (selSev !== 'All' && f.severity !== selSev) return false
     if (selCat !== 'All' && f.risk_category !== selCat) return false
@@ -725,7 +732,14 @@ const I_LABELS = ['', 'Tiny', 'Small', 'Noticeable', 'Major', 'Severe']
 // @ts-ignore - inlined into Risk Register collapsible
 function RiskMatrixView({ contracts: allContracts }: { contracts: ContractDoc[] }) {
   // Collect all flags with L and I
-  const allFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
+  const rawFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
+  const allFlags = rawFlags.filter((f) => {
+    if (resolvedFlags) {
+      const flagId = `f-${f.contract.num}-${f.field}`
+      if (resolvedFlags.has(flagId)) return false
+    }
+    return true
+  })
   
   // Build the 5×5 grid
   const grid: number[][] = Array.from({ length: 5 }, () => Array(5).fill(0))
@@ -1853,15 +1867,16 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
   // Summary counts
   const counts = {
     critical: allItems.filter((i) => i.severity === 'critical').length,
-    high: items.filter((i) => i.severity === 'high').length,
-    expiring: items.filter((i) => i.id.startsWith('e-')).length,
-    crossref: items.filter((i) => i.id.startsWith('x-')).length,
+    high: allItems.filter((i) => i.severity === 'high').length,
+    expiring: allItems.filter((i) => i.id.startsWith('e-')).length,
+    crossref: allItems.filter((i) => i.id.startsWith('x-')).length,
   }
+  const totalResolved = (resolvedFlags?.size || 0) + (completedLinks?.size || 0)
 
   return (
     <div>
       {/* Summary Tiles */}
-      <div className="grid grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-5 gap-3 mb-5">
         <button onClick={() => setFilter('critical')} className={`text-left p-3 rounded-lg border transition ${filter === 'critical' ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
           <div className="text-2xl font-bold text-red-600">{counts.critical}</div>
           <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Critical</div>
@@ -1878,6 +1893,13 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           <div className="text-2xl font-bold text-blue-600">{counts.expiring}</div>
           <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Expiring</div>
         </button>
+        <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50">
+          <div className="text-2xl font-bold text-emerald-600">{totalResolved}</div>
+          <div className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide mt-0.5">Resolved</div>
+          {totalResolved > 0 && (
+            <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); window.location.reload() }} className="mt-1 text-[9px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
+          )}
+        </div>
       </div>
 
       {/* Filter chips */}
@@ -2274,8 +2296,15 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
 
 
 // ── Risk Prevention Insights: cross-file pattern detection + actionable recommendations ──
-function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab }: { contracts: ContractDoc[]; onJumpToContract?: (c: ContractDoc) => void; onSwitchTab?: (tab: string) => void }) {
-  const allFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
+function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, resolvedFlags, completedLinks }: { contracts: ContractDoc[]; onJumpToContract?: (c: ContractDoc) => void; onSwitchTab?: (tab: string) => void; resolvedFlags?: Set<string>; completedLinks?: Set<string> }) {
+  const rawFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
+  const allFlags = rawFlags.filter((f) => {
+    if (resolvedFlags) {
+      const flagId = `f-${f.contract.num}-${f.field}`
+      if (resolvedFlags.has(flagId)) return false
+    }
+    return true
+  })
   
   // 1. Systemic pattern detection: group flags by field across contracts
   const byField: Record<string, { count: number; contracts: number[]; severity: string[] }> = {}
@@ -2366,7 +2395,12 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab }
 
         {/* What-If */}
         <div className="bg-white border border-slate-200 rounded-lg p-4">
-          <div className="text-[10px] font-bold text-slate-500 uppercase mb-2">What-If: Fix Top 3 Patterns</div>
+          <div className="flex items-center gap-2">
+              <div className="text-[10px] font-bold text-slate-500 uppercase">What-If: Fix Top 3 Patterns</div>
+              {resolvedFlags && resolvedFlags.size > 0 && (
+                <span className="text-[9px] bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-bold">{resolvedFlags.size} resolved</span>
+              )}
+            </div>
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-xs">
               <span className="text-slate-400">Critical flags:</span>
@@ -2870,7 +2904,7 @@ function App() {
                   <SmartFilingView contracts={filtered} />
                 )}
                 {activeTab === 'insights' && (
-                  <InsightsView contracts={contracts} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} />
+                  <InsightsView contracts={contracts} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} resolvedFlags={resolvedFlags} completedLinks={completedLinks} />
                 )}
               </>
             </div>
