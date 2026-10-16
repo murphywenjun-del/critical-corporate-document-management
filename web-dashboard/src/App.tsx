@@ -155,8 +155,11 @@ function RiskRegisterTable({
   const [selSource, setSelSource] = useState('All')
   const [selScore, setSelScore] = useState<number | null>(null)
   const [search, setSearch] = useState('')
-  const [statusOverrides, setStatusOverrides] = useState<Record<string, string>>({})
-  void statusOverrides; void setStatusOverrides // referenced in row action buttons
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, string>>(() => {
+    try { const s = localStorage.getItem('southlake_status_overrides'); if (s) return JSON.parse(s) } catch {}
+    return {}
+  })
+  useEffect(() => { localStorage.setItem('southlake_status_overrides', JSON.stringify(statusOverrides)) }, [statusOverrides])
   const allFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
   const filtered = allFlags.filter((f) => {
     if (selSev !== 'All' && f.severity !== selSev) return false
@@ -1862,9 +1865,30 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         resp = await fetch('/api/classify-and-file', { method: 'POST', body: formData })
         if (!resp.ok) throw new Error(`proxy ${resp.status}`)
       } catch {
-        // Fallback: direct API call
-        resp = await fetch('http://localhost:8000/api/classify-and-file', { method: 'POST', body: formData })
-        if (!resp.ok) throw new Error(`API ${resp.status}`)
+        // Fallback: direct API call → keyword classification
+        try {
+          resp = await fetch('http://localhost:8000/api/classify-and-file', { method: 'POST', body: formData })
+          if (!resp.ok) throw new Error(`API ${resp.status}`)
+        } catch {
+          // Ultimate fallback: keyword-based (no AI needed)
+          const kw = (n: string) => {
+            const l = n.toLowerCase()
+            if (/(nda|agreement|contract|phr|phi)/.test(l)) return 'Operational'
+            if (/(finance|payment|invoice|budget|cost)/.test(l)) return 'Financial'
+            if (/(dr|backup|continuity|disaster|bcp)/.test(l)) return 'Continuity'
+            if (/(reputation|marketing|brand|public)/.test(l)) return 'Reputational'
+            return 'Other'
+          }
+          const fb: UploadedDoc[] = fileArr.map((f) => ({
+            filename: f.name, document_type: kw(f.name), risk_score: 50,
+            risk_level: 'Medium', flags_count: 0, flags: [],
+            text_preview: f.name, processed_at: new Date().toISOString(),
+            filed_to: `${kw(f.name)}/auto`, is_upload: true,
+          }))
+          setUploaded((p) => [...fb, ...p])
+          setUploading(false)
+          return
+        }
       }
 
       const data = await resp.json()
@@ -2394,12 +2418,12 @@ export default function App() {
       {/* ── KPI Row ────────────────────────────────────────────────────────── */}
       <div className="px-4 sm:px-6 py-4">
         <div className="max-w-screen-2xl mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <KpiCard label="Documents" value={s.totalContracts} />
-          <KpiCard label="Critical Flags" value={s.criticalCount} valueClass="text-red-600" onClick={() => { setActiveTab('risk-register'); }} />
-          <KpiCard label="Open Flags" value={contracts.flatMap((c) => c.flags).filter((f) => f.status === 'open').length} valueClass="text-orange-600" />
-          <KpiCard label="Remediated" value={contracts.flatMap((c) => c.flags).filter((f) => f.status === 'remediated').length} valueClass="text-emerald-600" />
-          <KpiCard label="Avg Compliance" value={`${Math.round(s.avgComplianceRate * 100)}%`} valueClass="text-teal-600" />
-          <KpiCard label="Clean Docs" value={contracts.filter((c) => c.flags.length === 0).length} valueClass="text-emerald-600" />
+          <KpiCard label="Documents" value={s.totalContracts} onClick={() => setActiveTab('contracts')} />
+          <KpiCard label="Critical Flags" value={s.criticalCount} valueClass="text-red-600" onClick={() => setActiveTab('risk-register')} />
+          <KpiCard label="Open Flags" value={contracts.flatMap((c) => c.flags).filter((f) => f.status === 'open').length} valueClass="text-orange-600" onClick={() => setActiveTab('risk-register')} />
+          <KpiCard label="Remediated" value={contracts.flatMap((c) => c.flags).filter((f) => f.status === 'remediated').length} valueClass="text-emerald-600" onClick={() => setActiveTab('risk-register')} />
+          <KpiCard label="Avg Compliance" value={`${Math.round(s.avgComplianceRate * 100)}%`} valueClass="text-teal-600" onClick={() => setActiveTab('insights')} />
+          <KpiCard label="Clean Docs" value={contracts.filter((c) => c.flags.length === 0).length} valueClass="text-emerald-600" onClick={() => setActiveTab('contracts')} />
         </div>
 
         {/* Risk Distribution + Top Actions */}
@@ -2521,16 +2545,14 @@ export default function App() {
             <div className="fixed inset-0 z-30 bg-black/20 lg:hidden" onClick={() => setSidebarOpen(false)} />
           )}
 
-          {/* Main Content */}
-          <main className="flex-1 min-w-0 overflow-x-auto">
-            {selected ? (
-              <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} />
-            ) : (
+          {/* Main Content + Detail Panel */}
+          <main className="flex-1 min-w-0 overflow-x-auto flex">
+            <div className="flex-1 min-w-0">
               <>
                 {activeTab === 'risk-register' && (
                   <RiskRegisterTable
                     contracts={filtered}
-                    onSelectContract={(c) => { setSelected(c); setActiveTab('contracts') }}
+                    onSelectContract={(c) => { setSelected(c); }}
                     onSwitchTab={(tab) => setActiveTab(tab)}
                   />
                 )}
@@ -2541,15 +2563,15 @@ export default function App() {
 
                     <ContractList
                       contracts={filtered}
-                      selectedNum={null}
+                      selectedNum={selected?.num ?? null}
                       onSelect={(c) => setSelected(c)}
                     />
                   </div>
                 )}
                 {activeTab === 'deadlines' && (
                   <div>
-                    <DeadlinesTimeline contracts={filtered} onSelectContract={(c) => { setSelected(c); setActiveTab('contracts') }} />
-                    <DeadlinesTable contracts={filtered} onSelectContract={(c) => { setSelected(c); setActiveTab('contracts') }} />
+                    <DeadlinesTimeline contracts={filtered} onSelectContract={(c) => { setSelected(c); }} />
+                    <DeadlinesTable contracts={filtered} onSelectContract={(c) => { setSelected(c); }} />
                   </div>
                 )}
                 {activeTab === 'cross-refs' && (
@@ -2559,9 +2581,15 @@ export default function App() {
                   <SmartFilingView contracts={filtered} />
                 )}
                 {activeTab === 'insights' && (
-                  <InsightsView contracts={contracts} onJumpToContract={(c) => { setSelected(c); setActiveTab('contracts') }} />
+                  <InsightsView contracts={contracts} onJumpToContract={(c) => { setSelected(c); }} />
                 )}
               </>
+            </div>
+            {/* Right-side detail panel */}
+            {selected && (
+              <aside className="w-[420px] shrink-0 border-l border-slate-200 bg-white overflow-y-auto max-h-[calc(100vh-56px)]">
+                <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} />
+              </aside>
             )}
           </main>
         </div>
