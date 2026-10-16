@@ -1444,24 +1444,17 @@ function AmendmentsView({ contracts: allContracts, onSelect }: { contracts: Cont
 
 function ContractDetail({
   selected,
-  onBack,
   docLinks: allDocLinks,
 }: {
   selected: ContractDoc
-  onBack: () => void
+  onBack?: () => void
   docLinks: DocLink[]
 }) {
   const s = selected
   return (
     <div>
-      {/* Breadcrumb + header */}
-      <div className="flex items-center gap-2 mb-4">
-        <button onClick={onBack} className="text-xs text-teal-600 hover:text-teal-800 flex items-center gap-1">
-          ← Back to list
-        </button>
-        <span className="text-xs text-slate-300">/</span>
-        <span className="text-xs text-slate-500">ContractDoc #{s.num}</span>
-      </div>
+      {/* Title */}
+      <div className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Contract #{s.num}</div>
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
@@ -2587,8 +2580,14 @@ export default function App() {
             </div>
             {/* Right-side detail panel */}
             {selected && (
-              <aside className="w-[420px] shrink-0 border-l border-slate-200 bg-white overflow-y-auto max-h-[calc(100vh-56px)]">
-                <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} />
+              <aside className="w-[440px] shrink-0 border-l-2 border-slate-300 bg-slate-50 overflow-y-auto max-h-[calc(100vh-56px)] shadow-[-8px_0_24px_rgba(0,0,0,0.06)]">
+                <div className="sticky top-0 bg-slate-50 border-b border-slate-200 px-5 py-3 flex items-center justify-between z-10">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Contract Detail</span>
+                  <button onClick={() => setSelected(null)} className="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition text-sm">✕</button>
+                </div>
+                <div className="px-5 py-4">
+                  <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} />
+                </div>
               </aside>
             )}
           </main>
