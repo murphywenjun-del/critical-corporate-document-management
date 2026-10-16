@@ -10,8 +10,8 @@ export interface Flag {
   impact: number       // 1-5
   risk_score: number   // L × I (1-25)
   compliance_type: 'hard' | 'best_practice'
-  risk_category: string // HEROC: Operational | Financial | Reputational | Continuity
-  subcategory: string  // HEROC subcategory (e.g. Clinical Practice, Data Privacy & PHIPA)
+  risk_category: string // HIROC: Operational | Financial | Reputational | Continuity
+  subcategory: string  // HIROC subcategory (e.g. Clinical Practice, Data Privacy & PHIPA)
   department: string   // Southlake department affected
   status: string       // 'open' | 'remediated' | 'accepted'
   source: string       // 'rule' | 'ai_scan'
@@ -120,8 +120,8 @@ export const SOUTHDEPARTMENTS = [
 
 export type SouthlakeDept = typeof SOUTHDEPARTMENTS[number]
 
-// ── HEROC subcategories (2-level) ───────────────────────────────────────────────
-export const HEROC_SUBCATS: Record<string, string[]> = {
+// ── HIROC subcategories (2-level) ───────────────────────────────────────────────
+export const HIROC_SUBCATS: Record<string, string[]> = {
   'Operational': [
     'Clinical Practice',
     'Staffing & HR',
@@ -165,7 +165,7 @@ export const SUBCAT_DEPT: Record<string, string> = {
 }
 
 
-// ── Clinical dept → HEROC subcategory mapping (Southlake) ─────────────
+// ── Clinical dept → HIROC subcategory mapping (Southlake) ─────────────
 // Each subcategory maps to the clinical departments most exposed to that risk type.
 export const SUBCAT_DEPTS: Record<string, string[]> = {
   'Clinical Practice': [

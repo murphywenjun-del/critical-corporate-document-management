@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { contracts, portfolioStats, docLinks, HEROC_SUBCATS, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type ContractDoc, type Amendment, type DocLink } from './data'
+import { contracts, portfolioStats, docLinks, HIROC_SUBCATS, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type ContractDoc, type Amendment, type DocLink } from './data'
 
 
 // ── Toast Notification System ──────────────────────────────────────────────
@@ -259,7 +259,7 @@ function RiskRegisterTable({
   const categories = ['All', ...Array.from(new Set(allFlags.map((f) => f.risk_category).filter(Boolean))) as string[]]
   const subcats = selCat === 'All'
     ? ['All', ...Array.from(new Set(allFlags.map((f) => f.subcategory).filter(Boolean))) as string[]]
-    : ['All', ...(HEROC_SUBCATS[selCat] || [])]
+    : ['All', ...(HIROC_SUBCATS[selCat] || [])]
   // Clinical depts: context-aware — if sub selected, show depts under that sub; else all
   const clinDepts = selSub === 'All'
     ? ['All', ...SOUTHDEPARTMENTS]
@@ -385,7 +385,7 @@ function RiskRegisterTable({
       <div className="mb-4">
         <div className="flex gap-6 flex-wrap">
           <TagSelector label="Severity" options={['All', 'Critical', 'High', 'Medium', 'Low']} selected={selSev} onChange={setSelSev} />
-          <TagSelector label="HEROC Category" options={categories} selected={selCat} onChange={setSelCat} />
+          <TagSelector label="HIROC Category" options={categories} selected={selCat} onChange={setSelCat} />
           <TagSelector label="Status" options={['All', 'open', 'remediated', 'accepted']} selected={selFlagStatus} onChange={setSelFlagStatus} />
           <details className="text-[11px] text-slate-400">
             <summary className="cursor-pointer hover:text-slate-600 py-1">More filters ▾</summary>
@@ -924,12 +924,12 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contrac
         </div>
       </div>
 
-      {/* HEROC Taxonomy — full 4→14→22 hierarchy */}
+      {/* HIROC Taxonomy — full 4→14→22 hierarchy */}
       <div className="bg-white border border-slate-200 rounded-lg p-5">
-        <h3 className="text-sm font-bold text-slate-800 mb-1">HEROC Taxonomy — 4 Categories · 14 Subcategories · 22 Departments</h3>
+        <h3 className="text-sm font-bold text-slate-800 mb-1">HIROC Taxonomy — 4 Categories · 14 Subcategories · 22 Departments</h3>
         <p className="text-[11px] text-slate-400 mb-4">Each flag is classified into a category → subcategory → affected department.</p>
         <div className="grid grid-cols-4 gap-3">
-          {Object.entries(HEROC_SUBCATS).map(([cat, subcats]) => {
+          {Object.entries(HIROC_SUBCATS).map(([cat, subcats]) => {
             const catFlags = allFlags.filter((f) => f.risk_category === cat)
             const avgScore = catFlags.length ? Math.round(catFlags.reduce((s,f) => s+f.risk_score, 0) / catFlags.length) : 0
             return (
@@ -2248,7 +2248,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
     addToTree(cat, sub, { label: `#${c.num} ${c.displayName}`, num: c.num, riskLevel: c.riskLevel, flagsCount: c.flagsCount || cFlags.length, isUploaded: false })
   }
 
-  // Uploaded docs: HEROC category (from top flag) + document type (as sub-folder)
+  // Uploaded docs: HIROC category (from top flag) + document type (as sub-folder)
   for (const u of uploaded) {
     const flags = u.flags || []
     const topFlag = flags.slice().sort((a, b) => (a.severity === 'Critical' ? 3 : a.severity === 'High' ? 2 : 1) - (b.severity === 'Critical' ? 3 : b.severity === 'High' ? 2 : 1))[0]
@@ -2264,7 +2264,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
       {/* Header */}
       <div>
         <h2 className="text-sm font-bold text-slate-800">AI Smart Filing</h2>
-        <p className="text-xs text-slate-500 mt-0.5">Upload → AI classifies → auto-files to HEROC folders. No manual step needed.</p>
+        <p className="text-xs text-slate-500 mt-0.5">Upload → AI classifies → auto-files to HIROC folders. No manual step needed.</p>
       </div>
 
       {/* API Server Warning */}
@@ -2340,7 +2340,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">
           FOLDER STRUCTURE
           <span className="font-normal text-slate-400 ml-2">
-            5 HEROC categories · {Object.values(diskTree).reduce((a, v) => a + Object.values(v.subcategories).reduce((b, files) => b + files.length, 0), 0)} files on disk
+            5 HIROC categories · {Object.values(diskTree).reduce((a, v) => a + Object.values(v.subcategories).reduce((b, files) => b + files.length, 0), 0)} files on disk
           </span>
         </div>
         <div className="divide-y divide-slate-100">
@@ -2415,7 +2415,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         <div className="text-[10px] font-bold text-slate-500 uppercase mb-1.5">Filing Logic</div>
         <ul className="text-[11px] text-slate-600 space-y-0.5 list-disc pl-4">
           <li><b>Upload</b> → OCR + Agnes extraction + rules engine (server.py port 8000)</li>
-          <li><b>Category</b> → HEROC from highest-severity flag (Operational / Financial / Reputational / Continuity)</li>
+          <li><b>Category</b> → HIROC from highest-severity flag (Operational / Financial / Reputational / Continuity)</li>
           <li><b>Subcategory</b> → 14 subcategories mapped to Southlake departments</li>
           <li><b>Confidence</b> → 95% (0 flags) · 88% (1-2) · 72% (3-5) · 55% (6+)</li>
           <li><b>Clean docs</b> → filed to "Clean / Unfiled" until flags appear</li>
@@ -2430,7 +2430,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
             <div className="text-sm font-bold text-slate-800 mb-2">📄 {fd.split('/').pop()}</div>
             <div className="text-xs text-slate-500 space-y-1.5">
               <div><b>Full path:</b> <code className="text-teal-700 break-all">{fd}</code></div>
-              <div><b>HEROC Category:</b> {fd.split('/').find((p) => ['Operational','Financial','Reputational','Continuity','Clean'].includes(p)) || 'Unknown'}</div>
+              <div><b>HIROC Category:</b> {fd.split('/').find((p) => ['Operational','Financial','Reputational','Continuity','Clean'].includes(p)) || 'Unknown'}</div>
               <div><b>Subcategory:</b> {fd.split('/').slice(-2, -1)[0] || 'N/A'}</div>
               <div className="text-slate-400 mt-2">Stored at <code className="text-slate-600">data/archive/{fd}</code></div>
             </div>
@@ -2689,7 +2689,7 @@ function getAIProposal(field: string, contractName: string): string {
     if (field.includes(key) || key.includes(field)) return val
   }
   // Generic fallback
-  return `Update ${contractName} to address: "${field}"\n\nProposed clause:\n"[To be drafted by Legal — reference HEROC category and applicable regulatory requirement]"\n\n[Ref: ${contractName} — pending legal review]`
+  return `Update ${contractName} to address: "${field}"\n\nProposed clause:\n"[To be drafted by Legal — reference HIROC category and applicable regulatory requirement]"\n\n[Ref: ${contractName} — pending legal review]`
 }
 
 // ── Process Wizard (standalone, used from Work Queue) ──────────────────────
@@ -2971,9 +2971,9 @@ function App() {
 
         {/* Risk Distribution + Top Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Risk distribution by HEROC */}
+          {/* Risk distribution by HIROC */}
           <div className="bg-white border border-slate-200 rounded-lg p-4">
-            <div className="text-xs font-bold text-slate-700 mb-3">Risk Distribution by HEROC Category</div>
+            <div className="text-xs font-bold text-slate-700 mb-3">Risk Distribution by HIROC Category</div>
             {(['Operational', 'Financial', 'Reputational', 'Continuity'] as const).map((cat) => {
               const catFlags = contracts.flatMap((c) => c.flags).filter((f) => f.risk_category === cat)
               const total = contracts.flatMap((c) => c.flags).length || 1
