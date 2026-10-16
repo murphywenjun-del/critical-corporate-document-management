@@ -2812,6 +2812,57 @@ function App() {
     return true
   })
 
+  const [logged_in, setLoggedIn] = useState(() => localStorage.getItem('sl_auth') === '1')
+  const [loginId, setLoginId] = useState('')
+  const [loginPw, setLoginPw] = useState('')
+  const [loginError, setLoginError] = useState('')
+  const handleLogin = () => {
+    if (loginId.trim() === 'SL1123' && loginPw === '123123') {
+      localStorage.setItem('sl_auth', '1')
+      setLoggedIn(true)
+    } else {
+      setLoginError('Invalid credentials. Try ID: SL1123 / PW: 123123')
+    }
+  }
+  const handleLogout = () => {
+    localStorage.removeItem('sl_auth')
+    setLoggedIn(false)
+  }
+
+  if (!logged_in) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-6">
+            <div className="w-12 h-12 rounded-xl bg-teal-600 flex items-center justify-center mx-auto mb-3">
+              <span className="text-white text-lg font-bold">S</span>
+            </div>
+            <h1 className="text-white text-lg font-bold">Document Risk Management</h1>
+            <p className="text-slate-400 text-xs mt-1">Southlake Health · Pilot</p>
+          </div>
+          <div className="bg-white rounded-xl p-6 shadow-2xl">
+            <h2 className="text-sm font-bold text-slate-700 mb-4">Sign in</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] font-medium text-slate-500 block mb-1">Employee ID / Email</label>
+                <input value={loginId} onChange={(e) => setLoginId(e.target.value)} placeholder="e.g. SL1123" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-slate-500 block mb-1">Password</label>
+                <input type="password" value={loginPw} onChange={(e) => setLoginPw(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleLogin()} placeholder="••••••" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+              </div>
+              {loginError && <p className="text-[11px] text-red-500">{loginError}</p>}
+              <button onClick={handleLogin} className="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium py-2.5 rounded-lg transition">
+                Sign in
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-4 text-center">PHI is not transmitted. All data stays on-site.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
       {/* ── Top Bar ─────────────────────────────────────────────────────────── */}
@@ -2831,6 +2882,10 @@ function App() {
           </div>
           <div className="flex items-center gap-4">
             <span className="text-[10px] text-slate-400 hidden lg:block">13 contracts · 41 flags · 58% compliance</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded px-2 py-0.5">SL1123</span>
+              <button onClick={handleLogout} className="text-[10px] text-slate-400 hover:text-slate-600 transition">Sign out</button>
+            </div>
             {/* Mobile sidebar toggle */}
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
