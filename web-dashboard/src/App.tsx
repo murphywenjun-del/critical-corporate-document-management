@@ -1699,7 +1699,6 @@ function SettingsSidebar({
 function WorkQueueView({ contracts: allContracts, onSelectContract }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void }) {
   // Gather actionable items
   const criticalFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c }))).filter((f) => f.severity === 'Critical')
-  const openCrossRefs = docLinks.filter((d) => d.state !== 'closed' && d.state !== 'verified')
   const pendingAmendments = allContracts.filter((c) => c.amendments && c.amendments.length > 0).flatMap((c) => c.amendments!.map((a) => ({ ...a, contract: c })))
   const expiringSoon = allContracts.filter((c) => c.expiryDate && (new Date(c.expiryDate).getTime() - Date.now()) < 90 * 24 * 3600 * 1000)
 
@@ -1727,14 +1726,15 @@ function WorkQueueView({ contracts: allContracts, onSelectContract }: { contract
   }
 
   // Open cross-refs → high
+  const openCrossRefs = docLinks.filter((d) => d.status !== 'synced')
   for (const d of openCrossRefs.slice(0, 3)) {
     items.push({
       priority: 'high',
       icon: '🔗',
-      title: `${d.sourceName} → ${d.targetName}`,
+      title: `#${d.sourceNum} ${d.sourceClause} → ${d.targetName}`,
       detail: d.changeDescription,
       contract: allContracts.find((c) => c.num === d.sourceNum),
-      action: `Process (${d.state})`,
+      action: `Process (${d.status})`,
     })
   }
 
@@ -1823,7 +1823,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract }: { contract
         <div className="flex items-center gap-4 text-[11px] text-slate-400">
           <span>📄 {allContracts.length} documents</span>
           <span>🚨 {allContracts.flatMap((c) => c.flags).filter((f) => f.severity === 'Critical').length} critical flags</span>
-          <span>🔗 {docLinks.filter((d) => d.state !== 'closed').length} open cross-refs</span>
+          <span>🔗 {docLinks.filter((d) => d.status !== 'synced').length} open cross-refs</span>
           <span>⏰ {expiringSoon.length} expiring &lt;90d</span>
         </div>
       </div>
