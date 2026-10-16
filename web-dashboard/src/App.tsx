@@ -455,7 +455,7 @@ function RiskRegisterTable({
                     ) : resolvedFlags?.has(`f-${f.contract.num}-${f.field}`) ? (
                       <span className="text-[9px] text-emerald-600 font-bold">✓ Resolved</span>
                     ) : (
-                      <button onClick={(e) => { e.stopPropagation(); onConfirmAction?.(`Resolve Flag`, `"${f.field}"\n\nDocument: ${f.contract.displayName} (#${f.contract.num})\nSeverity: ${f.severity}\nL×I: ${f.L}×${f.I} = ${f.risk_score}`, () => { setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })); onFix?.(`f-${f.contract.num}-${f.field}`) }, true) }} className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition">Fix</button>
+                      <button onClick={(e) => { e.stopPropagation(); onConfirmAction?.(`Resolve Flag`, `"${f.field}"\n\nDocument: ${f.contract.displayName} (#${f.contract.num})\nSeverity: ${f.severity}\nL×I: ${f.likelihood}×${f.impact} = ${f.risk_score}`, () => { setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })); onFix?.(`f-${f.contract.num}-${f.field}`) }, true) }} className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition">Fix</button>
                     )}
                   </div>
                 </td>
