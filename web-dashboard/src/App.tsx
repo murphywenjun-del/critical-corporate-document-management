@@ -71,6 +71,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'work-queue', label: 'Work Queue' },
   { id: 'risk-register', label: 'Risk Register' },
   { id: 'contracts', label: 'Documents' },
+  { id: 'deadlines', label: 'Deadlines' },
   { id: 'cross-refs', label: 'Workflows' },
   { id: 'smart-filing', label: 'Filing' },
   { id: 'insights', label: 'Insights' },
