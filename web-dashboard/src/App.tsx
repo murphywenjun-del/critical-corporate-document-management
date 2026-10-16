@@ -2316,6 +2316,7 @@ export default function App() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [useAgnes, setUseAgnes] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
     fetch('/api/results')
@@ -2482,10 +2483,11 @@ export default function App() {
           {/* Sidebar */}
           <aside
             className={`
-              fixed inset-y-0 left-0 z-40 w-72 bg-white border-r border-slate-200 p-5 overflow-y-auto
-              transform transition-transform duration-200
-              lg:relative lg:inset-auto lg:translate-x-0 lg:shrink-0 lg:w-64
-              ${sidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:translate-x-0'}
+              fixed inset-y-0 left-0 z-40 bg-white border-r border-slate-200 p-5 overflow-y-auto
+              transform transition-all duration-200
+              lg:relative lg:inset-auto lg:translate-x-0 lg:shrink-0
+              ${sidebarCollapsed ? 'lg:w-10 lg:p-2' : 'lg:w-64'}
+              ${sidebarOpen ? 'translate-x-0 shadow-2xl w-72' : '-translate-x-full lg:translate-x-0'}
               top-14 bottom-0
             `}
           >
@@ -2498,17 +2500,30 @@ export default function App() {
               </svg>
             </button>
 
-            <SettingsSidebar
-              selectedType={filterType} onSelectType={setFilterType}
-              selectedRisk={filterRisk} onSelectRisk={setFilterRisk}
-              selectedDept={filterDept} onSelectDept={setFilterDept}
-              selectedExpiry={filterExpiry} onSelectExpiry={setFilterExpiry}
-              onUpload={handleFileUpload}
-              isUploading={isUploading}
-              useAgnes={useAgnes}
-              onUseAgnesChange={setUseAgnes}
-              uploadError={uploadError}
-            />
+            {/* Desktop collapse toggle */}
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="hidden lg:block w-7 h-7 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 hover:text-teal-600 hover:border-teal-300 transition text-xs font-bold mb-4"
+              title={sidebarCollapsed ? "展开 Settings" : "收起 Settings"}
+            >
+              {sidebarCollapsed ? '»' : '«'}
+            </button>
+
+            {sidebarCollapsed ? (
+              <div className="hidden lg:block text-center text-[9px] text-slate-400 mt-2">Settings</div>
+            ) : (
+              <SettingsSidebar
+                selectedType={filterType} onSelectType={setFilterType}
+                selectedRisk={filterRisk} onSelectRisk={setFilterRisk}
+                selectedDept={filterDept} onSelectDept={setFilterDept}
+                selectedExpiry={filterExpiry} onSelectExpiry={setFilterExpiry}
+                onUpload={handleFileUpload}
+                isUploading={isUploading}
+                useAgnes={useAgnes}
+                onUseAgnesChange={setUseAgnes}
+                uploadError={uploadError}
+              />
+            )}
           </aside>
 
           {/* Mobile backdrop */}
