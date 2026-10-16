@@ -189,13 +189,7 @@ function RiskRegisterTable({
   })
   useEffect(() => { localStorage.setItem('southlake_status_overrides', JSON.stringify(statusOverrides)) }, [statusOverrides])
   const rawFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
-  const allFlags = rawFlags.filter((f) => {
-    if (resolvedFlags) {
-      const flagId = `f-${f.contract.num}-${f.field}`
-      if (resolvedFlags.has(flagId)) return false
-    }
-    return true
-  })
+  const allFlags = rawFlags
   const filtered = allFlags.filter((f) => {
     if (selSev !== 'All' && f.severity !== selSev) return false
     if (selCat !== 'All' && f.risk_category !== selCat) return false
