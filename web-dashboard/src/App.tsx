@@ -2994,6 +2994,10 @@ function App() {
                 )}
                 {activeTab === 'risk-register' && (
                   <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400">Showing {filtered.length} contracts · {filtered.flatMap((c) => c.flags).filter((f) => f.status === 'open').length} open flags</span>
+                      <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); window.location.reload() }} className="text-[9px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
+                    </div>
                     <RiskMatrixView contracts={filtered} />
                     <RiskRegisterTable
                     contracts={filtered}
