@@ -1760,9 +1760,8 @@ function SettingsSidebar({
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
 function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void) => void; resolvedLog?: { id: string; label: string; time: string; type: string }[]; focusFields?: string[] }) {
-  const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref' | 'pattern'>('all')
+  const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref'>('all')
   const [showResolved, setShowResolved] = useState(false)
-  const [patternFilter, setPatternFilter] = useState<string[]>([])
   const [search, setSearch] = useState('')
 
   // Compute work items
@@ -1890,7 +1889,6 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
     if (filter === 'high') return i.severity === 'high'
     if (filter === 'expiring') return i.id.startsWith('e-')
     if (filter === 'crossref') return i.id.startsWith('x-')
-    if (filter === 'tasks') return i.id.startsWith('t-')
     return true
   })
 
