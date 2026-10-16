@@ -1778,7 +1778,7 @@ function SettingsSidebar({
 
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
-function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string) => void; resolvedLog?: { id: string; label: string; time: string; type: string }[]; focusFields?: string[] }) {
+function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[] }) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref'>('all')
   const [showResolved, setShowResolved] = useState(false)
   const [search, setSearch] = useState('')
@@ -2048,11 +2048,16 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
             <span className="text-[10px] text-emerald-500">{showResolved ? '▲ Hide' : '▼ Show'}</span>
           </button>
           {showResolved && (
-            <div className="divide-y divide-emerald-100 max-h-40 overflow-y-auto">
+            <div className="divide-y divide-emerald-100 max-h-48 overflow-y-auto">
               {resolvedLog.slice(0, 10).map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between px-4 py-2 text-[11px]">
-                  <span className="font-medium text-slate-700">{entry.label}</span>
-                  <span className="text-slate-400">{entry.time}</span>
+                <div key={entry.id} className="px-4 py-2 text-[11px]">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-slate-700">{entry.label}</span>
+                    <span className="text-slate-400">{entry.time}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    Resolved by: <span className="font-medium text-slate-500">{entry.who || 'You'}</span> · {entry.type === 'workflow' ? 'Cross-Ref' : 'Flag'}
+                  </div>
                 </div>
               ))}
             </div>
@@ -2728,7 +2733,7 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [processLink, setProcessLink] = useState<DocLink | null>(null)
-  const [resolvedLog, setResolvedLog] = useState<{ id: string; label: string; time: string; type: string }[]>(() => {
+  const [resolvedLog, setResolvedLog] = useState<{ id: string; label: string; time: string; type: string; who?: string }[]>(() => {
     try { const r = localStorage.getItem('resolvedLog'); return r ? JSON.parse(r) : [] } catch { return [] }
   })
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: (note?: string) => void; showNote?: boolean; defaultNote?: string } | null>(null)
@@ -2746,9 +2751,12 @@ function App() {
   const markFlagResolved = (flagId: string) => {
     setResolvedFlags((prev) => { const next = new Set(prev); next.add(flagId); localStorage.setItem('resolvedFlags', JSON.stringify([...next])); return next })
     const parts = flagId.split('-')
-    const label = parts.length > 2 ? parts.slice(2).join('-').replace(/_/g, ' ') : flagId
+    const fieldLabel = parts.length > 2 ? parts.slice(2).join('-').replace(/_/g, ' ') : flagId
+    const docNum = parts[1] ? '#' + parts[1] : ''
+    const now = new Date()
+    const dateTime = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     setResolvedLog((prev) => {
-      const entry = { id: flagId, label, time: new Date().toLocaleTimeString(), type: flagId.startsWith('x-') ? 'workflow' : 'flag' }
+      const entry = { id: flagId, label: `${fieldLabel} → ${docNum}`, who: 'You', time: dateTime, type: flagId.startsWith('x-') ? 'workflow' : 'flag' }
       const next = [entry, ...prev]
       localStorage.setItem('resolvedLog', JSON.stringify(next))
       return next
