@@ -65,14 +65,14 @@ function KpiCard({ label, value, valueClass, onClick }: { label: string; value: 
 
 // ── Tab Bar ───────────────────────────────────────────────────────────────────
 
-type TabId = 'risk-register' | 'contracts' | 'deadlines' | 'cross-refs' | 'smart-filing' | 'insights'
+type TabId = 'work-queue' | 'risk-register' | 'contracts' | 'deadlines' | 'cross-refs' | 'smart-filing' | 'insights'
 
 const TABS: Array<{ id: TabId; label: string }> = [
+  { id: 'work-queue', label: 'Work Queue' },
   { id: 'risk-register', label: 'Risk Register' },
-  { id: 'contracts', label: 'Contracts' },
-  { id: 'deadlines', label: 'Deadlines' },
-  { id: 'cross-refs', label: 'Cross-Refs' },
-  { id: 'smart-filing', label: 'Smart Filing' },
+  { id: 'contracts', label: 'Documents' },
+  { id: 'cross-refs', label: 'Workflows' },
+  { id: 'smart-filing', label: 'Filing' },
   { id: 'insights', label: 'Insights' },
 ]
 
@@ -1693,6 +1693,144 @@ function SettingsSidebar({
 
 
 
+
+// ── Work Queue View (action-oriented workspace) ─────────────────────────────
+
+function WorkQueueView({ contracts: allContracts, onSelectContract }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void }) {
+  // Gather actionable items
+  const criticalFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c }))).filter((f) => f.severity === 'Critical')
+  const openCrossRefs = docLinks.filter((d) => d.state !== 'closed' && d.state !== 'verified')
+  const pendingAmendments = allContracts.filter((c) => c.amendments && c.amendments.length > 0).flatMap((c) => c.amendments!.map((a) => ({ ...a, contract: c })))
+  const expiringSoon = allContracts.filter((c) => c.expiryDate && (new Date(c.expiryDate).getTime() - Date.now()) < 90 * 24 * 3600 * 1000)
+
+  type WorkItem = {
+    priority: 'critical' | 'high' | 'medium'
+    icon: string
+    title: string
+    detail: string
+    contract?: ContractDoc
+    action: string
+  }
+
+  const items: WorkItem[] = []
+
+  // Critical flags → top priority
+  for (const f of criticalFlags.slice(0, 5)) {
+    items.push({
+      priority: 'critical',
+      icon: '🚨',
+      title: `${f.flag_if}`,
+      detail: `#${f.contract.num} ${f.contract.displayName}`,
+      contract: f.contract,
+      action: 'Review & Fix',
+    })
+  }
+
+  // Open cross-refs → high
+  for (const d of openCrossRefs.slice(0, 3)) {
+    items.push({
+      priority: 'high',
+      icon: '🔗',
+      title: `${d.sourceName} → ${d.targetName}`,
+      detail: d.changeDescription,
+      contract: allContracts.find((c) => c.num === d.sourceNum),
+      action: `Process (${d.state})`,
+    })
+  }
+
+  // Pending amendments → high
+  for (const a of pendingAmendments.slice(0, 2)) {
+    items.push({
+      priority: 'high',
+      icon: '📝',
+      title: a.label,
+      detail: `Affects #${a.contract.num} ${a.contract.displayName}`,
+      contract: a.contract,
+      action: 'Review',
+    })
+  }
+
+  // Expiring soon → medium
+  for (const c of expiringSoon.slice(0, 2)) {
+    items.push({
+      priority: 'medium',
+      icon: '⏰',
+      title: `${c.displayName} expiring`,
+      detail: `Expiry: ${c.expiryDate} · ${c.type}`,
+      contract: c,
+      action: 'Renew / Escalate',
+    })
+  }
+
+  // Sort by priority
+  const prioOrder: Record<string, number> = { critical: 0, high: 1, medium: 2 }
+  items.sort((a, b) => prioOrder[a.priority] - prioOrder[b.priority])
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="mb-6">
+        <h2 className="text-lg font-bold text-slate-900">Work Queue</h2>
+        <p className="text-xs text-slate-500 mt-0.5">{items.filter((i) => i.priority === 'critical').length} critical · {items.filter((i) => i.priority === 'high').length} high · {items.filter((i) => i.priority === 'medium').length} medium</p>
+      </div>
+
+      {/* Action cards */}
+      <div className="space-y-3">
+        {items.map((item, i) => (
+          <div
+            key={i}
+            className={`border rounded-lg p-4 flex items-start gap-3 cursor-pointer transition hover:shadow-sm ${
+              item.priority === 'critical' ? 'border-red-200 bg-red-50/40' :
+              item.priority === 'high' ? 'border-amber-200 bg-amber-50/30' :
+              'border-slate-200 bg-white'
+            }`}
+            onClick={() => item.contract && onSelectContract(item.contract)}
+          >
+            <span className="text-lg shrink-0 mt-0.5">{item.icon}</span>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold text-slate-800 truncate">{item.title}</div>
+              <div className="text-xs text-slate-500 mt-0.5 truncate">{item.detail}</div>
+            </div>
+            <div className="shrink-0 flex items-center gap-2">
+              <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                item.priority === 'critical' ? 'bg-red-100 text-red-700' :
+                item.priority === 'high' ? 'bg-amber-100 text-amber-700' :
+                'bg-slate-100 text-slate-500'
+              }`}>
+                {item.priority}
+              </span>
+              <button
+                onClick={(e) => { e.stopPropagation(); item.contract && onSelectContract(item.contract) }}
+                className="text-xs font-medium text-teal-600 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 rounded px-2.5 py-1 transition"
+              >
+                {item.action} →
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {items.length === 0 && (
+          <div className="text-center py-12">
+            <div className="text-3xl mb-2">✅</div>
+            <div className="text-sm font-semibold text-slate-700">All clear</div>
+            <div className="text-xs text-slate-400 mt-1">No pending actions. Check back after new uploads.</div>
+          </div>
+        )}
+      </div>
+
+      {/* Quick stats footer */}
+      <div className="mt-8 pt-4 border-t border-slate-100">
+        <div className="flex items-center gap-4 text-[11px] text-slate-400">
+          <span>📄 {allContracts.length} documents</span>
+          <span>🚨 {allContracts.flatMap((c) => c.flags).filter((f) => f.severity === 'Critical').length} critical flags</span>
+          <span>🔗 {docLinks.filter((d) => d.state !== 'closed').length} open cross-refs</span>
+          <span>⏰ {expiringSoon.length} expiring &lt;90d</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main App ─────────────────────────────────────────────────────────────────
 
 
@@ -2215,7 +2353,7 @@ function InsightsView({ contracts: allContracts, onJumpToContract }: { contracts
 
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabId>('risk-register')
+  const [activeTab, setActiveTab] = useState<TabId>('work-queue')
   const [selected, setSelected] = useState<ContractDoc | null>(null)
   const [filterType, setFilterType] = useState('All')
   const [filterRisk, setFilterRisk] = useState('All')
@@ -2452,6 +2590,9 @@ export default function App() {
           <main className="flex-1 min-w-0 overflow-x-auto flex">
             <div className="flex-1 min-w-0">
               <>
+                {activeTab === 'work-queue' && (
+                  <WorkQueueView contracts={contracts} onSelectContract={(c) => setSelected(c)} />
+                )}
                 {activeTab === 'risk-register' && (
                   <RiskRegisterTable
                     contracts={filtered}
