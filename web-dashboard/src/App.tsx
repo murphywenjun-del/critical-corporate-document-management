@@ -30,23 +30,38 @@ function ToastContainer({ toasts }: { toasts: { id: number; msg: string; type: s
 
 
 // ── Confirm Modal (in-page, replaces native confirm) ─────────────────────────
-function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Confirm', danger = false }: {
+function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Confirm', danger = false, showNote = false }: {
   title: string
   message: string
-  onConfirm: () => void
+  onConfirm: (note?: string) => void
   onCancel: () => void
   confirmLabel?: string
   danger?: boolean
+  showNote?: boolean
 }) {
+  const [note, setNote] = useState('')
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
       <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-5">
-        <div className="text-sm font-bold text-slate-900 mb-2">{title}</div>
-        <div className="text-xs text-slate-600 mb-4 whitespace-pre-line">{message}</div>
+        <div className="text-sm font-bold text-slate-900 mb-1">{title}</div>
+        <div className="text-xs text-slate-600 mb-3 whitespace-pre-line">{message}</div>
+        {showNote && (
+          <div className="mb-3">
+            <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Resolution note (optional)</label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. Updated contract with legal, added clause 8.2…"
+              rows={2}
+              className="w-full text-xs border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-teal-300"
+            />
+          </div>
+        )}
+        <div className="text-[10px] text-slate-400 mb-3">Resolved by: You · {new Date().toLocaleDateString()}</div>
         <div className="flex gap-2">
           <button onClick={onCancel} className="flex-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg py-2 transition">Cancel</button>
-          <button onClick={onConfirm} className={`flex-1 text-xs font-bold text-white rounded-lg py-2 transition ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-teal-600 hover:bg-teal-700'}`}>{confirmLabel}</button>
+          <button onClick={() => onConfirm(showNote ? note : undefined)} className={`flex-1 text-xs font-bold text-white rounded-lg py-2 transition ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-teal-600 hover:bg-teal-700'}`}>{confirmLabel}</button>
         </div>
       </div>
     </div>
@@ -203,7 +218,7 @@ function RiskRegisterTable({
   onSelectContract: (c: ContractDoc) => void
   onSwitchTab?: (tab: TabId) => void
   onFix?: (flagId: string) => void
-  onConfirmAction?: (title: string, message: string, action: () => void) => void
+  onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean) => void
   resolvedFlags?: Set<string> // used in insights hint
 }) {
   const [selSev, setSelSev] = useState('All')
@@ -1759,7 +1774,7 @@ function SettingsSidebar({
 
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
-function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void) => void; resolvedLog?: { id: string; label: string; time: string; type: string }[]; focusFields?: string[] }) {
+function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean) => void; resolvedLog?: { id: string; label: string; time: string; type: string }[]; focusFields?: string[] }) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref'>('all')
   const [showResolved, setShowResolved] = useState(false)
   const [search, setSearch] = useState('')
@@ -1987,11 +2002,11 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                         const link = docLinks.find((d) => d.sourceNum === item.docNum && d.status !== 'synced' && item.id.includes(d.targetName))
                         if (link) onProcess(link)
                       } else if (item.action === 'Fix' || item.action === 'Review') {
-                        onConfirmAction?.(`Resolve Flag`, `Mark "${item.what}" on ${item.docLabel} (#${item.docNum}) as Fixed?\n\nThis removes it from Work Queue.`, () => {
+                        onConfirmAction?.(`Resolve Flag`, `"${item.what}"\n\nDocument: ${item.docLabel} (#${item.docNum})\nSeverity: ${item.severity}`, () => {
                           onResolveFlag?.(item.id)
-                        })
+                        }, true)
                       } else if (item.action === 'Renew' || item.action === 'Schedule') {
-                        onConfirmAction?.(`Schedule Renewal`, `Schedule renewal for ${item.docLabel} (#${item.docNum})?\n\nExpiry: ${item.due || 'unknown'}\nThis removes the expiring alert.`, () => {
+                        onConfirmAction?.(`Schedule Renewal`, `${item.docLabel} (#${item.docNum})\nExpiry: ${item.due || 'unknown'}\n\nConfirm renewal has been scheduled with the counterparty.`, () => {
                           onResolveFlag?.(item.id)
                         })
                       } else if (item.id.startsWith('t-')) {
@@ -2694,7 +2709,7 @@ function App() {
   const [resolvedLog, setResolvedLog] = useState<{ id: string; label: string; time: string; type: string }[]>(() => {
     try { const r = localStorage.getItem('resolvedLog'); return r ? JSON.parse(r) : [] } catch { return [] }
   })
-  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: (note?: string) => void; showNote?: boolean } | null>(null)
   const [focusFields, setFocusFields] = useState<string[]>([])
   // Persisted state
   const [resolvedFlags, setResolvedFlags] = useState<Set<string>>(() => {
@@ -2953,7 +2968,7 @@ function App() {
                     resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} onResolveFlag={(id) => markFlagResolved(id)}
                     resolvedLog={resolvedLog}
                     focusFields={focusFields}
-                    onConfirmAction={(title, msg, action) => setConfirmState({ title, message: msg, onConfirm: action })} />
+                    onConfirmAction={(title, msg, action, showNote) => setConfirmState({ title, message: msg, onConfirm: action, showNote })} />
                 )}
                 {activeTab === 'risk-register' && (
                   <RiskRegisterTable
@@ -2961,7 +2976,7 @@ function App() {
                     onSelectContract={(c) => { setSelected(c); }}
                     onSwitchTab={(tab) => setActiveTab(tab)}
                     onFix={(flagId) => markFlagResolved(flagId)}
-                    onConfirmAction={(title, msg, action) => setConfirmState({ title, message: msg, onConfirm: action })}
+                    onConfirmAction={(title, msg, action, showNote) => setConfirmState({ title, message: msg, onConfirm: action, showNote })}
                     resolvedFlags={resolvedFlags}
                   />
                 )}
@@ -3017,8 +3032,10 @@ function App() {
         <ConfirmModal
           title={confirmState.title}
           message={confirmState.message}
-          onConfirm={() => { confirmState.onConfirm(); setConfirmState(null) }}
+          onConfirm={(note) => { confirmState.onConfirm(note); setConfirmState(null) }}
           onCancel={() => setConfirmState(null)}
+          showNote={confirmState.showNote}
+          confirmLabel="Confirm"
         />
       )}
 
