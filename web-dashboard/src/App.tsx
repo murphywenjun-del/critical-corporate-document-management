@@ -1967,11 +1967,11 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                         if (link) onProcess(link)
                       } else if (item.action === 'Fix' || item.action === 'Review') {
                         onConfirmAction?.(`Resolve Flag`, `Mark "${item.what}" on ${item.docLabel} (#${item.docNum}) as Fixed?\n\nThis removes it from Work Queue.`, () => {
-                          onResolveFlag?.(`f-${item.docNum}-${item.what.slice(0, 30)}`)
+                          onResolveFlag?.(item.id)
                         })
                       } else if (item.action === 'Renew' || item.action === 'Schedule') {
                         onConfirmAction?.(`Schedule Renewal`, `Schedule renewal for ${item.docLabel} (#${item.docNum})?\n\nExpiry: ${item.due || 'unknown'}\nThis removes the expiring alert.`, () => {
-                          onResolveFlag?.(`e-${item.docNum}`)
+                          onResolveFlag?.(item.id)
                         })
                       } else {
                         onSelectContract(item.contract)
