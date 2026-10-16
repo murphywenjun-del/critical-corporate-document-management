@@ -2408,22 +2408,36 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
               <span className="font-bold text-teal-600">{flagsToEliminate}</span>
               <span className="text-slate-400">of {allFlags.length}</span>
             </div>
+            {resolvedFlags && resolvedFlags.size >= flagsToEliminate && (
+              <div className="mt-3 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                ✓ All top patterns resolved ({resolvedFlags.size} flags fixed)
+              </div>
+            )}
             <div className="mt-3 flex gap-2">
               <button
                 onClick={() => { if (top3[0]) { const c = allContracts.find((cc) => cc.num === top3[0].contractNums[0]); if (c) onJumpToContract?.(c) } }}
                 className="flex-1 text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg py-2 transition"
               >
-                Open First →
+                Open #{top3[0]?.contractNums[0] || '?'} ({top3[0]?.field?.slice(0, 20) || ''}…) →
               </button>
               <button
                 onClick={() => {
-                  localStorage.setItem('insightsActioned_top3', JSON.stringify(top3.map((x) => x.field)))
-                  alert('✓ 3 tasks created in Work Queue. Check the Work Queue tab.')
+                  // Create specific tasks: for each top-3 pattern, find the first affected contract
+                  const specificTasks = top3.map((p) => ({
+                    id: Date.now().toString() + p.field,
+                    label: `Fix: ${p.field} → Contract #${p.contractNums[0]}`,
+                    contractNum: p.contractNums[0],
+                    time: new Date().toLocaleTimeString(),
+                    flagField: p.field,
+                  }))
+                  const existing = JSON.parse(localStorage.getItem('createdTasks') || '[]')
+                  localStorage.setItem('createdTasks', JSON.stringify([...specificTasks, ...existing]))
+                  alert(`✓ 3 specific tasks created:\n\n${specificTasks.map((t) => '• ' + t.label).join('\n')}\n\nCheck Work Queue →`)
                   onSwitchTab?.('work-queue')
                 }}
                 className="flex-1 text-[11px] font-bold text-white bg-slate-700 hover:bg-slate-800 rounded-lg py-2 transition"
               >
-                + Create 3 Tasks
+                + Create 3 Specific Tasks
               </button>
             </div>
           </div>
@@ -2504,8 +2518,15 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
                   </button>
                   <button
                     onClick={() => {
-                      localStorage.setItem('insightsActioned_pb' + item.contracts[0], JSON.stringify(item.contracts))
-                      alert('✓ ' + item.affected + ' task(s) added to Work Queue')
+                      const specificTasks = item.contracts.map((num) => ({
+                        id: Date.now().toString() + '_' + num,
+                        label: `Fix: ${item.pattern?.slice(0, 30) || 'Pattern'} → Contract #${num}`,
+                        contractNum: num,
+                        time: new Date().toLocaleTimeString(),
+                      }))
+                      const existing = JSON.parse(localStorage.getItem('createdTasks') || '[]')
+                      localStorage.setItem('createdTasks', JSON.stringify([...specificTasks, ...existing]))
+                      alert('✓ ' + specificTasks.length + ' specific task(s) created:\n' + specificTasks.map((t) => '• ' + t.label).join('\n'))
                       onSwitchTab?.('work-queue')
                     }}
                     className="text-[10px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded px-2.5 py-1 transition"
