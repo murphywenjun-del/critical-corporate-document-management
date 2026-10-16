@@ -733,13 +733,7 @@ const I_LABELS = ['', 'Tiny', 'Small', 'Noticeable', 'Major', 'Severe']
 function RiskMatrixView({ contracts: allContracts }: { contracts: ContractDoc[] }) {
   // Collect all flags with L and I
   const rawFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
-  const allFlags = rawFlags.filter((f) => {
-    if (resolvedFlags) {
-      const flagId = `f-${f.contract.num}-${f.field}`
-      if (resolvedFlags.has(flagId)) return false
-    }
-    return true
-  })
+  const allFlags = rawFlags
   
   // Build the 5×5 grid
   const grid: number[][] = Array.from({ length: 5 }, () => Array(5).fill(0))
@@ -2297,6 +2291,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
 
 // ── Risk Prevention Insights: cross-file pattern detection + actionable recommendations ──
 function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, resolvedFlags, completedLinks }: { contracts: ContractDoc[]; onJumpToContract?: (c: ContractDoc) => void; onSwitchTab?: (tab: string) => void; resolvedFlags?: Set<string>; completedLinks?: Set<string> }) {
+  void completedLinks
   const rawFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
   const allFlags = rawFlags.filter((f) => {
     if (resolvedFlags) {
