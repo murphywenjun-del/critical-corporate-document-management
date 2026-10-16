@@ -2286,7 +2286,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
 
 
 // ── Risk Prevention Insights: cross-file pattern detection + actionable recommendations ──
-function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, resolvedFlags, completedLinks, onCreateTasks }: { contracts: ContractDoc[]; onJumpToContract?: (c: ContractDoc) => void; onSwitchTab?: (tab: string) => void; resolvedFlags?: Set<string>; completedLinks?: Set<string>; onCreateTasks?: (tasks: { id: string; label: string; contractNum: number; time: string }[]) => void }) {
+function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, resolvedFlags, completedLinks }: { contracts: ContractDoc[]; onJumpToContract?: (c: ContractDoc) => void; onSwitchTab?: (tab: string) => void; resolvedFlags?: Set<string>; completedLinks?: Set<string> }) {
   void completedLinks
   const rawFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
   const allFlags = rawFlags.filter((f) => {
@@ -2877,7 +2877,7 @@ function App() {
                   <SmartFilingView contracts={filtered} />
                 )}
                 {activeTab === 'insights' && (
-                  <InsightsView contracts={contracts} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} resolvedFlags={resolvedFlags} completedLinks={completedLinks} onCreateTasks={(tasks) => { setCreatedTasks((prev) => { const next = [...tasks, ...prev]; localStorage.setItem('createdTasks', JSON.stringify(next)); return next }) }} />
+                  <InsightsView contracts={contracts} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} resolvedFlags={resolvedFlags} completedLinks={completedLinks} />
                 )}
               </>
             </div>
