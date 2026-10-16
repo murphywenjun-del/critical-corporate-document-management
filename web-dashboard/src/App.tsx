@@ -2858,7 +2858,7 @@ function App() {
               <>
                 {activeTab === 'work-queue' && (
                   <WorkQueueView contracts={contracts} onSelectContract={(c) => setSelected(c)}
-                    onProcess={(link) => { setProcessLink(link); const c = contracts.find((cc) => cc.num === link.sourceNum); if (c) setSelected(c) }}
+                    onProcess={(link) => { setProcessLink(link); setSelected(null) }}
                     resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} />
                 )}
                 {activeTab === 'risk-register' && (
