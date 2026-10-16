@@ -2993,14 +2993,17 @@ function App() {
                     onConfirmAction={(title, msg, action, showNote, defaultNote) => setConfirmState({ title, message: msg, onConfirm: action, showNote, defaultNote })} />
                 )}
                 {activeTab === 'risk-register' && (
-                  <RiskRegisterTable
+                  <div className="space-y-4">
+                    <RiskMatrixView contracts={filtered} />
+                    <RiskRegisterTable
                     contracts={filtered}
                     onSelectContract={(c) => { setSelected(c); }}
                     onSwitchTab={(tab) => setActiveTab(tab)}
                     onFix={(flagId) => markFlagResolved(flagId)}
                     onConfirmAction={(title, msg, action, showNote, defaultNote) => setConfirmState({ title, message: msg, onConfirm: action, showNote, defaultNote })}
                     resolvedFlags={resolvedFlags}
-                  />
+                    />
+                  </div>
                 )}
                 {activeTab === 'contracts' && (
                   <div className="space-y-4">
