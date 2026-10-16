@@ -2020,6 +2020,26 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           </div>
         )}
       </div>
+
+      {/* Resolved Log */}
+      {resolvedLog && resolvedLog.length > 0 && (
+        <div className="mt-4 border border-emerald-200 rounded-lg overflow-hidden">
+          <button onClick={() => setShowResolved((v) => !v)} className="w-full flex items-center justify-between px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 transition">
+            <span className="text-xs font-bold text-emerald-700">✓ Resolved ({resolvedLog.length})</span>
+            <span className="text-[10px] text-emerald-500">{showResolved ? '▲ Hide' : '▼ Show'}</span>
+          </button>
+          {showResolved && (
+            <div className="divide-y divide-emerald-100 max-h-40 overflow-y-auto">
+              {resolvedLog.slice(0, 10).map((entry) => (
+                <div key={entry.id} className="flex items-center justify-between px-4 py-2 text-[11px]">
+                  <span className="font-medium text-slate-700">{entry.label}</span>
+                  <span className="text-slate-400">{entry.time}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
