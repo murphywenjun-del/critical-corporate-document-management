@@ -82,6 +82,7 @@ export interface ContractDoc {
   retentionBasis: string      // Plain-language records-schedule rationale
   retentionOwner: string      // Who gets notified at the retention deadline
   paper?: { copies: number; location: string } // Paper copies to track through disposal
+  isUpload?: boolean // true when the doc came from a Smart Filing upload (live, this session)
 }
 
 export interface JevData {

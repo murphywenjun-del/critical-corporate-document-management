@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { contracts, docLinks, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type ContractDoc, type Amendment, type DocLink,
   ROLES, canView, canManage, archiveFileConf, contractToTemplateRef, DEMO_TODAY, CONF_LABEL, CONF_BADGE, retentionState, type Role,
   TEMPLATE_LIBRARY, matchTemplate, classifyType, RISK_FRAMEWORK,
@@ -492,10 +492,11 @@ function RiskRegisterTable({
 function CriteriaPanel({ contracts: allContracts, resolvedFlags }: { contracts: ContractDoc[]; resolvedFlags?: Set<string> }) {
   // Group by type and show criteria met — LIVE: per-doc share of applicable criteria
   // not violated by an open (unresolved) flag; consistent with the "Criteria Met (avg)" KPI.
-  const docCriteriaMet = (c: ContractDoc): number => {
+  // Uploads without a checklist for their type are excluded (n = 0).
+  const docCriteriaMet = (c: ContractDoc): number | null => {
     const n = (CRITERIA_BY_TYPE[c.type] || []).length
+    if (n === 0) return null
     const open = c.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${c.num}-${f.field}`))).length
-    if (n === 0) return open === 0 ? 1 : 0.5
     return Math.max(0, Math.min(1, 1 - open / n))
   }
 
@@ -515,10 +516,11 @@ function CriteriaPanel({ contracts: allContracts, resolvedFlags }: { contracts: 
         {Object.entries(byType).map(([type, docs]) => {
           const criteria = CRITERIA_BY_TYPE[type] || []
           const total = docs.length
-          const clean = docs.filter((d) => d.flags.filter((f) => f.status === 'open').length === 0).length
+          const clean = docs.filter((d) => d.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${d.num}-${f.field}`))).length === 0).length
           const openGaps = docs.reduce((sum, d) => sum + d.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${d.num}-${f.field}`))).length, 0)
           // Live per-type criteria share: 100% of applicable criteria met, minus open gaps (no negative rates)
-          const rate = total > 0 ? Math.round(100 * docs.reduce((s, d) => s + docCriteriaMet(d), 0) / total) : 100
+          const vals = docs.map(docCriteriaMet).filter((v): v is number => v !== null)
+          const rate = vals.length > 0 ? Math.round(100 * vals.reduce((a, b) => a + b, 0) / vals.length) : 100
           return (
             <div key={type} className="border border-slate-100 rounded p-3">
               <div className="flex items-center justify-between mb-1">
@@ -527,13 +529,19 @@ function CriteriaPanel({ contracts: allContracts, resolvedFlags }: { contracts: 
               </div>
               <div className="text-[11px] text-slate-500 mb-2">{clean}/{total} clean · {openGaps} open gaps of {criteria.length * total} criteria checked</div>
               {/* Progress bar */}
-              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full ${rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                  style={{ width: `${rate}%` }}
-                />
-              </div>
-              <div className="text-[11px] text-slate-500 mt-1">{rate}% of applicable criteria met</div>
+              {criteria.length > 0 ? (
+                <>
+                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                      style={{ width: `${rate}%` }}
+                    />
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-1">{rate}% of applicable criteria met</div>
+                </>
+              ) : (
+                <div className="text-[11px] text-slate-400 mt-1 italic">No criteria checklist mapped for this type yet</div>
+              )}
             </div>
           )
         })}
@@ -549,11 +557,13 @@ function ContractList({
   selectedNum,
   onSelect,
   role,
+  resolvedFlags,
 }: {
   contracts: ContractDoc[]
   selectedNum: number | null
   onSelect: (c: ContractDoc) => void
   role?: Role
+  resolvedFlags?: Set<string>
 }) {
   return (
     <div className="bg-white border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100">
@@ -561,6 +571,7 @@ function ContractList({
         const locked = role ? !canView(role, c) : false
         // Repository meta (item 5, 2026-10-17: centralized contract repository)
         const expired = !!c.expiryDate && c.expiryDate < DEMO_TODAY
+        const openCount = c.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${c.num}-${f.field}`))).length
         const relatedCount =
           (c.amendments?.length ?? 0) +
           (c.baseContractId != null ? 1 : 0) +
@@ -624,6 +635,11 @@ function ContractList({
                     SUPERSEDED
                   </span>
                 )}
+                {c.isUpload && (
+                  <span className="text-[11px] font-bold bg-teal-600 text-white px-1.5 py-0.5 rounded">
+                    NEW · uploaded
+                  </span>
+                )}
                 {c.flags.length === 0 && (
                   <span className="text-[11px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200">
                     CLEAN ✓
@@ -643,8 +659,8 @@ function ContractList({
                         {c.riskLevel}
                       </span>
                     </div>
-                    <span className="text-xs text-slate-500 w-8 text-right">
-                      {c.flagsCount > 0 ? `${c.flagsCount} flags` : 'clean'}
+                    <span className="text-xs text-slate-500 w-8 text-right" title={openCount < c.flagsCount ? `${openCount} open of ${c.flagsCount}` : undefined}>
+                      {openCount > 0 ? `${openCount} open` : c.flagsCount > 0 ? 'done ✓' : 'clean'}
                     </span>
                   </>
                 )}
@@ -1381,10 +1397,12 @@ const L_LABELS = ['', ...RISK_FRAMEWORK.likelihoodLabels]
 const I_LABELS = ['', ...RISK_FRAMEWORK.impactLabels]
 
 // @ts-ignore - inlined into Risk Register collapsible
-function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contracts: ContractDoc[]; onSelectContract?: (c: ContractDoc) => void }) {
+function RiskMatrixView({ contracts: allContracts, onSelectContract, resolvedFlags }: { contracts: ContractDoc[]; onSelectContract?: (c: ContractDoc) => void; resolvedFlags?: Set<string> }) {
   // Collect all flags with L and I
   const rawFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
-  const allFlags = rawFlags
+  // Cascade: flags resolved in Work Queue no longer appear in the matrix or taxonomy counts
+  const allFlags = rawFlags.filter((f) => !(resolvedFlags && resolvedFlags.has(`f-${f.contract.num}-${f.field}`)))
+  const hiddenCount = rawFlags.length - allFlags.length
 
   // Cell click state: [l, i] or null
   const [selectedCell, setSelectedCell] = useState<[number, number] | null>(null)
@@ -1461,7 +1479,7 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contrac
       {/* 5×5 Grid — clickable cells */}
       <div className="bg-white border border-slate-200 rounded-lg p-5">
         <h3 className="text-sm font-bold text-slate-800 mb-1">Risk Matrix</h3>
-        <div className="text-[11px] text-slate-400 mb-2">{RISK_FRAMEWORK.source} · bands ≥{RISK_FRAMEWORK.bands.red} red / ≥{RISK_FRAMEWORK.bands.orange} orange / ≥{RISK_FRAMEWORK.bands.yellow} yellow</div>
+        <div className="text-[11px] text-slate-400 mb-2">{RISK_FRAMEWORK.source} · bands ≥{RISK_FRAMEWORK.bands.red} red / ≥{RISK_FRAMEWORK.bands.orange} orange / ≥{RISK_FRAMEWORK.bands.yellow} yellow{hiddenCount > 0 ? ` · ${hiddenCount} resolved flag${hiddenCount > 1 ? 's' : ''} hidden` : ''}</div>
         <p className="text-[11px] text-slate-400 mb-4">Click a cell to see which documents/flags fall in that risk band.</p>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px]">
@@ -1889,7 +1907,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
 // ── Amendments View (closed-loop, modal-confirmed) ──────────────────────────
 
 // @ts-ignore - merged into CrossRefs tab
-function AmendmentsView({ contracts: allContracts, onSelect }: { contracts: ContractDoc[]; onSelect: (c: ContractDoc) => void }) {
+function AmendmentsView({ contracts: allContracts, onSelect, resolvedFlags }: { contracts: ContractDoc[]; onSelect: (c: ContractDoc) => void; resolvedFlags?: Set<string> }) {
   type AState = 'pending' | 'reviewed' | 'executed' | 'verified' | 'archived'
   const A_STEPS: Array<{ id: AState; label: string; color: string; desc: string }> = [
     { id: 'pending',  label: 'Pending',  color: 'bg-red-100 text-red-700 border-red-200', desc: 'Awaiting review' },
@@ -1976,9 +1994,13 @@ function AmendmentsView({ contracts: allContracts, onSelect }: { contracts: Cont
             </span>
             <span className="text-[11px] text-slate-400">{isExp ? '▲' : '▼'}</span>
           </div>
-          {!isExp && c.flags.length > 0 && (
-            <div className="text-[11px] text-slate-500">{c.flags.length} open risk{c.flags.length > 1 ? 's' : ''} · top: {c.flags[0].flag_if.slice(0, 60)}…</div>
-          )}
+          {!isExp && c.flags.length > 0 && (() => {
+            const open = c.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${c.num}-${f.field}`)))
+            if (open.length === 0) return null
+            return (
+              <div className="text-[11px] text-slate-500">{open.length} open risk{open.length > 1 ? 's' : ''} · top: {open[0].flag_if.slice(0, 60)}…</div>
+            )
+          })()}
         </div>
 
         {isExp && (
@@ -2179,14 +2201,18 @@ function ContractDetail({
   selected,
   docLinks: allDocLinks,
   onStatusOverride,
+  resolvedFlags,
 }: {
   selected: ContractDoc
   onBack?: () => void
   docLinks: DocLink[]
   onStatusOverride?: (flagId: string) => void
+  resolvedFlags?: Set<string>
 }) {
   const s = selected
   void onStatusOverride
+  const sOpen = s.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${s.num}-${f.field}`))).length
+  const isResolved = (f: (typeof s.flags)[0]) => resolvedFlags?.has(`f-${s.num}-${f.field}`) || f.status === 'remediated'
   return (
     <div>
       {/* Title */}
@@ -2222,7 +2248,7 @@ function ContractDetail({
       {/* Flags table */}
       <section className="mb-6">
         <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
-          Flags ({s.flagsCount})
+          Flags ({sOpen} open of {s.flagsCount})
         </h3>
         {s.flags.length === 0 ? (
           <div className="border border-emerald-200 bg-emerald-50/50 rounded-lg px-4 py-3">
@@ -2232,9 +2258,9 @@ function ContractDetail({
         ) : (
           <div className="bg-white border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100">
             {s.flags.map((f) => (
-              <div key={f.field}>
+              <div key={f.field} className={isResolved(f) ? 'opacity-60' : ''}>
                 <div className="flex items-start gap-3 px-4 py-3">
-                  <span className={`w-2 h-2 rounded-full ${SEV_DOT[f.severity]} mt-1 shrink-0`} />
+                  <span className={`w-2 h-2 rounded-full ${isResolved(f) ? 'bg-emerald-500' : SEV_DOT[f.severity]} mt-1 shrink-0`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-0.5">
                       <span className={`text-xs font-bold ${SEV_TEXT[f.severity]}`}>{f.severity}</span>
@@ -2245,8 +2271,11 @@ function ContractDetail({
                         L{f.likelihood}×I{f.impact} = <span className="font-bold text-slate-600">{f.risk_score}</span>
                       </span>
                       <span className="text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{flagHiroc(f.field).cat} · {flagHiroc(f.field).riskName}</span>
+                      {isResolved(f) && (
+                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">RESOLVED ✓</span>
+                      )}
                     </div>
-                    <p className="text-sm text-slate-800">{f.flag_if}</p>
+                    <p className={`text-sm ${isResolved(f) ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{f.flag_if}</p>
                   </div>
                 </div>
               </div>
@@ -2442,6 +2471,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
     status: string
     action: string
     due?: string
+    isNew?: boolean // from a Smart Filing upload — surface at the top of its severity tier
   }
 
   const items: WorkItem[] = []
@@ -2460,6 +2490,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           severity: 'critical',
           status: f.status,
           action: 'Fix',
+          isNew: c.isUpload === true,
         })
       } else if (f.severity === 'High' && f.status === 'open') {
         items.push({
@@ -2471,6 +2502,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           severity: 'high',
           status: f.status,
           action: 'Review',
+          isNew: c.isUpload === true,
         })
       }
     }
@@ -2541,9 +2573,9 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
 
   const allItems = [...active, ...taskItems]
 
-  // Sort: critical > high > medium > low, then by docNum
+  // Sort: new uploads first within each severity tier, then critical > high > medium > low, then by docNum
   const sevOrder = { critical: 0, high: 1, medium: 2, low: 3 }
-  allItems.sort((a, b) => sevOrder[a.severity] - sevOrder[b.severity] || a.docNum - b.docNum)
+  allItems.sort((a, b) => (sevOrder[a.severity] - sevOrder[b.severity]) || ((b.isNew ? 1 : 0) - (a.isNew ? 1 : 0)) || (a.docNum - b.docNum))
 
   // Filter
   const filtered = allItems.filter((i) => {
@@ -2631,6 +2663,9 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
               <tr key={item.id} className={`hover:bg-slate-50/70 cursor-pointer transition ${item.severity === 'critical' ? 'bg-red-50/30' : ''}`} onClick={() => onSelectContract(item.contract)}>
                 <td className="px-4 py-2.5 text-[13px] font-medium text-slate-800 max-w-[340px] truncate" title={item.what}>{item.what}</td>
                 <td className="px-4 py-2.5 text-[13px] text-slate-700">
+                  {item.isNew && (
+                    <span className="text-[11px] font-bold bg-teal-600 text-white px-1.5 py-0.5 rounded mr-1.5 align-middle">NEW</span>
+                  )}
                   <span className="font-mono text-[11px] text-slate-400">#{item.docNum}</span>
                   <span className="ml-1.5">{item.docLabel}</span>
                 </td>
@@ -2729,17 +2764,84 @@ interface UploadedDoc {
   flags: { severity: string; field: string; flag_if: string; risk_category?: string; subcategory?: string; department?: string }[]
   text_preview: string
   processed_at: string
+  doc_num?: number // stable doc id assigned at upload time (so resolved-flag keys don't shift)
 }
 
-function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[] }) {
+// ── Upload → live ContractDoc (so new filings cascade into Documents, Work Queue,
+//    Risk Register, KPIs and Criteria panel — not just the Smart Filing tab) ──────
+const SEV_LI: Record<string, { l: number; i: number }> = {
+  Critical: { l: 5, i: 5 }, High: { l: 4, i: 4 }, Medium: { l: 3, i: 3 }, Low: { l: 2, i: 2 },
+}
+function uploadToContractDoc(u: UploadedDoc, idx: number): ContractDoc {
+  const usedFields = new Set<string>()
+  const flags: Flag[] = (u.flags || []).map((f) => {
+    const rawSev = String(f.severity || '').trim()
+    const sev: 'Critical' | 'High' | 'Medium' | 'Low' =
+      (['Critical', 'High', 'Medium', 'Low'] as Array<'Critical' | 'High' | 'Medium' | 'Low'>).includes(rawSev as 'Critical' | 'High' | 'Medium' | 'Low')
+        ? (rawSev as 'Critical' | 'High' | 'Medium' | 'Low')
+        : 'Medium'
+    // De-duplicate field keys so per-flag ids (f-${num}-${field}) stay unique
+    let field = f.field || 'general'
+    let n = 2
+    while (usedFields.has(field)) field = `${f.field || 'general'} (${n++})`
+    usedFields.add(field)
+    const { l, i } = SEV_LI[sev]
+    return {
+      severity: sev, field,
+      flag_if: f.flag_if || 'AI review detected a potential issue',
+      likelihood: l, impact: i, risk_score: l * i,
+      compliance_type: sev === 'Critical' || sev === 'High' ? 'hard' : 'best_practice',
+      risk_category: f.risk_category || u.document_type,
+      subcategory: f.subcategory || f.risk_category || u.document_type,
+      department: f.department || 'Operations',
+      status: 'open', source: 'ai_scan',
+    }
+  })
+  const top = Math.max(0, ...flags.map((f) => f.risk_score))
+  const riskLevel = top >= 20 ? 'Critical' : top >= 12 ? 'High' : top >= 6 ? 'Medium' : 'Low'
+  return {
+    num: u.doc_num ?? 100 + idx,
+    name: u.filename, displayName: u.filename,
+    type: u.document_type || 'Other',
+    summary: u.text_preview
+      ? `${u.text_preview.slice(0, 110)}…`
+      : `Uploaded file — AI classified as ${u.document_type || 'Unknown'}`,
+    filePath: u.filed_to || `data/archive/${u.document_type || 'Uncategorized'}/auto`,
+    riskScore: top, riskLevel, flagsCount: flags.length, flags,
+    extractedFields: [],
+    jev: {
+      riskSeverity: { choice: '—', confidence: 0 }, needsHumanReview: 0,
+      isComplianceRelated: 0, shouldAlert: 0, decisionConfidence: 0,
+    },
+    textHighlights: [],
+    compliance: {
+      hardGaps: flags.filter((f) => f.compliance_type === 'hard').length,
+      bpGaps: flags.filter((f) => f.compliance_type === 'best_practice').length,
+      complianceRate: 0, topRiskField: flags[0]?.field || null,
+    },
+    department: 'Operations', expiryDate: '',
+    confidentiality: 'internal',
+    retentionYears: 7,
+    retentionBasis: 'New upload — retention pending classification to the records schedule',
+    retentionOwner: 'Records Management',
+    isUpload: true,
+  }
+}
+
+function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { contracts: ContractDoc[]; uploads: UploadedDoc[]; onUploaded: (docs: UploadedDoc[]) => void }) {
 
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
-  const [uploaded, setUploaded] = useState<UploadedDoc[]>([])
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [dragOver, setDragOver] = useState(false)
   const [diskTree, setDiskTree] = useState<Record<string, { files: string[]; subcategories: Record<string, string[]> }>>({})
   const [fileDetail, setFileDetail] = useState<string | null>(null)
+  // uploads is lifted to the app root so new filings cascade into Documents /
+  // Work Queue / Risk Register / KPIs (persisted across reloads)
+  const uploaded = uploads
+  const setUploaded = (updater: (prev: UploadedDoc[]) => UploadedDoc[]) => {
+    onUploaded(updater(uploads))
+  }
 
   // Fetch real on-disk folder tree
   useEffect(() => {
@@ -2970,7 +3072,8 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
       {/* Filing status */}
       {uploaded.length > 0 && (
         <div className="text-xs text-emerald-600">
-          ✓ {uploaded.length} file(s) auto-classified and saved to the archive — open a folder below (or use its “View” button) to see where each file was filed
+          ✓ {uploaded.length} file(s) auto-classified and saved to the archive — open a folder below (or use its “View” button) to see where each file was filed.<br />
+          <span className="text-slate-500">Newly filed documents now also appear in the Documents list, Work Queue and Risk Register — their AI-detected flags are included in the KPIs at the top.</span>
         </div>
       )}
 
@@ -3481,7 +3584,25 @@ function App() {
   void setCreatedTasks
 
   const today = new Date(DEMO_TODAY)
-  const filtered = contracts.filter((c) => {
+  // ── Smart Filing uploads, lifted to app root: persisted and cascaded into
+  //    every view (Documents list, Work Queue, Risk Register, KPIs, criteria) ──
+  const [uploads, setUploads] = useState<UploadedDoc[]>(() => {
+    try { return JSON.parse(localStorage.getItem('ccdm_uploads') || '[]') as UploadedDoc[] } catch { return [] }
+  })
+  const addUploads = (docs: UploadedDoc[]) => {
+    setUploads((prev) => {
+      let nextNum = prev.reduce((m, d) => Math.max(m, d.doc_num || 0), 899)
+      const stamped = docs.map((d) => (d.doc_num ? d : { ...d, doc_num: ++nextNum }))
+      const next = [...stamped, ...prev]
+      localStorage.setItem('ccdm_uploads', JSON.stringify(next))
+      return next
+    })
+  }
+  const liveContracts = useMemo<ContractDoc[]>(
+    () => [...contracts, ...uploads.map((u, i) => uploadToContractDoc(u, i))],
+    [uploads]
+  )
+  const filtered = liveContracts.filter((c) => {
     if (filterType !== 'All' && c.type !== filterType) return false
     if (filterRisk !== 'All' && c.riskLevel !== filterRisk) return false
     if (filterDept !== 'All' && c.department !== filterDept) return false
@@ -3504,14 +3625,15 @@ function App() {
   const openFlagsCount = visibleFlags2.filter(({ f, num }) => f.status === 'open' && !resolvedFlags.has(`f-${num}-${f.field}`)).length
   const criticalOpenCount = visibleFlags2.filter(({ f, num }) => f.severity === 'Critical' && f.status === 'open' && !resolvedFlags.has(`f-${num}-${f.field}`)).length
   const remediatedCount = visibleFlags2.filter(({ f, num }) => f.status === 'remediated' || resolvedFlags.has(`f-${num}-${f.field}`)).length
-  const docCriteriaMet = (c: ContractDoc): number => {
+  const docCriteriaMet = (c: ContractDoc): number | null => {
     const n = (CRITERIA_BY_TYPE[c.type] || []).length
+    if (n === 0) return null // no criteria checklist for this type (e.g. new uploads) → excluded from the average
     const open = c.flags.filter((f) => f.status === 'open' && !resolvedFlags.has(`f-${c.num}-${f.field}`)).length
-    if (n === 0) return open === 0 ? 1 : 0.5
     return Math.max(0, Math.min(1, 1 - open / n))
   }
-  const avgCompliance = visible.length > 0
-    ? Math.round(visible.reduce((sum, c) => sum + docCriteriaMet(c), 0) / visible.length * 100)
+  const critVals = visible.map(docCriteriaMet).filter((v): v is number => v !== null)
+  const avgCompliance = critVals.length > 0
+    ? Math.round(critVals.reduce((a, b) => a + b, 0) / critVals.length * 100)
     : 0
   const retentionAlertCount = visible.filter((c) => retentionState(c).status !== 'retained').length
 
@@ -3671,7 +3793,7 @@ function App() {
           <KpiCard label="Critical Flags" value={criticalOpenCount} valueClass="text-red-600" onClick={() => setActiveTab('risk-register')} />
           <KpiCard label="Open Flags" value={openFlagsCount} valueClass="text-orange-600" onClick={() => setActiveTab('risk-register')} />
           <KpiCard label="Remediated" value={remediatedCount} valueClass="text-emerald-600" onClick={() => setActiveTab('risk-register')} />
-          <KpiCard label="Criteria Met (avg)" value={`${avgCompliance}%`} valueClass="text-teal-600" onClick={() => setActiveTab('insights')} title="Portfolio-level, not per-document: for each visible contract, 100% − (open flags ÷ criteria applicable to that document type). Averaged across all your visible contracts. Live — it rises as you resolve flags in Work Queue." />
+          <KpiCard label="Criteria Met (avg)" value={`${avgCompliance}%`} valueClass="text-teal-600" onClick={() => setActiveTab('insights')} title="Portfolio-level, not per-document: for each visible contract with a criteria checklist, 100% − (open flags ÷ criteria applicable to that document type). Averaged across your visible contracts. Live — it rises as you resolve flags in Work Queue. Newly uploaded files without a defined checklist are excluded until one is mapped." />
           <KpiCard label="Retention Alerts" value={retentionAlertCount} valueClass={retentionAlertCount > 0 ? 'text-amber-600' : 'text-emerald-600'} onClick={() => setActiveTab('deadlines')} />
         </div>
 
@@ -3833,10 +3955,10 @@ function App() {
                 {activeTab === 'risk-register' && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-slate-400">Showing {visible.length} contracts · {visible.flatMap((c) => c.flags).filter((f) => f.status === 'open').length} open flags</span>
-                      <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); window.location.reload() }} className="text-[11px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
+                      <span className="text-[11px] text-slate-400">Showing {visible.length} contracts · {openFlagsCount} open flags</span>
+                      <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); localStorage.removeItem('ccdm_uploads'); window.location.reload() }} className="text-[11px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
                     </div>
-                    <RiskMatrixView contracts={visible} onSelectContract={(c) => { setSelected(c); }} />
+                    <RiskMatrixView contracts={visible} onSelectContract={(c) => { setSelected(c); }} resolvedFlags={resolvedFlags} />
                     <RiskRegisterTable
                     contracts={visible}
                     onSelectContract={(c) => { setSelected(c); }}
@@ -3860,6 +3982,7 @@ function App() {
                       selectedNum={selected?.num ?? null}
                       onSelect={(c) => setSelected(c)}
                       role={role}
+                      resolvedFlags={resolvedFlags}
                     />
                   </div>
                 )}
@@ -3878,7 +4001,7 @@ function App() {
                   <CrossRefsView contracts={visible} />
                 )}
                 {activeTab === 'smart-filing' && (
-                  <SmartFilingView contracts={visible} />
+                  <SmartFilingView contracts={visible} uploads={uploads} onUploaded={addUploads} />
                 )}
                 {activeTab === 'insights' && (
                   <InsightsView contracts={visible} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} resolvedFlags={resolvedFlags} completedLinks={completedLinks} onSetFocusFields={setFocusFields} />
@@ -3894,7 +4017,7 @@ function App() {
                 </div>
                 <div className="px-5 py-4">
                   {canView(role, selected)
-                    ? <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} onStatusOverride={(flagId) => { markFlagResolved(flagId) }} />
+                    ? <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} onStatusOverride={(flagId) => { markFlagResolved(flagId) }} resolvedFlags={resolvedFlags} />
                     : <RestrictedAccessPanel doc={selected} role={role} />}
                 </div>
               </aside>
