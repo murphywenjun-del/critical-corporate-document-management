@@ -378,6 +378,49 @@ def get_folder_tree():
         tree[cat_dir.name] = {"files": cat_files, "subcategories": sub_dir}
     return {"root": "data/archive", "categories": tree}
 
+
+@app.get("/api/search")
+def search_docs(q: str, limit: int = 30):
+    """Full-text search over the real on-disk archive (data/archive/**/*.md).
+
+    Returns matching files with category path, first-match snippet, and size.
+    Falls back to research/contracts if the archive is empty.
+    """
+    q = q.strip()
+    if len(q) < 2:
+        return {"query": q, "count": 0, "results": []}
+    needle = q.lower()
+    dirs = [d for d in [ARCHIVE_DIR, BASE_DIR / "web-dashboard" / "public" / "research" / "contracts"] if d.exists()]
+    results = []
+    for base in dirs:
+        for f in sorted(base.rglob("*.md")):
+            try:
+                text = f.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+            idx = text.lower().find(needle)
+            if idx < 0:
+                continue
+            start = max(0, idx - 60)
+            snippet = ("…" if start > 0 else "") + text[start:idx + len(needle) + 60].replace("\n", " ").strip() + "…"
+            try:
+                rel = f.relative_to(base).as_posix()
+            except ValueError:
+                rel = f.name
+            results.append({
+                "file": f.name,
+                "path": rel,
+                "snippet": snippet,
+                "size_bytes": f.stat().st_size,
+                "source": "archive" if base == ARCHIVE_DIR else "research",
+            })
+            if len(results) >= limit:
+                break
+        if len(results) >= limit:
+            break
+    results = results[:limit]
+    return {"query": q, "count": len(results), "results": results}
+
 @app.post("/api/file-doc")
 def file_doc(filename: str, category: str, subcategory: str = "General"):
     """Move an uploaded file into the correct archive folder on disk."""
@@ -412,6 +455,32 @@ def file_doc(filename: str, category: str, subcategory: str = "General"):
         "path": f"data/archive/{category}/{subcategory}/{found.name}",
     }
 
+# Field → (client category, risk name). Mirrors FLAG_TO_HIROC in src/data.ts — keep in sync.
+SOUTHLAKE_FLAG_MAP = {
+    "signatories": ("Leadership", "Governance"),
+    "expiry_date": ("Financial", "Contracts"),
+    "effective_date": ("Financial", "Contracts"),
+    "binding_language": ("Financial", "Contracts"),
+    "termination_conv": ("Financial", "Contracts"),
+    "termination_clause": ("Financial", "Contracts"),
+    "auto_renewal": ("Financial", "Contracts"),
+    "conflicting_finance": ("Financial", "Costs"),
+    "indemnity_cap": ("Financial", "Fines/liabilities"),
+    "indemnity_clause": ("Financial", "Fines/liabilities"),
+    "phia_compliance": ("Regulatory", "Privacy"),
+    "purpose_limitation": ("Regulatory", "Privacy"),
+    "data_minimization": ("Regulatory", "Privacy"),
+    "governing_law": ("Regulatory", "Regulatory/legislation"),
+    "breach_timeline": ("Information Management/Technology", "Breach/loss of information"),
+    "breach_notification": ("Information Management/Technology", "Breach/loss of information"),
+    "security_standards": ("Information Management/Technology", "Systems/technology needs"),
+    "audit_rights": ("Information Management/Technology", "Records management"),
+    "return_destruction": ("Information Management/Technology", "Records management"),
+    "duplicate_version": ("Information Management/Technology", "Records management"),
+    "missing_fields": ("Information Management/Technology", "Records management"),
+    "ocr_quality": ("Information Management/Technology", "Systems/technology failure"),
+}
+
 @app.post("/api/classify-and-file")
 async def classify_and_file(files: List[UploadFile] = File(...)):
     """Upload files, run AI classification, and auto-file into the correct folder."""
@@ -435,23 +504,27 @@ async def classify_and_file(files: List[UploadFile] = File(...)):
                 results.append({"filename": file.filename, "error": result["error"]})
                 continue
 
-            # Determine folder: HEROC category (from top flag) + document type (from extraction)
+            # Determine folder: client 12-category Southlake/HIROC taxonomy (from top flag's field)
             flags = result.get("flags", [])
             if flags:
                 top_flag = flags[0]
-                category = top_flag.get("risk_category", "Operational")
+                m = SOUTHLAKE_FLAG_MAP.get(top_flag.get("field", ""), None)
+                category = m[0] if m else top_flag.get("risk_category", "Uncategorized")
             else:
                 category = "Clean"
 
             # Subcategory = document type (what the AI detected)
             doc_type = result.get("document_type", "Other")
             # Sanitize for folder name
-            subcategory = re.sub(r'[^a-zA-Z0-9_]', '_', doc_type)
+            subcategory = re.sub(r'[^a-zA-Z0-9_ ]', '_', doc_type)
 
-            # Normalize category (must be one of the 4 HEROC + Clean)
-            valid_cats = {"Operational", "Financial", "Reputational", "Continuity", "Clean"}
+            # Normalize category (client's 12 categories + Clean + Uncategorized)
+            valid_cats = {"Care", "Human Resources", "Financial", "Leadership",
+                         "Information Management/Technology", "Facilities", "Regulatory",
+                         "External Relations", "Regulation - Professional", "Teaching",
+                         "Research", "Community Health", "Clean", "Uncategorized"}
             if category not in valid_cats:
-                category = "Operational"  # default
+                category = "Uncategorized"
 
             # File it
             target_dir = ARCHIVE_DIR / category / subcategory

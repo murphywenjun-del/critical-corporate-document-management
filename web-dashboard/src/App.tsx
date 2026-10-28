@@ -2623,12 +2623,19 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         } catch {
           // Ultimate fallback: keyword-based (no AI needed)
           const kw = (n: string) => {
+            // Fallback classifier: client 12-category Southlake/HIROC taxonomy (nearest keyword match)
             const l = n.toLowerCase()
-            if (/(nda|agreement|contract|phr|phi)/.test(l)) return 'Operational'
-            if (/(finance|payment|invoice|budget|cost)/.test(l)) return 'Financial'
-            if (/(dr|backup|continuity|disaster|bcp)/.test(l)) return 'Continuity'
-            if (/(reputation|marketing|brand|public)/.test(l)) return 'Reputational'
-            return 'Other'
+            if (/(research|clinical|trial|study|safety|ethic)/.test(l)) return 'Research'
+            if (/(phi|phr|privacy|confidential|nda|data sharing|data_sharing|data use|data_use)/.test(l)) return 'Regulatory'
+            if (/(finance|payment|invoice|budget|cost|procurement|vendor|indemn|contract|agreement|services|service)/.test(l)) return 'Financial'
+            if (/(dr|backup|continuity|disaster|bcp|system|data|breach|information|security)/.test(l)) return 'Information Management/Technology'
+            if (/(reputation|marketing|brand|media|complaint|public)/.test(l)) return 'External Relations'
+            if (/(staff|hr|labour|recruit|injur|workplace|training)/.test(l)) return 'Human Resources'
+            if (/(facility|building|waste|hazard|plant|maintenance|space)/.test(l)) return 'Facilities'
+            if (/(emergency|response|governance|strategic|succession|merger)/.test(l)) return 'Leadership'
+            if (/(community|population|immun|prenatal|primary care|chronic|disabilit|ambulance)/.test(l)) return 'Community Health'
+            if (/(patient|medic|nurs|infection|fall|adverse|birth)/.test(l)) return 'Care'
+            return 'Uncategorized'
           }
           const fb: UploadedDoc[] = fileArr.map((f) => ({
             filename: f.name, document_type: kw(f.name), risk_score: 50,
@@ -2683,18 +2690,19 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
       addToTree('Clean', 'NoFlags', { label: `#${c.num} ${c.displayName}`, num: c.num, riskLevel: 'Low', flagsCount: 0, isUploaded: false })
       continue
     }
-    // Use highest-severity flag's category
+    // Use highest-score flag's client category + nearest risk name (Southlake/HIROC taxonomy)
     const topFlag = cFlags.slice().sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0))[0]
-    const cat = topFlag?.risk_category || 'Uncategorized'
-    const sub = topFlag?.subcategory || 'General'
+    const h = flagHiroc(topFlag.field)
+    const cat = h.cat
+    const sub = h.riskName.replace(/\//g, '-')
     addToTree(cat, sub, { label: `#${c.num} ${c.displayName}`, num: c.num, riskLevel: c.riskLevel, flagsCount: c.flagsCount || cFlags.length, isUploaded: false })
   }
 
-  // Uploaded docs: HIROC category (from top flag) + document type (as sub-folder)
+  // Uploaded docs: client category (from top flag) + document type (as sub-folder)
   for (const u of uploaded) {
     const flags = u.flags || []
     const topFlag = flags.slice().sort((a, b) => (a.severity === 'Critical' ? 3 : a.severity === 'High' ? 2 : 1) - (b.severity === 'Critical' ? 3 : b.severity === 'High' ? 2 : 1))[0]
-    const cat = topFlag?.risk_category || (u.flags_count === 0 ? 'Clean' : 'Operational')
+    const cat = topFlag ? flagHiroc(topFlag.field).cat : (u.flags_count === 0 ? 'Clean' : 'Uncategorized')
     const sub = u.document_type || 'Other'
     addToTree(cat, sub, { label: `📎 ${u.filename}`, riskLevel: u.risk_level, flagsCount: u.flags_count || flags.length, isUploaded: true })
   }
@@ -2782,12 +2790,12 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">
           FOLDER STRUCTURE
           <span className="font-normal text-slate-400 ml-2">
-            5 HIROC categories · {Object.values(diskTree).reduce((a, v) => a + Object.values(v.subcategories).reduce((b, files) => b + files.length, 0), 0)} files on disk
+            12 Southlake/HIROC categories · {Object.values(diskTree).reduce((a, v) => a + Object.values(v.subcategories).reduce((b, files) => b + files.length, 0), 0)} files on disk
           </span>
         </div>
         <div className="divide-y divide-slate-100">
-          {(['Operational', 'Financial', 'Reputational', 'Continuity', 'Clean'] as const).map((cat) => {
-            const icons: Record<string, string> = { Operational: '⚙️', Financial: '💰', Reputational: '📢', Continuity: '🔄', Clean: '✅' }
+          {[...Object.keys(SOUTHLAKE_RISK_TAXONOMY), 'Clean'].map((cat) => {
+            const icons: Record<string, string> = { 'Care': '🩺', 'Human Resources': '👥', 'Financial': '💰', 'Leadership': '🏛️', 'Information Management/Technology': '💻', 'Facilities': '🏥', 'Regulatory': '⚖️', 'External Relations': '🤝', 'Regulation - Professional': '📜', 'Teaching': '🎓', 'Research': '🔬', 'Community Health': '🏘️', 'Clean': '✅' }
             const diskSubs = diskTree[cat]?.subcategories || {}
             const diskSubsWithFiles = Object.entries(diskSubs).filter(([_ , files]) => files.length > 0)
             const diskFileCount = diskSubsWithFiles.reduce((a, [_, files]) => a + files.length, 0)
@@ -2857,14 +2865,13 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         <div className="text-[10px] font-bold text-slate-500 uppercase mb-1.5">Filing Logic</div>
         <ul className="text-[11px] text-slate-600 space-y-0.5 list-disc pl-4">
           <li><b>Upload</b> → OCR + Agnes extraction + rules engine (server.py port 8000)</li>
-          <li><b>Category</b> → HIROC from highest-severity flag (Operational / Financial / Reputational / Continuity)</li>
-          <li><b>Subcategory</b> → 14 subcategories mapped to Southlake departments</li>
+          <li><b>Category</b> → client 12-category Southlake/HIROC taxonomy, from the highest-score flag</li>
+          <li><b>Subcategory</b> → nearest risk name from the client register (dept mapping pending their scoring page)</li>
           <li><b>Confidence</b> → 95% (0 flags) · 88% (1-2) · 72% (3-5) · 55% (6+)</li>
           <li><b>Clean docs</b> → filed to "Clean / Unfiled" until flags appear</li>
         </ul>
       </div>
-    </div>
-  )
+
       {/* File Detail Modal */}
       {fileDetail && (() => { const fd = fileDetail!; return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setFileDetail(null)}>
@@ -2872,7 +2879,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
             <div className="text-sm font-bold text-slate-800 mb-2">📄 {fd.split('/').pop()}</div>
             <div className="text-xs text-slate-500 space-y-1.5">
               <div><b>Full path:</b> <code className="text-teal-700 break-all">{fd}</code></div>
-              <div><b>HIROC Category:</b> {fd.split('/').find((p) => ['Operational','Financial','Reputational','Continuity','Clean'].includes(p)) || 'Unknown'}</div>
+              <div><b>Southlake/HIROC Category:</b> {fd.split('/').find((p) => [...Object.keys(SOUTHLAKE_RISK_TAXONOMY), 'Clean', 'Uncategorized'].includes(p)) || 'Unknown'}</div>
               <div><b>Subcategory:</b> {fd.split('/').slice(-2, -1)[0] || 'N/A'}</div>
               <div className="text-slate-400 mt-2">Stored at <code className="text-slate-600">data/archive/{fd}</code></div>
             </div>
@@ -2880,7 +2887,8 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
           </div>
         </div>
       )})()}
-
+    </div>
+  )
 }
 
 

@@ -10,7 +10,7 @@ export interface Flag {
   impact: number       // 1-5
   risk_score: number   // L × I (1-25)
   compliance_type: 'hard' | 'best_practice'
-  risk_category: string // HIROC: Operational | Financial | Reputational | Continuity
+  risk_category: string // legacy AI 4-category value (reference only); UI derives the client 12 categories via flagHiroc(field)
   subcategory: string  // HIROC subcategory (e.g. Clinical Practice, Data Privacy & PHIPA)
   department: string   // Southlake department affected
   status: string       // 'open' | 'remediated' | 'accepted'
