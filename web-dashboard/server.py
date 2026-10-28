@@ -42,10 +42,14 @@ def load_all_results() -> List[Dict]:
     return results
 
 # ── Config ───────────────────────────────────────────────────────────────────
-AGNES_API_KEY = os.environ.get("AGNES_API_KEY", "")
+# Cloud LLM APIs are DISABLED by default — hard constraint: the prototype runs
+# with no cloud. Any LLM capability is served by local Ollama (127.0.0.1:11434).
+# Cloud providers are opt-in only, via explicit CCDM_* env vars (never read the
+# generic AGNES/TYPESAFE keys that may exist in the environment).
+AGNES_API_KEY = os.environ.get("CCDM_AGNES_API_KEY", "")
 AGNES_BASE_URL = "https://apihub.agnes-ai.com/v1/chat/completions"
 AGNES_MODEL = "agnes-2.5-flash"
-JEV_API_KEY = os.environ.get("TYPESAFE_API_KEY", "")
+JEV_API_KEY = os.environ.get("CCDM_JEV_API_KEY", "")
 JEV_BASE_URL = "https://api.typesafe.ai/v1/systemone"
 JEV_MODEL = "jev-latest"
 
@@ -270,6 +274,7 @@ def process_file(file_path: str, use_agnes: bool = True) -> Dict:
         "flags": flags,
         "extracted_fields": extracted,
         "jev_result": jev_result,
+        "text": text,  # full extracted text — lets the local LLM extraction see the whole document
         "text_preview": text[:500],
         "timestamp": datetime.now().isoformat(),
         "processed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -381,8 +386,9 @@ def get_folder_tree():
 
 @app.get("/api/search")
 def search_docs(q: str, limit: int = 30):
-    """Full-text search over the real on-disk archive (data/archive/**/*.md).
+    """Full-text search over the real on-disk archive (data/archive/**).
 
+    Indexes .md / .txt / .csv / .json as text and .docx / .doc via python-docx.
     Returns matching files with category path, first-match snippet, and size.
     Falls back to research/contracts if the archive is empty.
     """
@@ -392,11 +398,30 @@ def search_docs(q: str, limit: int = 30):
     needle = q.lower()
     dirs = [d for d in [ARCHIVE_DIR, BASE_DIR / "web-dashboard" / "public" / "research" / "contracts"] if d.exists()]
     results = []
+    allowed = {".md", ".txt", ".csv", ".json", ".docx", ".doc"}
+
+    def read_text(f: Path) -> str:
+        ext = f.suffix.lower()
+        try:
+            if ext in {".txt", ".md", ".csv", ".json"}:
+                return f.read_text(encoding="utf-8", errors="ignore")
+            if ext in {".docx", ".doc"}:
+                from docx import Document
+                doc = Document(str(f))
+                return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        except Exception:
+            return ""
+        return ""
+
     for base in dirs:
-        for f in sorted(base.rglob("*.md")):
+        for f in sorted(base.rglob("*")):
+            if not f.is_file() or f.suffix.lower() not in allowed:
+                continue
             try:
-                text = f.read_text(encoding="utf-8", errors="ignore")
+                text = read_text(f)
             except Exception:
+                continue
+            if not text:
                 continue
             idx = text.lower().find(needle)
             if idx < 0:
@@ -481,6 +506,98 @@ SOUTHLAKE_FLAG_MAP = {
     "ocr_quality": ("Information Management/Technology", "Systems/technology failure"),
 }
 
+# ── Local LLM (Ollama) — hard constraint: no cloud, all AI runs locally ─────
+# Default engine: gemma3:1b (~14 tok/s on this machine). llama3.1:latest (4.6GB)
+# is not viable on 8GB RAM; set OLLAMA_MODEL=llama3.1:latest to prefer it —
+# requests automatically fall back to gemma3:1b when the primary model times out.
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma3:1b")
+OLLAMA_FALLBACK_MODEL = "gemma3:1b"
+
+
+def ollama_chat(messages, temperature=0.2, timeout=90, fmt=None, model=None):
+    """Call a local Ollama model. Raises if the server is unreachable or times out."""
+    payload = {"model": model or OLLAMA_MODEL, "messages": messages, "stream": False,
+               "options": {"temperature": temperature}}
+    if fmt:
+        payload["format"] = fmt
+    req = urllib.request.Request(OLLAMA_URL + "/api/chat",
+                                 data=json.dumps(payload).encode(),
+                                 headers={"Content-Type": "application/json"},
+                                 method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode())
+
+
+def ollama_chat_fallback(messages, temperature=0.2, timeout=90, fmt=None):
+    """ollama_chat with automatic fallback to gemma3:1b when the primary model fails.
+
+    Returns (response_dict, model_used).
+    """
+    try:
+        return ollama_chat(messages, temperature=temperature, timeout=timeout, fmt=fmt), OLLAMA_MODEL
+    except Exception:
+        if OLLAMA_MODEL != OLLAMA_FALLBACK_MODEL:
+            out = ollama_chat(messages, temperature=temperature, timeout=timeout,
+                              fmt=fmt, model=OLLAMA_FALLBACK_MODEL)
+            return out, OLLAMA_FALLBACK_MODEL + " (fallback)"
+        raise
+
+
+def ollama_extract(text: str) -> Optional[Dict]:
+    """LLM extraction of structured contract fields (local Ollama, with model fallback)."""
+    user = (
+        "Extract structured data from this contract text. Respond with STRICT JSON only, "
+        "no prose, matching exactly: {\"document_type\": one of [\"NDA\",\"CDA\",\"MOU\","
+        "\"Procurement\",\"Data_Sharing\",\"Clinical_Trial\",\"Other\"], "
+        "\"parties\": [\"name\", ...], \"vp_signature_count\": integer or null, "
+        "\"has_phipa_clause\": boolean, \"has_indemnity\": boolean, "
+        "\"breach_notification_hours\": integer or null, "
+        "\"missing_clauses\": [\"clause name\", ...]}.\n\n"
+        "TEXT (first 6000 chars):\n" + text[:6000]
+    )
+    out, _ = ollama_chat_fallback([
+        {"role": "system", "content": "You are a precise contract-data extractor. Output strict JSON only."},
+        {"role": "user", "content": user},
+    ], temperature=0.0, timeout=120, fmt="json")
+    return json.loads(out["message"]["content"])
+
+
+@app.post("/api/llm-compare")
+def llm_compare(payload: dict):
+    """LLM clause review of an incoming document vs a reference (local Ollama).
+
+    Body: { incoming: {num, name, type, fields, flags}, ref: {label, fields}, diffs: [...] }
+    Returns { ok, model, data: {summary, key_findings, review_focus} } — ok:false when
+    the local engine is unavailable, so the UI can degrade to deterministic analysis.
+    """
+    try:
+        inc = payload.get("incoming", {})
+        ref = payload.get("ref", {})
+        diffs = payload.get("diffs", [])
+        prompt = (
+            "Compare the incoming document's clauses against the reference and identify "
+            "where the deviations matter to Legal review. Respond with STRICT JSON only: "
+            "{\"summary\": one-paragraph assessment, \"key_findings\": [3-5 short findings], "
+            "\"review_focus\": [2-4 specific clauses for the reviewer to check]}.\n\n"
+            "INCOMING (" + str(inc.get("name", "")) + ", type " + str(inc.get("type", "")) + "):\n"
+            + json.dumps({"fields": inc.get("fields", []), "flags": inc.get("flags", [])}, indent=1)[:4000] +
+            "\n\nREFERENCE (" + str(ref.get("label", "")) + "):\n"
+            + json.dumps(ref.get("fields", {}), indent=1)[:4000] +
+            "\n\nCLAUSE DIFFS (status aligned/changed/missing):\n"
+            + json.dumps(diffs[:10], indent=1)[:3000]
+        )
+        out, model_used = ollama_chat_fallback([
+            {"role": "system", "content": "You are a contract-review assistant at Southlake Health. Be specific and conservative; flag real clause risks, not style."},
+            {"role": "user", "content": prompt},
+        ], temperature=0.2, timeout=120, fmt="json")
+        data = json.loads(out["message"]["content"])
+        return {"ok": True, "model": model_used,
+                "data": {"summary": data.get("summary", ""), "key_findings": data.get("key_findings", []), "review_focus": data.get("review_focus", [])}}
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)[:200]})
+
+
 @app.post("/api/classify-and-file")
 async def classify_and_file(files: List[UploadFile] = File(...)):
     """Upload files, run AI classification, and auto-file into the correct folder."""
@@ -503,6 +620,23 @@ async def classify_and_file(files: List[UploadFile] = File(...)):
             if "error" in result:
                 results.append({"filename": file.filename, "error": result["error"]})
                 continue
+
+            # Local LLM extraction (Ollama) augments the rules engine; degrades to rules-only when offline
+            engine = "rules"
+            try:
+                llm = ollama_extract(result.get("text", result.get("text_preview", "")))
+                if llm:
+                    engine = "ollama+rules"
+                    if llm.get("document_type") in {"NDA", "CDA", "MOU", "Procurement", "Data_Sharing", "Clinical_Trial", "Other"}:
+                        result["document_type"] = llm["document_type"]
+                    for mc in (llm.get("missing_clauses") or [])[:3]:
+                        result.setdefault("flags", []).append({
+                            "severity": "Medium", "field": "missing_fields",
+                            "flag_if": f"LLM extraction: expected clause not found — {mc}",
+                        })
+            except Exception:
+                pass
+            result["engine"] = engine
 
             # Determine folder: client 12-category Southlake/HIROC taxonomy (from top flag's field)
             flags = result.get("flags", [])

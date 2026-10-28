@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { contracts, docLinks, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type ContractDoc, type Amendment, type DocLink,
-  ROLES, canView, DEMO_TODAY, CONF_LABEL, CONF_BADGE, retentionState, type Role,
+  ROLES, canView, canManage, archiveFileConf, contractToTemplateRef, DEMO_TODAY, CONF_LABEL, CONF_BADGE, retentionState, type Role,
   TEMPLATE_LIBRARY, matchTemplate, classifyType, RISK_FRAMEWORK,
   SOUTHLAKE_RISK_TAXONOMY, flagHiroc } from './data'
 
@@ -698,10 +698,16 @@ function RetentionBoard({
   contracts: allContracts,
   approved,
   onApprove,
+  manageable,
+  disposed,
+  onDispose,
 }: {
   contracts: ContractDoc[]
   approved: Set<string>
   onApprove: (c: ContractDoc) => void
+  manageable?: boolean
+  disposed?: Set<string>
+  onDispose?: (c: ContractDoc) => void
 }) {
   const rows = allContracts
     .filter((c) => c.expiryDate)
@@ -742,6 +748,7 @@ function RetentionBoard({
               <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-28">Retention Until</th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-24">Days Left</th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-28">Notify</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-24">Paper copies</th>
               <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-32">Status / Action</th>
             </tr>
           </thead>
@@ -761,14 +768,42 @@ function RetentionBoard({
                     {daysLeft < 0 ? `${Math.abs(daysLeft)}d ago` : `${daysLeft}d`}
                   </td>
                   <td className="px-4 py-2.5 text-xs text-slate-500">{c.retentionOwner}</td>
+                  <td className="px-4 py-2.5 text-xs text-slate-600">
+                    {c.paper ? (
+                      <div>
+                        <div className="font-bold">{c.paper.copies} {c.paper.copies > 1 ? 'copies' : 'copy'}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">{c.paper.location}</div>
+                      </div>
+                    ) : (
+                      <span className="text-slate-300">digital only</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5">
                     {status === 'elapsed' ? (
                       isApproved ? (
-                        <span className="text-[10px] font-bold text-emerald-600">✓ Destruction approved</span>
+                        <div className="space-y-1">
+                          <span className="text-[10px] font-bold text-emerald-600">✓ Destruction approved</span>
+                          {c.paper && (
+                            disposed?.has(String(c.num)) ? (
+                              <span className="text-[10px] font-bold text-emerald-600">✓ Paper copies disposed</span>
+                            ) : (
+                              <button
+                                onClick={() => onDispose?.(c)}
+                                disabled={!manageable}
+                                title={!manageable ? 'Paper disposal sign-off is restricted to the Legal role (demo RBAC)' : undefined}
+                                className="text-[10px] font-bold text-slate-600 border border-slate-200 bg-slate-50 hover:bg-slate-100 rounded px-2 py-1 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                Dispose {c.paper.copies} paper {c.paper.copies > 1 ? 'copies' : 'copy'} →
+                              </button>
+                            )
+                          )}
+                        </div>
                       ) : (
                         <button
                           onClick={() => onApprove(c)}
-                          className="text-[10px] font-bold text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 rounded px-2 py-1 transition"
+                          disabled={!manageable}
+                          title={!manageable ? 'Destruction approval is restricted to the Legal role (demo RBAC)' : undefined}
+                          className="text-[10px] font-bold text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 rounded px-2 py-1 transition disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           Approve discard →
                         </button>
@@ -816,7 +851,7 @@ function matchDoc(c: ContractDoc, needle: string): boolean {
   return hay.includes(needle)
 }
 
-function DocSearch({ contracts: allContracts, onSelect }: { contracts: ContractDoc[]; onSelect: (c: ContractDoc) => void }) {
+function DocSearch({ contracts: allContracts, onSelect, role }: { contracts: ContractDoc[]; onSelect: (c: ContractDoc) => void; role?: Role | null }) {
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<{ file: string; path: string; snippet: string; size_bytes: number; source: string }[] | null>(null)
   const [diskCount, setDiskCount] = useState<number | null>(null)
@@ -830,7 +865,10 @@ function DocSearch({ contracts: allContracts, onSelect }: { contracts: ContractD
       .catch(() => { if (!cancelled) { setHits([]); setDiskCount(0) } })
     return () => { cancelled = true }
   }, [needle])
+  // RBAC: demo docs arrive pre-gated from the caller; disk files are gated here by their archive confidentiality
   const local = needle.length >= 2 ? allContracts.filter((c) => matchDoc(c, needle)) : []
+  const gatedHits = role ? (hits || []).filter((h) => canView(role, { confidentiality: archiveFileConf(h.file) })) : hits
+  const gatedDiskCount = role ? (gatedHits || []).length : diskCount
   return (
     <div className="bg-white border border-slate-200 rounded-lg p-4">
       <div className="relative">
@@ -864,15 +902,18 @@ function DocSearch({ contracts: allContracts, onSelect }: { contracts: ContractD
               </button>
             ))}
           </div>
-          {/* On-disk archive matches */}
+          {/* On-disk archive matches (RBAC-gated: files above the role's access level are hidden) */}
           {hits !== null ? (
             <div>
               <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
-                On-disk archive <span className="text-teal-600">({diskCount ?? 0} files)</span>
+                On-disk archive <span className="text-teal-600">({gatedDiskCount ?? 0} files)</span>
                 <span className="font-normal normal-case text-slate-400"> · data/archive, verified from disk</span>
+                {role && (hits || []).length > (gatedHits || []).length && (
+                  <span className="font-normal normal-case text-slate-400"> · {(hits || []).length - (gatedHits || []).length} hidden by role access</span>
+                )}
               </div>
-              {hits.length === 0 && <div className="text-[11px] text-slate-400">No matches in the on-disk archive.</div>}
-              {hits.map((h, i) => (
+              {(gatedHits || []).length === 0 && <div className="text-[11px] text-slate-400">No matches in the on-disk archive (or all matches are above your access level).</div>}
+              {(gatedHits || []).map((h, i) => (
                 <div key={i} className="px-3 py-2 -mx-3 hover:bg-slate-50 rounded transition-colors">
                   <div className="text-xs font-medium text-slate-700 truncate">{h.path}</div>
                   <div className="text-[10px] text-slate-500 mt-0.5 truncate">
@@ -905,25 +946,51 @@ const RISK_BADGE: Record<string, { bg: string; fg: string; label: string }> = {
 function TemplateMatchView({ allContracts, role }: { allContracts: ContractDoc[]; role: Role }) {
   const visibleDocs = allContracts.filter((c) => canView(role, c))
   const [incomingNum, setIncomingNum] = useState<number | ''>(4) // #4 DSA Provider — demo default (falls back to placeholder for roles that can't view it)
+  const [refMode, setRefMode] = useState<'template' | 'contract'>('template')
   const [tplId, setTplId] = useState('tpl-dsa')
+  const [refContractNum, setRefContractNum] = useState<number>(9)
+  const [ai, setAi] = useState<{ status: 'idle' | 'loading' | 'done' | 'error'; data?: { summary: string; key_findings: string[]; review_focus: string[] }; model?: string; error?: string }>({ status: 'idle' })
 
-  // Auto-suggest the best reference when the incoming document changes
+  // Auto-suggest the best reference when the incoming document changes (template mode only)
   const prevNum = useRef<number | ''>('')
   useEffect(() => {
     if (incomingNum === '' || prevNum.current === incomingNum) { prevNum.current = incomingNum; return }
-    const inc = allContracts.find((c) => c.num === incomingNum)
-    if (inc) {
-      const cls = classifyType(inc)
-      const t = TEMPLATE_LIBRARY.find((x) => x.type === cls.type)
-      if (t) setTplId(t.id)
+    if (refMode === 'template') {
+      const inc = allContracts.find((c) => c.num === incomingNum)
+      if (inc) {
+        const cls = classifyType(inc)
+        const t = TEMPLATE_LIBRARY.find((x) => x.type === cls.type)
+        if (t) setTplId(t.id)
+      }
     }
     prevNum.current = incomingNum
-  }, [incomingNum, allContracts])
+  }, [incomingNum, allContracts, refMode])
 
   const incoming = incomingNum !== '' ? visibleDocs.find((c) => c.num === incomingNum) || null : null
-  const tpl = TEMPLATE_LIBRARY.find((t) => t.id === tplId) || TEMPLATE_LIBRARY[0]
+  const refContract = refMode === 'contract' ? visibleDocs.find((c) => c.num === refContractNum && c.num !== incomingNum) || null : null
+  const tpl = refMode === 'contract' && refContract
+    ? contractToTemplateRef(refContract)
+    : TEMPLATE_LIBRARY.find((t) => t.id === tplId) || TEMPLATE_LIBRARY[0]
   const result = incoming ? matchTemplate(incoming, tpl) : null
   const simColor = !result ? '#64748b' : result.similarity >= 90 ? '#10b981' : result.similarity >= 70 ? '#f59e0b' : '#ef4444'
+
+  // Real local AI (Ollama, server.py: primary model from OLLAMA_MODEL env, automatic fallback to gemma3:1b): LLM clause review of the diff above
+  const runAiReview = () => {
+    if (!incoming || !result) return
+    setAi({ status: 'loading' })
+    fetch('/api/llm-compare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        incoming: { num: incoming.num, name: incoming.displayName, type: incoming.type, fields: incoming.extractedFields, flags: incoming.flags },
+        ref: { label: tpl.name, fields: tpl.fieldValues },
+        diffs: result.diffs,
+      }),
+    })
+      .then((r) => r.json())
+      .then((d) => setAi(d.ok ? { status: 'done', data: d.data, model: d.model } : { status: 'error', error: d.error }))
+      .catch((e) => setAi({ status: 'error', error: String(e) }))
+  }
 
   const selStyle: React.CSSProperties = {
     fontSize: 12, border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px',
@@ -946,13 +1013,41 @@ function TemplateMatchView({ allContracts, role }: { allContracts: ContractDoc[]
           </div>
         </div>
         <div style={{ minWidth: 280, flex: 1, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>COMPARE AGAINST (template / executed reference)</div>
-          <select style={{ ...selStyle, width: '100%' }} value={tplId} onChange={(e) => setTplId(e.target.value)}>
-            {TEMPLATE_LIBRARY.map((t) => (
-              <option key={t.id} value={t.id}>{t.name} · {t.type} · {t.kind}</option>
-            ))}
-          </select>
-          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>{tpl.notes}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>COMPARE AGAINST</div>
+            <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+              <button
+                onClick={() => setRefMode('template')}
+                style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 8, border: '1px solid ' + (refMode === 'template' ? '#0d9488' : '#e2e8f0'), background: refMode === 'template' ? '#f0fdfa' : '#fff', color: refMode === 'template' ? '#0f766e' : '#94a3b8', cursor: 'pointer' }}
+              >Template</button>
+              <button
+                onClick={() => setRefMode('contract')}
+                style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 8, border: '1px solid ' + (refMode === 'contract' ? '#0d9488' : '#e2e8f0'), background: refMode === 'contract' ? '#f0fdfa' : '#fff', color: refMode === 'contract' ? '#0f766e' : '#94a3b8', cursor: 'pointer' }}
+              >Past signed contract</button>
+            </div>
+          </div>
+          {refMode === 'template' ? (
+            <>
+              <select style={{ ...selStyle, width: '100%' }} value={tplId} onChange={(e) => setTplId(e.target.value)}>
+                {TEMPLATE_LIBRARY.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name} · {t.type} · {t.kind}</option>
+                ))}
+              </select>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>{tpl.notes}</div>
+            </>
+          ) : (
+            <>
+              <select style={{ ...selStyle, width: '100%' }} value={refContractNum} onChange={(e) => setRefContractNum(Number(e.target.value))}>
+                {visibleDocs.filter((c) => c.num !== incomingNum).map((c) => (
+                  <option key={c.num} value={c.num}>#{c.num} · {c.displayName} ({c.type})</option>
+                ))}
+              </select>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
+                Clause-level diff against a previously signed contract in the repository — the “did the party deviate from
+                what we already accepted?” check.
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -985,8 +1080,8 @@ function TemplateMatchView({ allContracts, role }: { allContracts: ContractDoc[]
                   {result.alignedCount} of {result.totalClauses} reference clauses align.</span>
               </div>
               <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 10, lineHeight: 1.5 }}>
-                Deterministic clause alignment over extracted fields (demo engine). Phase 2: LLM clause
-                matching via local Ollama — same UI, clause-text-level diffs.
+                Deterministic clause alignment over extracted fields (runs offline, instant). For clause-text-level
+                judgment, use “AI Clause Review” below — local Ollama, no cloud.
               </div>
             </div>
           </div>
@@ -1048,9 +1143,67 @@ function TemplateMatchView({ allContracts, role }: { allContracts: ContractDoc[]
               </table>
             </div>
             <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 10, lineHeight: 1.5 }}>
-              “Needs Attention” = clauses where the incoming document deviates from the approved reference
-              and the deviation triggers a risk rule. All other clauses are treated as boilerplate and skipped in review.
+              Deterministic clause alignment over extracted fields. “Needs Attention” = clauses where the incoming
+              document deviates from the approved reference and the deviation triggers a risk rule; aligned boilerplate
+              is skipped in review.
             </div>
+          </div>
+
+          {/* AI clause review — real local LLM (Ollama), no cloud */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 18, marginTop: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, fontWeight: 800 }}>AI Clause Review</span>
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: '#f0fdfa', color: '#0f766e', fontWeight: 700 }}>local Ollama · runs on this machine</span>
+              <button
+                onClick={runAiReview}
+                disabled={ai.status === 'loading'}
+                style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '6px 14px', borderRadius: 8, border: '1px solid #0d9488', background: ai.status === 'loading' ? '#ccfbf1' : '#0d9488', color: '#fff', cursor: ai.status === 'loading' ? 'default' : 'pointer', opacity: ai.status === 'loading' ? 0.7 : 1 }}
+              >
+                {ai.status === 'loading' ? 'Generating…' : ai.status === 'done' ? 'Re-run AI review' : 'Run AI review'}
+              </button>
+            </div>
+            {ai.status === 'idle' && (
+              <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.6 }}>
+                Sends the clause diff above to the local Ollama model for a legal-review summary: what a reviewer
+                should focus on, which findings matter most, and any clause risks the deterministic engine may have
+                under-weighted. Runs entirely on this machine (127.0.0.1:11434).
+              </div>
+            )}
+            {ai.status === 'loading' && (
+              <div style={{ fontSize: 11, color: '#64748b' }}>Local model generating review… (~10–40 s)</div>
+            )}
+            {ai.status === 'error' && (
+              <div style={{ fontSize: 11, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 10, lineHeight: 1.5 }}>
+                AI review unavailable: {ai.error}. The deterministic clause diff above remains the source of truth —
+                start Ollama (ollama serve) and try again.
+              </div>
+            )}
+            {ai.status === 'done' && ai.data && (
+              <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.6 }}>
+                <div style={{ marginBottom: 10 }}>{ai.data.summary}</div>
+                {ai.data.key_findings && ai.data.key_findings.length > 0 && (
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', marginBottom: 4 }}>KEY FINDINGS</div>
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      {ai.data.key_findings.map((f, i) => (
+                        <li key={i} style={{ marginBottom: 3 }}>{f}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {ai.data.review_focus && ai.data.review_focus.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', marginBottom: 4 }}>REVIEW FOCUS</div>
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      {ai.data.review_focus.map((f, i) => (
+                        <li key={i} style={{ marginBottom: 3 }}>{f}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div style={{ fontSize: 9, color: '#cbd5e1', marginTop: 10 }}>Generated locally by {ai.model} — assistive only; the clause diff above is the system of record.</div>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -2276,7 +2429,7 @@ function SettingsSidebar({
 
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
-function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[] }) {
+function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields, manageable }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[]; manageable?: boolean }) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref'>('all')
   const [showResolved, setShowResolved] = useState(false)
   const [search, setSearch] = useState('')
@@ -2519,7 +2672,9 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                         onSelectContract(item.contract)
                       }
                     }}
-                    className="text-[11px] font-medium text-teal-600 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 rounded px-2 py-1 transition"
+                    disabled={!manageable}
+                    title={!manageable ? 'Edit / manage actions are restricted to the Legal role (demo RBAC)' : undefined}
+                    className="text-[11px] font-medium text-teal-600 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 rounded px-2 py-1 transition disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {item.action} →
                   </button>
@@ -3244,6 +3399,9 @@ function App() {
   const [approvedDestruction, setApprovedDestruction] = useState<Set<string>>(() => {
     try { const r = localStorage.getItem('sl_approved_destruction'); return r ? new Set(JSON.parse(r)) : new Set() } catch { return new Set() }
   })
+  const [disposedPaper, setDisposedPaper] = useState<Set<string>>(() => {
+    try { const r = localStorage.getItem('sl_paper_disposed'); return r ? new Set(JSON.parse(r)) : new Set() } catch { return new Set() }
+  })
   const setRole = (id: string) => { setRoleId(id); localStorage.setItem('sl_role', id) }
   const [filterType, setFilterType] = useState('All')
   const [filterRisk, setFilterRisk] = useState('All')
@@ -3364,6 +3522,26 @@ function App() {
       },
       showNote: true,
       defaultNote: 'Approved for discard per records schedule.',
+    })
+  }
+
+  // Paper disposal (item 4): destroy physical copies after digital discard is approved
+  const disposePaper = (c: ContractDoc) => {
+    const n = c.paper?.copies ?? 0
+    setConfirmState({
+      title: `Dispose ${n} paper ${n > 1 ? 'copies' : 'copy'} of #${c.num} ${c.displayName}?`,
+      message: `Location: ${c.paper?.location}. The digital record remains in the archive as an audit trail. Confirm physical destruction of all ${n} ${n > 1 ? 'copies' : 'copy'}. This action is logged.`,
+      onConfirm: () => {
+        setDisposedPaper((prev) => {
+          const next = new Set(prev)
+          next.add(String(c.num))
+          localStorage.setItem('sl_paper_disposed', JSON.stringify([...next]))
+          return next
+        })
+        show(`#${c.num} paper copies disposed (${n}) — digital audit record retained`, 'success')
+      },
+      showNote: true,
+      defaultNote: 'Paper disposal verified against the location log.',
     })
   }
 
@@ -3640,7 +3818,7 @@ function App() {
                   <WorkQueueView contracts={visible} onSelectContract={(c) => setSelected(c)}
                     onProcess={(link) => { setProcessLink(link); setSelected(null) }}
                     resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} onResolveFlag={(id) => markFlagResolved(id)}
-                    resolvedLog={resolvedLog}
+                    manageable={!!role && canManage(role)} resolvedLog={resolvedLog}
                     focusFields={focusFields}
                     onConfirmAction={(title, msg, action, showNote, defaultNote) => setConfirmState({ title, message: msg, onConfirm: action, showNote, defaultNote })} />
                 )}
@@ -3664,7 +3842,7 @@ function App() {
                 {activeTab === 'contracts' && (
                   <div className="space-y-4">
                     {/* Full-text search (demo docs + on-disk archive) */}
-                    <DocSearch contracts={filtered} onSelect={(c) => { setSelected(c); }} />
+                    <DocSearch contracts={visible} role={role} onSelect={(c) => { setSelected(c); }} />
 
                     {/* Criteria-based compliance panel (F) */}
                     <CriteriaPanel contracts={visible} />
@@ -3684,7 +3862,8 @@ function App() {
                   <div>
                     <DeadlinesTimeline contracts={visible} onSelectContract={(c) => { setSelected(c); }} />
                     <DeadlinesTable contracts={visible} onSelectContract={(c) => { setSelected(c); }} />
-                    <RetentionBoard contracts={visible} approved={approvedDestruction} onApprove={approveDestruction} />
+                    <RetentionBoard contracts={visible} approved={approvedDestruction} onApprove={approveDestruction}
+  manageable={!!role && canManage(role)} disposed={disposedPaper} onDispose={disposePaper} />
                   </div>
                 )}
                 {activeTab === 'cross-refs' && (

@@ -81,6 +81,7 @@ export interface ContractDoc {
   retentionYears: number      // Years post-expiry the document must be retained
   retentionBasis: string      // Plain-language records-schedule rationale
   retentionOwner: string      // Who gets notified at the retention deadline
+  paper?: { copies: number; location: string } // Paper copies to track through disposal
 }
 
 export interface JevData {
@@ -138,6 +139,33 @@ export const CONF_BADGE: Record<Confidentiality, string> = {
 
 export function canView(role: Role, doc: Pick<ContractDoc, 'confidentiality'>): boolean {
   return role.access.includes(doc.confidentiality)
+}
+
+// Edit/manage actions (resolve flags, approve disposal, log paper destruction) are
+// restricted to the Legal role in the demo; other roles are read-only.
+export function canManage(role: Role): boolean {
+  return role.id === 'legal'
+}
+
+// On-disk archive files → confidentiality, so the disk search can be RBAC-gated.
+// Contract files inherit their contract's level; standalone files are internal.
+export const ARCHIVE_FILE_CONF: Record<string, Confidentiality> = {
+  'NDA_Standard_Compliant_2024.md': 'public',
+  'MOU_Missing_Second_Signature_2024.md': 'internal',
+  'Procurement_HealthIT_Service_Agreement_2023.md': 'confidential',
+  'DSA_Provider_Data_Sharing_2024.md': 'restricted',
+  'NDA_Old_Vendor_2022.md': 'internal',
+  'Procurement_Security_Services_2024.md': 'confidential',
+  'MOU_Partnership_Duplicate_Versions_2024.md': 'internal',
+  'Legacy_IT_Contract_2019_Scan.md': 'confidential',
+  'IT_Master_Services_Agreement_2024.md': 'confidential',
+  'Health_Data_Sharing_Services_2024.md': 'restricted',
+  'DSA_Amendment_No1_Extended_Retention_2026.md': 'restricted',
+  'Research_PHI_Use_Agreement_2025.md': 'internal',
+  'Environmental_Waste_Management_2024.md': 'internal',
+}
+export function archiveFileConf(filename: string): Confidentiality {
+  return ARCHIVE_FILE_CONF[filename] || 'internal'
 }
 
 // ── Retention management (2026-10-17 meeting: retention period alerts) ────
@@ -552,6 +580,19 @@ function findFieldValue(c: ContractDoc, label: string): { value: string; status:
   return null
 }
 
+// Treat a previously signed contract as a comparison reference
+// (item 2: "compare against standard templates AND past signed similar contracts")
+export function contractToTemplateRef(ref: ContractDoc): TemplateRef {
+  const fieldValues: Record<string, string> = {}
+  for (const f of ref.extractedFields || []) if (f.status !== '?') fieldValues[f.label] = f.value
+  return {
+    id: `ref-c${ref.num}`,
+    name: `Contract #${ref.num} — ${ref.displayName} (signed, in repo)`,
+    kind: 'executed', type: ref.type, fieldValues,
+    notes: 'Previously signed contract from the repository — reference for clause comparison.',
+  }
+}
+
 export function matchTemplate(c: ContractDoc, tpl: TemplateRef): TemplateMatchResult {
   const cls = classifyType(c)
   const ctx: ClauseCtx = { type: cls.type }
@@ -806,7 +847,7 @@ export const contracts: ContractDoc[] = [
     jev: { riskSeverity: { choice: "medium", confidence: 0.48 }, needsHumanReview: 0.35, isComplianceRelated: 0.99, shouldAlert: 0.55, decisionConfidence: 2.19 },
     compliance: { hardGaps: 0, bpGaps: 0, complianceRate: 1.0, topRiskField: null },
     department: "Legal & Compliance", expiryDate: "2029-03-15",
-    confidentiality: "public", retentionYears: 5, retentionBasis: "NDA confidentiality period — 5 years post-term", retentionOwner: "Legal & Compliance",
+    confidentiality: "public", retentionYears: 5, retentionBasis: "NDA confidentiality period — 5 years post-term", retentionOwner: "Legal & Compliance", paper: { copies: 1, location: "Legal vault — signed original" },
   },
   {
     num: 2, name: "MOU_Missing_Second_Signature_2024", displayName: "MOU — Missing VP Signatures",
@@ -928,7 +969,7 @@ export const contracts: ContractDoc[] = [
     jev: { riskSeverity: { choice: "critical", confidence: 0.62 }, needsHumanReview: 0.66, isComplianceRelated: 0.96, shouldAlert: 0.78, decisionConfidence: 2.32 },
     compliance: { hardGaps: 5, bpGaps: 2, complianceRate: 0.12, topRiskField: "signatories" },
     department: "Research", expiryDate: "2025-12-31",
-    confidentiality: "restricted", retentionYears: 10, retentionBasis: "PHI data sharing — 10 years (PHIPA best practice)", retentionOwner: "Data Privacy Office",
+    confidentiality: "restricted", retentionYears: 10, retentionBasis: "PHI data sharing — 10 years (PHIPA best practice)", retentionOwner: "Data Privacy Office", paper: { copies: 1, location: "Legal vault — DSA original" },
   },
   {
     num: 5, name: "NDA_Old_Vendor_2022", displayName: "NDA — Expired Vendor Agreement",
@@ -1047,7 +1088,7 @@ export const contracts: ContractDoc[] = [
     // ── Amendment linking: Contract 7 IS the base, and has 2 versions ──
     
     department: "Quality & Patient Safety", expiryDate: "2025-07-31",
-    confidentiality: "internal", retentionYears: 7, retentionBasis: "Partnership MOU — 7 years post-termination", retentionOwner: "Quality & Patient Safety",
+    confidentiality: "internal", retentionYears: 7, retentionBasis: "Partnership MOU — 7 years post-termination", retentionOwner: "Quality & Patient Safety", paper: { copies: 2, location: "Legal vault + Finance filing" },
     amendments: [
       {
         id: "v1",
@@ -1108,7 +1149,7 @@ export const contracts: ContractDoc[] = [
     jev: { riskSeverity: { choice: "high", confidence: 0.86 }, needsHumanReview: 0.90, isComplianceRelated: 0.86, shouldAlert: 0.91, decisionConfidence: 0.0 },
     compliance: { hardGaps: 4, bpGaps: 2, complianceRate: 0.33, topRiskField: "signatories" },
     department: "IT / Info Systems", expiryDate: "2022-03-01",
-    confidentiality: "confidential", retentionYears: 3, retentionBasis: "Legacy 2019 license — 3-year records review cycle", retentionOwner: "IT / Info Systems",
+    confidentiality: "confidential", retentionYears: 3, retentionBasis: "Legacy 2019 license — 3-year records review cycle", retentionOwner: "IT / Info Systems", paper: { copies: 3, location: "Records archive — 2019 originals + scans" },
   },
   // ── NEW Contract 9: IT Master Services Agreement (from Exelon/NSW template structure) ──
   {
@@ -1245,7 +1286,7 @@ export const contracts: ContractDoc[] = [
     jev: { riskSeverity: { choice: "high", confidence: 0.72 }, needsHumanReview: 0.85, isComplianceRelated: 0.91, shouldAlert: 0.78, decisionConfidence: 1.85 },
     compliance: { hardGaps: 3, bpGaps: 1, complianceRate: 0.5, topRiskField: "signatories" },
     department: "Research", expiryDate: "2027-01-01",
-    confidentiality: "restricted", retentionYears: 10, retentionBasis: "PHI data sharing amendment — 10 years (PHIPA)", retentionOwner: "Data Privacy Office",
+    confidentiality: "restricted", retentionYears: 10, retentionBasis: "PHI data sharing amendment — 10 years (PHIPA)", retentionOwner: "Data Privacy Office", paper: { copies: 1, location: "Legal vault — amendment original" },
     baseContractId: 10,
   },
   {
