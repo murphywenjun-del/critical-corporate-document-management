@@ -174,7 +174,7 @@ export function retentionState(c: Pick<ContractDoc, 'expiryDate' | 'retentionYea
 // Current values are the AI default: 5×5 Likelihood×Impact, score bands
 // ≥20 red / 12–19 orange / 6–11 yellow / <6 green.
 export const RISK_FRAMEWORK = {
-  source: 'AI default — pending Southlake internal risk register (expected ~early Nov)',
+  source: 'Southlake / HIROC risk taxonomy adopted (client-provided register, Jul 2019 — 12 categories). C×P 3×3 scoring page pending — AI 5×5 L×I in use meanwhile.',
   likelihoodLabels: ['Rare', 'Unlikely', 'Might happen', 'Likely', 'Will happen'],
   impactLabels: ['Tiny', 'Small', 'Noticeable', 'Major', 'Severe'],
   bands: { red: 20, orange: 12, yellow: 6 },
@@ -182,6 +182,60 @@ export const RISK_FRAMEWORK = {
     'Single-contract: L×I score per flag, band determines red/orange/green.',
     'Portfolio: field-frequency patterns (same flag in ≥3 contracts = systemic trend).',
   ],
+}
+
+// ── Southlake / HIROC risk taxonomy (client-provided, Jul 2019 register) ──
+// "Integrated Risk Management Program Taxonomy — Risk Categories and Risk
+// Names", HIROC Risk Register (July 2019), provided by Southlake. 12 risk
+// categories + risk names. The C×P scoring page (consequence High=3/Med=2/
+// Low=1 × probability) continues on the register's next page and has not
+// been provided yet — RISK_FRAMEWORK scoring stays on the AI 5×5 L×I.
+// Research risk names below double as the tracking checklist for item 6
+// (research agreements: contracts (research), ethics, IP, adverse events).
+export const SOUTHLAKE_RISK_TAXONOMY: Record<string, string[]> = {
+  'Care': ['Adverse Events (General)', 'Abduction', 'Airway', 'Birth trauma', 'Communication/coordination', 'Diagnostic errors', 'Discharge/transitions', 'Equipment/unauthorized absence', 'Falls', 'Infection control', 'Laboratory/radiology', 'Medication', 'Monitoring (e.g. vital signs)', 'Multi-patient events', 'Not seen / not found', 'Pressure ulcers', 'Restraints/entanglement/entrapment', 'Retained foreign objects', 'Security/assault', 'Suicide/self-harm', 'Wrong patient/site', 'Access', 'Acuity', 'Care/consent conflicts', 'Complaints management', 'Contracted services monitoring', 'Experience/relations', 'Funds management', 'Length of stay', 'Pain management', 'Patient victimization', 'Readmissions', 'Supply shortages', 'Support services'],
+  'Human Resources': ['Agency issues', 'Benefits/overtime', 'Development', 'Engagement', 'Labour relations', 'Physical injuries', 'Psychological injuries', 'Recruitment/retention', 'Rights', 'Scope of practice', 'Staffing', 'Violence/disruptive behaviour', 'Wrongful dismissal'],
+  'Financial': ['Contracts', 'Costs', 'Fines/liabilities', 'Fraud', 'Indebtedness', 'Investments', 'Procurement', 'Reporting', 'Revenue/funding', 'Supply chain'],
+  'Leadership': ['Alignment acute/non-acute', 'Change management', 'Conflict of interest', 'Culture', 'Emergency response', 'Governance', 'Information gaps', 'Mergers/partnerships/alliances', 'New program/technology', 'Politics', 'Strategic projects', 'Strategy alignment', 'Succession'],
+  'Information Management/Technology': ['Barcode/technology failure', 'Barcode/technology needs', 'Breach/loss of information', 'Records management', 'Systems integration', 'Systems project', 'Systems reliability', 'Systems/technology failure', 'Systems/technology needs', 'Technology use'],
+  'Facilities': ['Aging/maintenance', 'Building access', 'Building project/construction', 'Hazardous materials', 'Physical space constraints', 'Plant/systems failure', 'Property damage', 'Visitor falls'],
+  'Regulatory': ['Accreditation', 'Credentialing', 'Performance agreements', 'Privacy', 'Regulatory/legislation'],
+  'External Relations': ['Community relations', 'Donor relations', 'Government relations', 'Media relations', 'Partner relations'],
+  'Regulation - Professional': ['Complaints/resolution', 'Registration/license', 'Quality assurance of clinical/medical practice', 'Facility accreditation/quality review'],
+  'Teaching': ['Accreditation (teaching)', 'Contracts (teaching)', 'Student experience'],
+  'Research': ['Adverse events (research subjects)', 'Conflict of interest', 'Contracts (research)', 'Ethics', 'Funding (research)', 'Grant usage', 'Inspections (research)', 'Intellectual property', 'Misconduct'],
+  'Community Health': ['Chronic disease management', 'Demographics', 'Emergency medical services', 'Immunization', 'Prenatal care', 'Primary care'],
+}
+
+// Contract-flag field → client taxonomy classification (item 3: 按内部标准调整分类方式)
+const FLAG_TO_HIROC: Record<string, [string, string]> = {
+  signatories: ['Leadership', 'Governance'],
+  expiry_date: ['Financial', 'Contracts'],
+  effective_date: ['Financial', 'Contracts'],
+  binding_language: ['Financial', 'Contracts'],
+  termination_conv: ['Financial', 'Contracts'],
+  termination_clause: ['Financial', 'Contracts'],
+  auto_renewal: ['Financial', 'Contracts'],
+  conflicting_finance: ['Financial', 'Costs'],
+  indemnity_cap: ['Financial', 'Fines/liabilities'],
+  indemnity_clause: ['Financial', 'Fines/liabilities'],
+  phia_compliance: ['Regulatory', 'Privacy'],
+  purpose_limitation: ['Regulatory', 'Privacy'],
+  data_minimization: ['Regulatory', 'Privacy'],
+  governing_law: ['Regulatory', 'Regulatory/legislation'],
+  breach_timeline: ['Information Management/Technology', 'Breach/loss of information'],
+  breach_notification: ['Information Management/Technology', 'Breach/loss of information'],
+  security_standards: ['Information Management/Technology', 'Systems/technology needs'],
+  audit_rights: ['Information Management/Technology', 'Records management'],
+  return_destruction: ['Information Management/Technology', 'Records management'],
+  duplicate_version: ['Information Management/Technology', 'Records management'],
+  missing_fields: ['Information Management/Technology', 'Records management'],
+  ocr_quality: ['Information Management/Technology', 'Systems/technology failure'],
+}
+
+export function flagHiroc(field: string): { cat: string; riskName: string } {
+  const m = FLAG_TO_HIROC[field]
+  return m ? { cat: m[0], riskName: m[1] } : { cat: 'Uncategorized', riskName: 'General' }
 }
 
 // ── Template Matching / AI Contract Comparison (2026-10-17 meeting) ──────

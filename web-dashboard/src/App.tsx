@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { contracts, docLinks, HIROC_SUBCATS, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type ContractDoc, type Amendment, type DocLink,
+import { contracts, docLinks, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type ContractDoc, type Amendment, type DocLink,
   ROLES, canView, DEMO_TODAY, CONF_LABEL, CONF_BADGE, retentionState, type Role,
-  TEMPLATE_LIBRARY, matchTemplate, classifyType, RISK_FRAMEWORK } from './data'
+  TEMPLATE_LIBRARY, matchTemplate, classifyType, RISK_FRAMEWORK,
+  SOUTHLAKE_RISK_TAXONOMY, flagHiroc } from './data'
 
 
 // ── Toast Notification System ──────────────────────────────────────────────
@@ -245,8 +246,8 @@ function RiskRegisterTable({
   const allFlags = rawFlags
   const filtered = allFlags.filter((f) => {
     if (selSev !== 'All' && f.severity !== selSev) return false
-    if (selCat !== 'All' && f.risk_category !== selCat) return false
-    if (selSub !== 'All' && f.subcategory !== selSub) return false
+    if (selCat !== 'All' && flagHiroc(f.field).cat !== selCat) return false
+    if (selSub !== 'All' && flagHiroc(f.field).riskName !== selSub) return false
     if (selClinDept !== 'All' && f.department !== selClinDept) return false
     if (selFlagStatus !== 'All' && f.status !== selFlagStatus) return false
     if (selSource !== 'All' && f.source !== selSource) return false
@@ -259,14 +260,13 @@ function RiskRegisterTable({
     return true
   })
   const sorted = [...filtered].sort((a, b) => b.risk_score - a.risk_score)
-  const categories = ['All', ...Array.from(new Set(allFlags.map((f) => f.risk_category).filter(Boolean))) as string[]]
+  const categories = ['All', ...Object.keys(SOUTHLAKE_RISK_TAXONOMY)]
   const subcats = selCat === 'All'
-    ? ['All', ...Array.from(new Set(allFlags.map((f) => f.subcategory).filter(Boolean))) as string[]]
-    : ['All', ...(HIROC_SUBCATS[selCat] || [])]
-  // Clinical depts: context-aware — if sub selected, show depts under that sub; else all
-  const clinDepts = selSub === 'All'
-    ? ['All', ...SOUTHDEPARTMENTS]
-    : ['All', ...(SUBCAT_DEPTS[selSub] || [])]
+    ? ['All', ...Array.from(new Set(allFlags.map((f) => flagHiroc(f.field).riskName)))]
+    : ['All', ...(SOUTHLAKE_RISK_TAXONOMY[selCat] || [])]
+  // Clinical depts: distinct values present in the flag register (client taxonomy
+  // department mapping lives on the register's next page — not provided yet)
+  const clinDepts = ['All', ...Array.from(new Set(allFlags.map((f) => f.department).filter((d): d is string => !!d)))]
 
   return (
     <div>
@@ -365,7 +365,7 @@ function RiskRegisterTable({
             const header = 'Severity,L,Impact,Score,Category,Subcategory,Department,Status,Source,Compliance,Issue,Contract\n'
             const rows = sorted.map((f) => [
               f.severity, f.likelihood, f.impact, f.risk_score,
-              f.risk_category, f.subcategory, f.department,
+              flagHiroc(f.field).cat, flagHiroc(f.field).riskName, f.department,
               f.status, f.source, f.compliance_type,
               `"${f.flag_if.replace(/"/g, '""')}"`,
               `#${f.contract.num} ${f.contract.displayName}`
@@ -1378,42 +1378,30 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contrac
         </div>
       </div>
 
-      {/* HIROC Taxonomy — full 4→14→22 hierarchy */}
+      {/* Southlake / HIROC risk taxonomy (client-provided, Jul 2019 register) */}
       <div className="bg-white border border-slate-200 rounded-lg p-5">
-        <h3 className="text-sm font-bold text-slate-800 mb-1">HIROC Taxonomy — 4 Categories · 14 Subcategories · 22 Departments</h3>
-        <p className="text-[11px] text-slate-400 mb-4">Each flag is classified into a category → subcategory → affected department.</p>
-        <div className="grid grid-cols-4 gap-3">
-          {Object.entries(HIROC_SUBCATS).map(([cat, subcats]) => {
-            const catFlags = allFlags.filter((f) => f.risk_category === cat)
-            const avgScore = catFlags.length ? Math.round(catFlags.reduce((s,f) => s+f.risk_score, 0) / catFlags.length) : 0
+        <h3 className="text-sm font-bold text-slate-800 mb-1">Southlake / HIROC Risk Taxonomy — 12 Categories (client-provided, Jul 2019 register)</h3>
+        <p className="text-[11px] text-slate-400 mb-4">Each flag is auto-classified to a client category → risk name (nearest match). C×P scoring page pending — score bands remain AI 5×5 L×I meanwhile.</p>
+        <div className="grid grid-cols-3 gap-3">
+          {Object.entries(SOUTHLAKE_RISK_TAXONOMY).map(([cat, riskNames]) => {
+            const catFlags = allFlags.filter((f) => flagHiroc(f.field).cat === cat)
+            const nameCount: Record<string, number> = {}
+            catFlags.forEach((f) => { const n = flagHiroc(f.field).riskName; nameCount[n] = (nameCount[n] || 0) + 1 })
+            const top = Object.entries(nameCount).sort((a, b) => b[1] - a[1]).slice(0, 3)
             return (
               <div key={cat} className="border border-slate-200 rounded-lg p-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-slate-700">{cat}</span>
                   <span className="text-[10px] text-slate-400">{catFlags.length} flags</span>
                 </div>
-                {catFlags.length > 0 && <div className="text-[10px] text-slate-400 mb-2">avg {avgScore}/25</div>}
-                <div className="space-y-1.5">
-                  {subcats.map((s) => {
-                    const dept = SUBCAT_DEPTS[s] || []
-                    const sFlags = catFlags.filter((f) => f.subcategory === s)
-                    return (
-                      <div key={s} className="pl-1">
-                        <div className="text-[11px] text-slate-600 flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-300 inline-block" />
-                          {s}
-                          {sFlags.length > 0 && <span className="text-[9px] text-slate-400">({sFlags.length})</span>}
-                        </div>
-                        <div className="pl-3 mt-0.5 space-y-px">
-                          {dept.slice(0, 3).map((d) => (
-                            <div key={d} className="text-[10px] text-slate-400">→ {d}</div>
-                          ))}
-                          {dept.length > 3 && <div className="text-[10px] text-slate-300">+{dept.length - 3} more</div>}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
+                {top.length > 0 ? (
+                  top.map(([n, c]) => (
+                    <div key={n} className="text-[11px] text-slate-500 mb-0.5">• {n} <span className="text-slate-400">({c})</span></div>
+                  ))
+                ) : (
+                  <div className="text-[11px] text-slate-300">no flags in current register</div>
+                )}
+                <div className="text-[9px] text-slate-300 mt-1.5">{riskNames.length} risk names in category</div>
               </div>
             )
           })}
@@ -2100,7 +2088,7 @@ function ContractDetail({
                       <span className="text-xs text-slate-400">
                         L{f.likelihood}×I{f.impact} = <span className="font-bold text-slate-600">{f.risk_score}</span>
                       </span>
-                      {f.risk_category && <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{f.risk_category} · {f.subcategory}</span>}
+                      <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{flagHiroc(f.field).cat} · {flagHiroc(f.field).riskName}</span>
                     </div>
                     <p className="text-sm text-slate-800">{f.flag_if}</p>
                   </div>
@@ -3504,24 +3492,27 @@ function App() {
 
         {/* Risk Distribution + Top Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Risk distribution by HIROC */}
+          {/* Risk distribution by Southlake / HIROC category (client taxonomy, Jul 2019) */}
           <div className="bg-white border border-slate-200 rounded-lg p-4">
-            <div className="text-xs font-bold text-slate-700 mb-3">Risk Distribution by HIROC Category</div>
-            {(['Operational', 'Financial', 'Reputational', 'Continuity'] as const).map((cat) => {
-              const catFlags = visible.flatMap((c) => c.flags).filter((f) => f.risk_category === cat)
-              const total = visible.flatMap((c) => c.flags).length || 1
-              const pct = Math.round((catFlags.length / total) * 100)
-              const colors: Record<string, string> = { Operational: 'bg-teal-500', Financial: 'bg-amber-500', Reputational: 'bg-purple-500', Continuity: 'bg-blue-500' }
-              return (
+            <div className="text-xs font-bold text-slate-700 mb-3">Risk Distribution by Southlake / HIROC Category</div>
+            {(() => {
+              const visFlags = visible.flatMap((c) => c.flags)
+              const counts: Record<string, number> = {}
+              visFlags.forEach((f) => { const cat = flagHiroc(f.field).cat; counts[cat] = (counts[cat] || 0) + 1 })
+              const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5)
+              const total = visFlags.length || 1
+              const palette = ['bg-teal-500', 'bg-amber-500', 'bg-purple-500', 'bg-blue-500', 'bg-rose-400']
+              return top.map(([cat, n], i) => (
                 <div key={cat} className="flex items-center gap-2 mb-2">
-                  <span className="text-[11px] text-slate-600 w-24">{cat}</span>
+                  <span className="text-[11px] text-slate-600 w-24 truncate" title={cat}>{cat}</span>
                   <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${colors[cat]}`} style={{ width: `${pct}%` }} />
+                    <div className={`h-full rounded-full ${palette[i]}`} style={{ width: `${Math.round((n / total) * 100)}%` }} />
                   </div>
-                  <span className="text-[10px] text-slate-400 w-16 text-right">{catFlags.length} flags ({pct}%)</span>
+                  <span className="text-[10px] text-slate-400 w-16 text-right">{n} flags ({Math.round((n / total) * 100)}%)</span>
                 </div>
-              )
-            })}
+              ))
+            })()}
+            <div className="text-[9px] text-slate-300 mt-1">12-category taxonomy from Southlake's HIROC risk register (Jul 2019) · top 5 shown</div>
             {/* Remediation progress */}
             <div className="mt-4 pt-3 border-t border-slate-100">
               <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Remediation Progress</div>
