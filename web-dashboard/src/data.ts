@@ -1461,12 +1461,12 @@ for (const c of contracts) {
   flagsByNum[c.num] = c.flags
 }
 
-// Pipeline stage definitions
+// Pipeline stage definitions (local, no cloud)
 export const pipelineStages = [
-  { label: 'Document Input', icon: '📄', desc: 'PDF / DOCX / Image upload' },
-  { label: 'Agnes OCR', icon: '👁️', desc: 'Text extraction & structured parsing' },
+  { label: 'Document Input', icon: '📄', desc: 'PDF / DOCX / TXT upload' },
+  { label: 'Text Extraction', icon: '👁️', desc: 'Local text-layer extraction (pypdf / docx)' },
   { label: 'Rules Engine', icon: '⚙️', desc: '25+ validated policy rules' },
-  { label: 'Jev Decision', icon: '🎯', desc: 'Typed risk classification' },
+  { label: 'Local AI Review', icon: '🎯', desc: 'Ollama clause extraction & classification' },
   { label: 'Evidence Store', icon: '📋', desc: 'Audit trail + citations' },
   { label: 'Human Review', icon: '👤', desc: 'Escalation queue' },
 ]

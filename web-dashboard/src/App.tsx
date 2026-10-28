@@ -2272,7 +2272,7 @@ function ContractDetail({
         </section>
 
         <section>
-          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Jev AI Assessment</h3>
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">AI Assessment</h3>
           <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
             {[
               { label: 'Risk Severity', value: s.jev.riskSeverity.choice, conf: s.jev.riskSeverity.confidence },
@@ -2376,18 +2376,14 @@ function SettingsSidebar({
   selectedRisk, onSelectRisk,
   selectedDept, onSelectDept,
   selectedExpiry, onSelectExpiry,
-  onUpload, isUploading,
-  uploadError,
+  onGoToSmartFiling,
 }: {
   selectedType: string; onSelectType: (v: string) => void
   selectedRisk: string; onSelectRisk: (v: string) => void
   selectedDept: string; onSelectDept: (v: string) => void
   selectedExpiry: string; onSelectExpiry: (v: string) => void
-  onUpload: (files: FileList) => void
-  isUploading: boolean
-  uploadError: string | null
+  onGoToSmartFiling: () => void
 }) {
-  const fileRef = useRef<HTMLInputElement>(null)
   const types = ['All', ...Array.from(new Set(contracts.map((c) => c.type)))]
   const risks = ['All', 'Low', 'Critical']
   const departments = ['All', ...SOUTHDEPARTMENTS]
@@ -2405,18 +2401,16 @@ function SettingsSidebar({
         </div>
       </div>
 
-      {/* Upload */}
+      {/* Upload — single clear path: the AI Smart Filing flow */}
       <div>
         <h3 className="text-sm font-bold text-slate-800 mb-3">Upload</h3>
-        <input ref={fileRef} type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.tiff,.tif,.docx,.doc,.txt" className="hidden" onChange={(e) => { const files = e.target.files; if (files) onUpload(files) }} />
         <button
-          onClick={() => fileRef.current?.click()}
-          disabled={isUploading}
-          className="w-full text-xs font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded px-3 py-2.5 hover:bg-teal-100 transition-colors disabled:opacity-50"
+          onClick={onGoToSmartFiling}
+          className="w-full text-xs font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded px-3 py-2.5 hover:bg-teal-100 transition-colors"
         >
-          {isUploading ? 'Processing…' : 'Upload document'}
+          📤 Upload document (AI filing)
         </button>
-        {uploadError && <p className="text-[11px] text-red-500 mt-1.5">{uploadError}</p>}
+        <p className="text-[11px] text-slate-400 mt-1.5">AI reads the file, classifies it, and files it automatically — you’ll see exactly where it was placed.</p>
       </div>
     </div>
   )
@@ -3056,7 +3050,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
       <div className="bg-slate-50 border border-slate-200 rounded p-3">
         <div className="text-[10px] font-bold text-slate-500 uppercase mb-1.5">Filing Logic</div>
         <ul className="text-[11px] text-slate-600 space-y-0.5 list-disc pl-4">
-          <li><b>Upload</b> → OCR + Agnes extraction + rules engine (server.py port 8000)</li>
+          <li><b>Upload</b> → local AI reads the file (Ollama, on this machine) + rules engine</li>
           <li><b>Category</b> → client 12-category Southlake/HIROC taxonomy, from the highest-score flag</li>
           <li><b>Subcategory</b> → nearest risk name from the client register (dept mapping pending their scoring page)</li>
           <li><b>Confidence</b> → 95% (0 flags) · 88% (1-2) · 72% (3-5) · 55% (6+)</li>
@@ -3444,11 +3438,6 @@ function App() {
   const [filterRisk, setFilterRisk] = useState('All')
   const [filterDept, setFilterDept] = useState('All')
   const [filterExpiry, setFilterExpiry] = useState('All')
-  const [, setUploadedContracts] = useState<any[]>([])
-  const [isUploading, setUploading] = useState(false)
-  const [uploadError, setUploadError] = useState<string | null>(null)
-  const [useAgnes, setUseAgnes] = useState(true)
-  void setUseAgnes // toggle removed from UI; kept for API param
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [processLink, setProcessLink] = useState<DocLink | null>(null)
@@ -3487,32 +3476,6 @@ function App() {
     show('Workflow completed ✓', 'success')
   }
   void setCreatedTasks
-
-  useEffect(() => {
-    fetch('/api/results')
-      .then((r) => r.json())
-      .then((data) => {
-        if (Array.isArray(data)) setUploadedContracts(data)
-      })
-      .catch(() => {})
-  }, [])
-
-  const handleFileUpload = async (files: FileList | null) => {
-    if (!files || files.length === 0) return
-    setUploading(true)
-    setUploadError(null)
-    const formData = new FormData()
-    for (let i = 0; i < files.length; i++) formData.append('files', files[i])
-    try {
-      const resp = await fetch(`/api/batch-upload?use_agnes=${useAgnes}`, { method: 'POST', body: formData })
-      const data = await resp.json()
-      if (data.results) setUploadedContracts((prev) => [...data.results, ...prev])
-    } catch {
-      setUploadError('Upload failed. API server not running?')
-    } finally {
-      setUploading(false)
-    }
-  }
 
   const today = new Date(DEMO_TODAY)
   const filtered = contracts.filter((c) => {
@@ -3835,9 +3798,7 @@ function App() {
                 selectedRisk={filterRisk} onSelectRisk={setFilterRisk}
                 selectedDept={filterDept} onSelectDept={setFilterDept}
                 selectedExpiry={filterExpiry} onSelectExpiry={setFilterExpiry}
-                onUpload={handleFileUpload}
-                isUploading={isUploading}
-                uploadError={uploadError}
+                onGoToSmartFiling={() => { setActiveTab('smart-filing'); setSelected(null) }}
               />
             )}
           </aside>
