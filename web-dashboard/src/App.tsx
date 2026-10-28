@@ -188,7 +188,7 @@ function TagSelector({
 }) {
   return (
     <div>
-      <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wide mb-1.5">{label}</p>
+      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{label}</p>
       <div className="flex flex-wrap gap-1.5">
         {options.map((opt) => {
           const active = selected === opt
@@ -1487,7 +1487,7 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contrac
                       <td key={i} onClick={() => count > 0 && setSelectedCell(isActive ? null : [l, i])} className={`border p-2 text-center cursor-pointer transition ${cellColor(l,i)} ${isActive ? 'ring-2 ring-teal-500 ring-inset' : ''} ${count > 0 ? 'hover:brightness-95' : 'opacity-50 cursor-default'}`}>
                         <div className={`text-lg font-bold ${cellText(l,i)}`}>{l*i}</div>
                         {count > 0 && (
-                          <div className="text-[11px] font-medium text-slate-600 mt-0.5">{count} flag{count>1?'s':''}</div>
+                          <div className="text-[11px] font-medium text-slate-700 mt-0.5">{count} flag{count>1?'s':''}</div>
                         )}
                       </td>
                     )
@@ -2608,7 +2608,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
         <button onClick={() => setFilter('high')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'high' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-amber-600 border-amber-200 hover:border-amber-400'}`}>High</button>
         <button onClick={() => setFilter('crossref')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'crossref' ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-teal-600 border-teal-200 hover:border-teal-400'}`}>Cross-Ref</button>
         <button onClick={() => setFilter('expiring')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'expiring' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-200 hover:border-blue-400'}`}>Expiring</button>
-        <span className="ml-auto text-[11px] text-slate-400">Showing {filtered.length} of {allItems.length}</span>
+        <span className="ml-auto text-[11px] text-slate-500">Showing {filtered.length} of {allItems.length}</span>
       </div>
 
       {/* Task Table */}
@@ -3694,7 +3694,7 @@ function App() {
                   <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div className={`h-full rounded-full ${palette[i]}`} style={{ width: `${Math.round((n / total) * 100)}%` }} />
                   </div>
-                  <span className="text-[11px] text-slate-400 w-16 text-right">{n} flags ({Math.round((n / total) * 100)}%)</span>
+                  <span className="text-[11px] text-slate-500 w-16 text-right">{n} flags ({Math.round((n / total) * 100)}%)</span>
                 </div>
               ))
             })()}
