@@ -585,12 +585,14 @@ function ContractList({
             } ${locked ? 'opacity-70' : ''}`}
           >
             <div className="flex items-center gap-3">
-              {/* Left: number + type + confidentiality */}
-              <div className="flex items-center gap-2 w-24 shrink-0">
-                <span className="text-xs font-mono text-slate-400">#{c.num}</span>
-                <span className="text-[11px] text-slate-400 uppercase">{c.type}</span>
+              {/* Left: number + type + confidentiality (stacked — long type labels like PROCUREMENT need the width) */}
+              <div className="w-28 shrink-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-mono text-slate-400">#{c.num}</span>
+                  <span className="text-[11px] text-slate-500 uppercase tracking-tight" title={c.type}>{c.type.replace(/_/g, ' ')}</span>
+                </div>
                 {role && (
-                  <span className={`text-[8px] font-bold px-1 py-0.5 rounded border ${CONF_BADGE[c.confidentiality]}`}>
+                  <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded border ${CONF_BADGE[c.confidentiality]}`}>
                     {CONF_LABEL[c.confidentiality]}
                   </span>
                 )}
