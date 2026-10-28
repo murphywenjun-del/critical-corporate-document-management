@@ -904,7 +904,7 @@ const RISK_BADGE: Record<string, { bg: string; fg: string; label: string }> = {
 
 function TemplateMatchView({ allContracts, role }: { allContracts: ContractDoc[]; role: Role }) {
   const visibleDocs = allContracts.filter((c) => canView(role, c))
-  const [incomingNum, setIncomingNum] = useState<number | ''>('')
+  const [incomingNum, setIncomingNum] = useState<number | ''>(4) // #4 DSA Provider — demo default (falls back to placeholder for roles that can't view it)
   const [tplId, setTplId] = useState('tpl-dsa')
 
   // Auto-suggest the best reference when the incoming document changes
