@@ -210,17 +210,17 @@ function TagSelector({
 }) {
   return (
     <div>
-      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">{label}</p>
-      <div className="flex flex-wrap gap-1.5">
+      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">{label}</p>
+      <div className="flex flex-wrap gap-2">
         {options.map((opt) => {
           const active = selected === opt
           return (
             <button
               key={opt}
               onClick={() => onChange(opt)}
-              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+              className={`text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
                 active
-                  ? 'bg-teal-600 text-white border-teal-600 font-medium'
+                  ? 'bg-teal-700 text-white border-teal-700 font-medium'
                   : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
               }`}
             >
@@ -533,7 +533,7 @@ function CriteriaPanel({ contracts: allContracts, resolvedFlags }: { contracts: 
         <h3 className="text-[13px] font-semibold text-slate-900">Criteria-Based Compliance</h3>
         <span className="text-[11px] text-slate-400">Applicability varies by document type</span>
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4">
         {Object.entries(byType).map(([type, docs]) => {
           const criteria = CRITERIA_BY_TYPE[type] || []
           const total = docs.length
@@ -543,25 +543,26 @@ function CriteriaPanel({ contracts: allContracts, resolvedFlags }: { contracts: 
           const vals = docs.map(docCriteriaMet).filter((v): v is number => v !== null)
           const rate = vals.length > 0 ? Math.round(100 * vals.reduce((a, b) => a + b, 0) / vals.length) : 100
           return (
-            <div key={type} className="border border-slate-100 rounded p-3">
+            <div key={type} className="border border-slate-100 rounded-lg p-4">
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-bold text-slate-700">{type}</span>
+                <span className="text-[13px] font-semibold text-slate-800">{type}</span>
                 <span className="text-[11px] text-slate-400">{total} docs</span>
               </div>
-              <div className="text-[11px] text-slate-500 mb-2">{clean}/{total} clean · {openGaps} open gaps of {criteria.length * total} criteria checked</div>
-              {/* Progress bar */}
+              <div className="flex items-end justify-between mb-2">
+                <div className="text-[11px] text-slate-500">{clean}/{total} clean · {openGaps} open gaps of {criteria.length * total} criteria checked</div>
+                {criteria.length > 0 && (
+                  <div className={`text-2xl font-bold tabular-nums ${rate >= 80 ? 'text-emerald-600' : rate >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{rate}%</div>
+                )}
+              </div>
               {criteria.length > 0 ? (
-                <>
-                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                      style={{ width: `${rate}%` }}
-                    />
-                  </div>
-                  <div className="text-[11px] text-slate-500 mt-1">{rate}% of applicable criteria met</div>
-                </>
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                    style={{ width: `${rate}%` }}
+                  />
+                </div>
               ) : (
-                <div className="text-[11px] text-slate-400 mt-1 italic">No criteria checklist mapped for this type yet</div>
+                <div className="text-[11px] text-slate-400 mt-2 italic">No criteria checklist mapped for this type yet</div>
               )}
             </div>
           )
@@ -1783,7 +1784,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
         function stepContent(to: WfState) {
           switch (to) {
             case 'acknowledged': return (
-              <div className="space-y-2">
+              <div className="space-y-4">
                 <div className="text-sm text-slate-600">Confirm a responsible person has <b>reviewed and accepted</b> this gap.</div>
                 <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-800">
                   <b>Gap:</b> {w.beforeText}
@@ -1792,7 +1793,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
               </div>
             )
             case 'fixing': return (
-              <div className="space-y-2">
+              <div className="space-y-4">
                 <div className="text-sm text-slate-600">Target document will be <b>updated</b> to match source requirement.</div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -1809,7 +1810,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
               </div>
             )
             case 'verified': return (
-              <div className="space-y-2">
+              <div className="space-y-4">
                 <div className="text-sm text-slate-600">Confirm the target document <b>has been updated</b> and matches source.</div>
                 <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs space-y-1">
                   <div className="text-blue-700 font-medium">Verification checklist:</div>
@@ -1821,7 +1822,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
               </div>
             )
             case 'closed': return (
-              <div className="space-y-2">
+              <div className="space-y-4">
                 <div className="text-sm text-slate-600">Marking this cross-reference as <b>fully resolved</b>.</div>
                 <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-xs text-emerald-800">
                   ✓ {w.beforeText} → {w.afterText}
@@ -2134,7 +2135,7 @@ function AmendmentsView({ contracts: allContracts, onSelect, resolvedFlags }: { 
                   </button>
                   <span className="text-xs text-slate-400">· {c.amendments!.length} amendments</span>
                 </div>
-                <div className="space-y-2">{c.amendments!.map((a) => <AmendRow key={`${c.num}-${a.id}`} c={c} a={a} />)}</div>
+                <div className="space-y-4">{c.amendments!.map((a) => <AmendRow key={`${c.num}-${a.id}`} c={c} a={a} />)}</div>
               </div>
             ))}
           </div>
@@ -2356,7 +2357,7 @@ function ContractDetail({
           {/* Related Documents (below JEV, in right column) */}
           <div className="mt-4">
             <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Related Documents</h3>
-            <div className="space-y-2">
+            <div className="space-y-4">
               {s.amendments && s.amendments.length > 0 ? (
                 s.amendments.map((a) => (
                   <div key={a.id} className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
@@ -2447,8 +2448,8 @@ function SettingsSidebar({
     <div className="flex flex-col gap-6">
       {/* Filters */}
       <div>
-        <h3 className="text-[13px] font-semibold text-slate-900 mb-3">Filters</h3>
-        <div className="space-y-3">
+        <h3 className="text-[13px] font-semibold text-slate-900 mb-4">Filters</h3>
+        <div className="space-y-5">
           <TagSelector label="Contract Type" options={types} selected={selectedType} onChange={onSelectType} />
           <TagSelector label="Risk Level" options={risks} selected={selectedRisk} onChange={onSelectRisk} />
           <TagSelector label="Department" options={departments} selected={selectedDept} onChange={onSelectDept} />
@@ -3316,7 +3317,7 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
                 <span className="text-[11px] bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-bold">{resolvedFlags.size} resolved</span>
               )}
             </div>
-          <div className="space-y-2">
+          <div className="space-y-4">
             <div className="flex items-center gap-2 text-xs">
               <span className="text-slate-400">Critical flags:</span>
               <span className="font-bold text-red-600">{currentCritical}</span>
@@ -3373,7 +3374,7 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
         </div>
         <div className="divide-y divide-slate-100">
           {systemicPatterns.map((p) => (
-            <div key={p.field} className="px-4 py-3">
+            <div key={p.field} className="px-5 py-4">
               <div className="flex items-center gap-2 mb-1">
                 <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${p.hasCritical ? 'bg-red-100 text-red-700' : p.hasHigh ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'}`}>
                   {p.hasCritical ? 'CRITICAL' : p.hasHigh ? 'HIGH' : 'MEDIUM'}
@@ -3381,7 +3382,7 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
                 <span className="text-xs font-bold text-slate-800">{p.field.replace(/_/g, ' ')}</span>
                 <span className="text-[11px] text-slate-400 ml-auto">{p.count} flags · {p.contractNums.length} contracts</span>
               </div>
-              <div className="flex items-center gap-1 text-[11px] text-slate-400 mb-1.5">
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-2">
                 {p.contractNums.slice(0, 6).map((n) => (
                   <button key={n} onClick={() => { const c = allContracts.find((cc) => cc.num === n); if (c) onJumpToContract?.(c) }} className="bg-slate-100 hover:bg-teal-100 text-teal-700 rounded px-1.5 text-[11px] font-medium cursor-pointer transition">#{n}</button>
                 ))}
@@ -3398,12 +3399,12 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
 
       {/* Prevention Playbook */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
-        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">
+        <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 text-xs font-bold text-slate-600">
           Prevention Playbook <span className="font-normal text-slate-400">(prioritized actions to prevent recurrence)</span>
         </div>
         <div className="divide-y divide-slate-100">
           {playbook.map((item) => (
-            <div key={item.priority} className="px-4 py-3 flex items-start gap-3">
+            <div key={item.priority} className="px-5 py-4 flex items-start gap-3.5">
               <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 ${
                 item.priority === 1 ? 'bg-red-100 text-red-700' : item.priority === 2 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600'
               }`}>{item.priority}</span>
@@ -3816,7 +3817,7 @@ function App() {
       </header>
 
       {/* ── KPI Row ────────────────────────────────────────────────────────── */}
-      <div className="px-4 sm:px-6 py-4">
+      <div className="px-4 sm:px-6 py-5">
         <div className="max-w-screen-2xl mx-auto">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <KpiCard label="Documents" value={visible.length} onClick={() => setActiveTab('contracts')} icon={<KpiIcon d={KPI_ICONS.docs} />} />
@@ -3838,8 +3839,8 @@ function App() {
         )}
         </div>
 
-        {/* Risk Distribution + Top Actions */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Risk Distribution + Top Actions — home-tab summary; detail tabs get a clean start */}
+        {activeTab === 'work-queue' && (<div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           {/* Risk distribution by Southlake / HIROC category (client taxonomy, Jul 2019) */}
           <div className="bg-white border border-slate-200 rounded-lg p-4">
             <div className="text-xs font-bold text-slate-700 mb-3">Risk Distribution by Southlake / HIROC Category</div>
@@ -3851,7 +3852,7 @@ function App() {
               const total = visFlags.length || 1
               const palette = ['bg-teal-500', 'bg-amber-500', 'bg-purple-500', 'bg-blue-500', 'bg-rose-400']
               return top.map(([cat, n], i) => (
-                <div key={cat} className="flex items-center gap-2 mb-2">
+                <div key={cat} className="flex items-center gap-2.5 mb-3">
                   <span className="text-[11px] text-slate-600 w-24 truncate" title={cat}>{cat}</span>
                   <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div className={`h-full rounded-full ${palette[i]}`} style={{ width: `${Math.round((n / total) * 100)}%` }} />
@@ -3895,7 +3896,7 @@ function App() {
                 .slice(0, 5)
               if (openFlags.length === 0) return <div className="text-[11px] text-emerald-600 font-medium">All flags resolved</div>
               return openFlags.map((f, i) => (
-                <div key={i} className="flex items-start gap-2 py-1.5 border-b border-slate-100 last:border-0">
+                <div key={i} className="flex items-start gap-2.5 py-2.5 border-b border-slate-100 last:border-0">
                   <span className={`text-[11px] font-bold w-5 text-center ${i === 0 ? 'text-red-600' : i < 3 ? 'text-orange-600' : 'text-slate-500'}`}>{i + 1}</span>
                   <div className="flex-1 min-w-0">
                     <div className="text-[13px] font-medium text-slate-800 truncate" title={f.flag_if}>{f.flag_if}</div>
@@ -3903,14 +3904,14 @@ function App() {
                       #{f.contractNum} {f.contractName} · {f.severity} · {f.risk_score}pts
                     </div>
                   </div>
-                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${f.severity === 'Critical' ? 'bg-red-600 text-white' : f.severity === 'High' ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white'}`}>
+                  <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${f.severity === 'Critical' ? 'bg-red-600 text-white' : f.severity === 'High' ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white'}`}>
                     {f.severity}
                   </span>
                 </div>
               ))
             })()}
           </div>
-        </div>
+        </div>)}
       </div>
 
       {/* ── Tab Bar ───────────────────────────────────────────────────────── */}
@@ -3921,7 +3922,7 @@ function App() {
       </div>
 
       {/* ── Sidebar + Content ─────────────────────────────────────────────── */}
-      <div className="px-4 sm:px-6 py-4">
+      <div className="px-4 sm:px-6 py-6">
         <div className="max-w-screen-2xl mx-auto flex gap-6">
           {/* Sidebar */}
           <aside
