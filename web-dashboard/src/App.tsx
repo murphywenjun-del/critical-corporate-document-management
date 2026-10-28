@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { contracts, docLinks, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type ContractDoc, type Amendment, type DocLink,
   ROLES, canView, canManage, archiveFileConf, contractToTemplateRef, DEMO_TODAY, CONF_LABEL, CONF_BADGE, retentionState, type Role,
   TEMPLATE_LIBRARY, matchTemplate, classifyType, RISK_FRAMEWORK,
-  SOUTHLAKE_RISK_TAXONOMY, flagHiroc } from './data'
+  SOUTHLAKE_RISK_TAXONOMY, flagHiroc, CRITERIA_BY_TYPE } from './data'
 
 
 // ── Toast Notification System ──────────────────────────────────────────────
@@ -126,11 +126,12 @@ function Modal({ title, children, onConfirm, onCancel, confirmLabel = 'Confirm' 
 
 // ── KPI Card (flat, big number) ──────────────────────────────────────────────
 
-function KpiCard({ label, value, valueClass, onClick }: { label: string; value: number | string; valueClass?: string; onClick?: () => void }) {
+function KpiCard({ label, value, valueClass, onClick, title }: { label: string; value: number | string; valueClass?: string; onClick?: () => void; title?: string }) {
   return (
     <div
       className={`bg-white border border-slate-200 rounded-lg p-4 ${onClick ? 'cursor-pointer hover:border-teal-300 hover:shadow-sm transition' : ''}`}
       onClick={onClick}
+      title={title}
     >
       <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">{label}</div>
       <div className={`text-3xl font-bold mt-1 ${valueClass || 'text-slate-900'}`}>{value}</div>
@@ -488,15 +489,16 @@ function RiskRegisterTable({
 
 // ── Criteria-Based Compliance Panel (F) ─────────────────────────────────────────
 // Sam's proposal: applicability varies by document type
-function CriteriaPanel({ contracts: allContracts }: { contracts: ContractDoc[] }) {
-  const CRITERIA: Record<string, string[]> = {
-    'NDA': ['PHIPA clause', 'Data return/destruction', 'Breach notification ≤48h', 'Governing law = Ontario', '2 VP signatures', 'Confidentiality ≥3yr'],
-    'MOU': ['Clear binding language', 'Financial caps', 'Termination mechanism', 'Governing law = Ontario', '2 VP signatures'],
-    'Procurement': ['SLA with KPIs', 'Service credits', 'Insurance specified', 'Data security + encryption', 'Termination for convenience', 'Governing law = Ontario'],
-    'Data_Sharing': ['PHIPA declaration', 'Data minimization', 'Breach notification ≤24h', 'Audit rights', 'Governing law = Ontario', 'Retention period defined'],
+function CriteriaPanel({ contracts: allContracts, resolvedFlags }: { contracts: ContractDoc[]; resolvedFlags?: Set<string> }) {
+  // Group by type and show criteria met — LIVE: per-doc share of applicable criteria
+  // not violated by an open (unresolved) flag; consistent with the "Criteria Met (avg)" KPI.
+  const docCriteriaMet = (c: ContractDoc): number => {
+    const n = (CRITERIA_BY_TYPE[c.type] || []).length
+    const open = c.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${c.num}-${f.field}`))).length
+    if (n === 0) return open === 0 ? 1 : 0.5
+    return Math.max(0, Math.min(1, 1 - open / n))
   }
 
-  // Group by type and show criteria met
   const byType: Record<string, ContractDoc[]> = {}
   for (const c of allContracts) {
     if (!byType[c.type]) byType[c.type] = []
@@ -511,26 +513,27 @@ function CriteriaPanel({ contracts: allContracts }: { contracts: ContractDoc[] }
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {Object.entries(byType).map(([type, docs]) => {
-          const criteria = CRITERIA[type] || []
+          const criteria = CRITERIA_BY_TYPE[type] || []
           const total = docs.length
-          const clean = docs.filter((d) => d.flags.length === 0).length
-          const hardGaps = docs.reduce((sum, d) => sum + (d.compliance?.hardGaps || 0), 0)
-          const rate = total > 0 ? Math.round(((total - hardGaps) / (total * (criteria.length || 1))) * 100) : 100
+          const clean = docs.filter((d) => d.flags.filter((f) => f.status === 'open').length === 0).length
+          const openGaps = docs.reduce((sum, d) => sum + d.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${d.num}-${f.field}`))).length, 0)
+          // Live per-type criteria share: 100% of applicable criteria met, minus open gaps (no negative rates)
+          const rate = total > 0 ? Math.round(100 * docs.reduce((s, d) => s + docCriteriaMet(d), 0) / total) : 100
           return (
             <div key={type} className="border border-slate-100 rounded p-3">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-bold text-slate-700">{type}</span>
                 <span className="text-[11px] text-slate-400">{total} docs</span>
               </div>
-              <div className="text-[11px] text-slate-500 mb-2">{clean}/{total} clean · {hardGaps} hard gaps</div>
+              <div className="text-[11px] text-slate-500 mb-2">{clean}/{total} clean · {openGaps} open gaps of {criteria.length * total} criteria checked</div>
               {/* Progress bar */}
               <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full ${rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                  style={{ width: `${Math.min(100, Math.max(0, rate))}%` }}
+                  style={{ width: `${rate}%` }}
                 />
               </div>
-              <div className={`text-[11px] mt-1 ${rate < 0 ? 'text-red-600 font-medium' : 'text-slate-500'}`}>{rate < 0 ? `${Math.abs(rate)}% below target — hard gaps outweigh the document set` : `${rate}% criteria met`}</div>
+              <div className="text-[11px] text-slate-500 mt-1">{rate}% of applicable criteria met</div>
             </div>
           )
         })}
@@ -3496,12 +3499,19 @@ function App() {
   // ── RBAC: documents visible to the active role ──
   const visible = filtered.filter((c) => canView(role, c))
   const hiddenCount = filtered.length - visible.length
-  const visibleFlags = visible.flatMap((c) => c.flags)
-  const openFlagsCount = visibleFlags.filter((f) => f.status === 'open').length
-  const criticalOpenCount = visibleFlags.filter((f) => f.severity === 'Critical' && f.status === 'open').length
-  const remediatedCount = visibleFlags.filter((f) => f.status === 'remediated').length
+  // Demo resolution overlay: a flag resolved in Work Queue no longer counts as open
+  const visibleFlags2 = visible.flatMap((c) => c.flags.map((f) => ({ f, num: c.num })))
+  const openFlagsCount = visibleFlags2.filter(({ f, num }) => f.status === 'open' && !resolvedFlags.has(`f-${num}-${f.field}`)).length
+  const criticalOpenCount = visibleFlags2.filter(({ f, num }) => f.severity === 'Critical' && f.status === 'open' && !resolvedFlags.has(`f-${num}-${f.field}`)).length
+  const remediatedCount = visibleFlags2.filter(({ f, num }) => f.status === 'remediated' || resolvedFlags.has(`f-${num}-${f.field}`)).length
+  const docCriteriaMet = (c: ContractDoc): number => {
+    const n = (CRITERIA_BY_TYPE[c.type] || []).length
+    const open = c.flags.filter((f) => f.status === 'open' && !resolvedFlags.has(`f-${c.num}-${f.field}`)).length
+    if (n === 0) return open === 0 ? 1 : 0.5
+    return Math.max(0, Math.min(1, 1 - open / n))
+  }
   const avgCompliance = visible.length > 0
-    ? Math.round(visible.reduce((sum, c) => sum + c.compliance.complianceRate, 0) / visible.length * 100)
+    ? Math.round(visible.reduce((sum, c) => sum + docCriteriaMet(c), 0) / visible.length * 100)
     : 0
   const retentionAlertCount = visible.filter((c) => retentionState(c).status !== 'retained').length
 
@@ -3618,7 +3628,7 @@ function App() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-[11px] text-slate-400 hidden lg:block">{visible.length} contracts · {openFlagsCount} open flags · {avgCompliance}% compliance</span>
+            <span className="text-[11px] text-slate-400 hidden lg:block">{visible.length} contracts · {openFlagsCount} open flags · {avgCompliance}% criteria met</span>
             {/* ── RBAC role switcher ── */}
             <div className="flex items-center gap-1.5" title="Role-based access control — switch the active role to see which documents your role can access">
               <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -3661,7 +3671,7 @@ function App() {
           <KpiCard label="Critical Flags" value={criticalOpenCount} valueClass="text-red-600" onClick={() => setActiveTab('risk-register')} />
           <KpiCard label="Open Flags" value={openFlagsCount} valueClass="text-orange-600" onClick={() => setActiveTab('risk-register')} />
           <KpiCard label="Remediated" value={remediatedCount} valueClass="text-emerald-600" onClick={() => setActiveTab('risk-register')} />
-          <KpiCard label="Avg Compliance" value={`${avgCompliance}%`} valueClass="text-teal-600" onClick={() => setActiveTab('insights')} />
+          <KpiCard label="Criteria Met (avg)" value={`${avgCompliance}%`} valueClass="text-teal-600" onClick={() => setActiveTab('insights')} title="Portfolio-level, not per-document: for each visible contract, 100% − (open flags ÷ criteria applicable to that document type). Averaged across all your visible contracts. Live — it rises as you resolve flags in Work Queue." />
           <KpiCard label="Retention Alerts" value={retentionAlertCount} valueClass={retentionAlertCount > 0 ? 'text-amber-600' : 'text-emerald-600'} onClick={() => setActiveTab('deadlines')} />
         </div>
 
@@ -3843,7 +3853,7 @@ function App() {
                     <DocSearch contracts={visible} role={role} onSelect={(c) => { setSelected(c); }} />
 
                     {/* Criteria-based compliance panel (F) */}
-                    <CriteriaPanel contracts={visible} />
+                    <CriteriaPanel contracts={visible} resolvedFlags={resolvedFlags} />
 
                     <ContractList
                       contracts={filtered}
