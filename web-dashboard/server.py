@@ -216,6 +216,18 @@ def process_file(file_path: str, use_agnes: bool = True) -> Dict:
         except Exception as e:
             print(f"  DOCX extraction error: {e}")
             text = ""
+    elif ext == ".pdf":
+        # PDF: local text-layer extraction (pypdf). No OCR — scanned PDFs have
+        # no text layer and will fall through to the plain-text attempt below.
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(file_path)
+            text = "\n".join((p.extract_text() or "") for p in reader.pages)
+            # pypdf can emit control chars (e.g. \x01) as word separators — normalize
+            text = re.sub(r"[\x00-\x08\x0b-\x1f]", " ", text)
+        except Exception as e:
+            print(f"  PDF extraction error: {e}")
+            text = ""
     else:
         try:
             text = agnes_ocr(file_path) if use_agnes else ""
@@ -237,7 +249,9 @@ def process_file(file_path: str, use_agnes: bool = True) -> Dict:
                 pass
     
     if not text or len(text.strip()) < 50:
-        return {"error": "Could not extract text from document", "filename": filename}
+        return {"error": "Could not extract text from document "
+                         "(scanned PDFs / image files need OCR, which is a cloud service — "
+                         "upload a text-layer PDF, .docx, .txt or .md instead)", "filename": filename}
     
     # Step 2: Structured extraction (Agnes or rules)
     if use_agnes and AGNES_API_KEY:
@@ -398,7 +412,7 @@ def search_docs(q: str, limit: int = 30):
     needle = q.lower()
     dirs = [d for d in [ARCHIVE_DIR, BASE_DIR / "web-dashboard" / "public" / "research" / "contracts"] if d.exists()]
     results = []
-    allowed = {".md", ".txt", ".csv", ".json", ".docx", ".doc"}
+    allowed = {".md", ".txt", ".csv", ".json", ".docx", ".doc", ".pdf"}
 
     def read_text(f: Path) -> str:
         ext = f.suffix.lower()
@@ -409,6 +423,10 @@ def search_docs(q: str, limit: int = 30):
                 from docx import Document
                 doc = Document(str(f))
                 return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+            if ext == ".pdf":
+                from pypdf import PdfReader
+                t = "\n".join((p.extract_text() or "") for p in PdfReader(str(f)).pages)
+                return re.sub(r"[\x00-\x08\x0b-\x1f]", " ", t)
         except Exception:
             return ""
         return ""
