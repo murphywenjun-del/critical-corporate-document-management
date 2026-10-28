@@ -105,10 +105,6 @@ export interface Role {
 
 export const ROLES: Role[] = [
   {
-    id: 'admin', label: 'System Admin', user: 'Sam Fielding · CIO',
-    access: ['public', 'internal', 'confidential', 'restricted'],
-  },
-  {
     id: 'legal', label: 'Legal & Compliance', user: 'Tanya Howell · Legal Counsel',
     access: ['public', 'internal', 'confidential', 'restricted'],
   },

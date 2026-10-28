@@ -61,7 +61,7 @@ done by cloning `murphywenjun-del/critical-corporate-document-management`, synci
 | Risk Register (42 flags across 13 contracts) | ✅ | L×I scoring, clickable matrix cells |
 | Documents / centralized repository | ✅ | All 13 contracts (not just flagged), search, ACTIVE/EXPIRED status, storage location, related docs, amendment links |
 | Full-text search (demo docs + on-disk archive) | ✅ | `GET /api/search`; offline fallback message when API down |
-| RBAC (5 demo roles, 4 confidentiality levels) | ✅ (simulated) | Role switcher; hidden-doc banner; restricted panel with access-request paths. **Production SSO/RBAC = Phase 2** |
+| RBAC (4 demo roles, 4 confidentiality levels) | ✅ (simulated) | Role switcher; hidden-doc banner; restricted panel with access-request paths. **Production SSO/RBAC = Phase 2** |
 | Retention & disposal board | ✅ (demo rules) | `expiry + retentionYears` vs. reference date 2026-10-15; eligible/imminent/retained; approve-discard → Records Management. **Rules are assumptions until Southlake Retention Policy is mapped** |
 | Template Match / AI comparison | ✅ (deterministic engine) | 5 reference templates; type auto-classification; weighted clause similarity; "Needs Attention" risk-ordered shortlist; full clause diff. **LLM clause-level matching = Phase 2 (local Ollama)** |
 | Risk matrix + portfolio insights | ✅ (AI default framework) | `RISK_FRAMEWORK` config object = integration point for Southlake internal risk register. Systemic patterns (same field ≥3 contracts) + What-If top-3 |

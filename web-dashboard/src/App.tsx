@@ -3242,7 +3242,7 @@ function App() {
     const saved = localStorage.getItem('sl_role')
     if (saved) return saved
     const p = new URLSearchParams(window.location.search).get('role')
-    return p && ROLES.some((r) => r.id === p) ? p : 'admin'
+    return p && ROLES.some((r) => r.id === p) ? p : 'legal'
   })
   const role = ROLES.find((r) => r.id === roleId) ?? ROLES[0]
   const [approvedDestruction, setApprovedDestruction] = useState<Set<string>>(() => {
