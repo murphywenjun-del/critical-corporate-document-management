@@ -53,8 +53,8 @@ function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Con
         {showNote && (
           <div className="mb-3">
             <div className="flex items-center gap-1.5 mb-1">
-              <span className="text-[10px] font-bold text-teal-600 uppercase">AI Proposed Resolution</span>
-              <span className="text-[9px] text-slate-400">(editable)</span>
+              <span className="text-[11px] font-bold text-teal-600 uppercase">AI Proposed Resolution</span>
+              <span className="text-[11px] text-slate-400">(editable)</span>
             </div>
             <textarea
               value={note}
@@ -65,7 +65,7 @@ function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Con
             />
           </div>
         )}
-        <div className="text-[10px] text-slate-400 mb-3">Resolved by: You · {new Date().toLocaleDateString()}</div>
+        <div className="text-[11px] text-slate-400 mb-3">Resolved by: You · {new Date().toLocaleDateString()}</div>
         <div className="flex gap-2">
           <button onClick={onCancel} className="flex-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg py-2 transition">Cancel</button>
           <button onClick={() => onConfirm(showNote ? note : undefined)} className={`flex-1 text-xs font-bold text-white rounded-lg py-2 transition ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-teal-600 hover:bg-teal-700'}`}>{confirmLabel}</button>
@@ -132,8 +132,8 @@ function KpiCard({ label, value, valueClass, onClick }: { label: string; value: 
       className={`bg-white border border-slate-200 rounded-lg p-4 ${onClick ? 'cursor-pointer hover:border-teal-300 hover:shadow-sm transition' : ''}`}
       onClick={onClick}
     >
-      <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">{label}</div>
-      <div className={`text-2xl font-bold mt-1 ${valueClass || 'text-slate-900'}`}>{value}</div>
+      <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">{label}</div>
+      <div className={`text-3xl font-bold mt-1 ${valueClass || 'text-slate-900'}`}>{value}</div>
     </div>
   )
 }
@@ -316,7 +316,7 @@ function RiskRegisterTable({
                     <button
                       key={label}
                       onClick={() => setSelScore(isActive ? null : matchScore)}
-                      className={`${isActive ? sev + ' ring-2 ring-offset-1 ring-teal-300' : sev} text-white text-[10px] font-bold px-2.5 py-1.5 rounded cursor-pointer transition-all ${!isActive ? 'opacity-70 hover:opacity-100' : ''}`}
+                      className={`${isActive ? sev + ' ring-2 ring-offset-1 ring-teal-300' : sev} text-white text-[11px] font-bold px-2.5 py-1.5 rounded cursor-pointer transition-all ${!isActive ? 'opacity-70 hover:opacity-100' : ''}`}
                       title={isActive ? 'Click to clear filter' : `Filter: ${cnt} flags with this score`}
                     >
                       {label} · {cnt}{isActive ? ' ✓' : ''}
@@ -326,7 +326,7 @@ function RiskRegisterTable({
               </div>
               {selScore !== null && (
                 <div className="mt-3 bg-teal-50 border border-teal-200 rounded-lg p-3">
-                  <div className="text-[10px] font-bold text-teal-700 mb-2">
+                  <div className="text-[11px] font-bold text-teal-700 mb-2">
                     Score = {selScore}: {allFlags.filter((f) => f.risk_score === selScore).length} flags across {new Set(allFlags.filter((f) => f.risk_score === selScore).map((f) => f.contract.num)).size} contracts
                     <button onClick={() => setSelScore(null)} className="ml-2 text-teal-500 underline">clear</button>
                   </div>
@@ -336,7 +336,7 @@ function RiskRegisterTable({
                         <span className={`w-2 h-2 rounded-full ${f.severity === 'Critical' ? 'bg-red-500' : f.severity === 'High' ? 'bg-orange-500' : 'bg-yellow-500'}`} />
                         <span className="font-medium">#{f.contract.num} {f.contract.displayName}</span>
                         <span className="text-slate-400">· {f.flag_if}</span>
-                        <span className="ml-auto text-teal-600 text-[10px] font-bold">→</span>
+                        <span className="ml-auto text-teal-600 text-[11px] font-bold">→</span>
                       </button>
                     ))}
                   </div>
@@ -378,7 +378,7 @@ function RiskRegisterTable({
             a.click()
             URL.revokeObjectURL(url)
           }}
-          className="text-[10px] font-medium text-slate-500 hover:text-teal-600 border border-slate-200 rounded px-2 py-1.5 bg-white hover:bg-teal-50 transition"
+          className="text-[11px] font-medium text-slate-500 hover:text-teal-600 border border-slate-200 rounded px-2 py-1.5 bg-white hover:bg-teal-50 transition"
         >
           ⬇ Export CSV ({sorted.length})
         </button>
@@ -402,7 +402,7 @@ function RiskRegisterTable({
       </div>
 
       {/* Source legend */}
-      <div className="flex items-center gap-4 mb-2 text-[10px] text-slate-400">
+      <div className="flex items-center gap-4 mb-2 text-[11px] text-slate-400">
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500" /> Rule-based</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500" /> AI-detected</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> Open</span>
@@ -432,37 +432,37 @@ function RiskRegisterTable({
                   </span>
                 </td>
                 <td className="px-2 py-2.5 text-center">
-                  <div className="text-[10px] font-mono font-bold text-slate-500">{f.likelihood}×{f.impact}</div>
+                  <div className="text-[11px] font-mono font-bold text-slate-500">{f.likelihood}×{f.impact}</div>
                   <div className={`text-xs font-bold ${f.risk_score>=20?'text-red-600':f.risk_score>=12?'text-orange-600':f.risk_score>=6?'text-yellow-600':'text-emerald-600'}`}>{f.risk_score}</div>
                 </td>
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-1.5">
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                      f.status === 'open' ? 'bg-red-100 text-red-700' :
-                      f.status === 'remediated' ? 'bg-emerald-100 text-emerald-700' :
-                      'bg-slate-100 text-slate-600'
+                    <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
+                      f.status === 'open' ? 'bg-red-600 text-white' :
+                      f.status === 'remediated' ? 'bg-emerald-600 text-white' :
+                      'bg-slate-500 text-white'
                     }`}>
                       {f.status === 'open' ? 'Open' : f.status === 'remediated' ? '✓ Done' : 'Accepted'}
                     </span>
                     <span className={`w-1.5 h-1.5 rounded-full ${f.source === 'ai_scan' ? 'bg-purple-500' : 'bg-teal-500'}`} title={f.source === 'ai_scan' ? 'AI-detected' : 'Rule-based'} />
                   </div>
                 </td>
-                <td className="px-4 py-2.5 text-xs text-slate-700 max-w-xs truncate">{f.flag_if}</td>
+                <td className="px-4 py-2.5 text-[13px] text-slate-800 max-w-xs truncate" title={f.flag_if}>{f.flag_if}</td>
                 <td className="px-4 py-2.5">
-                  <button onClick={() => onSelectContract(f.contract)} className="text-xs text-teal-600 hover:text-teal-800 hover:underline">
+                  <button onClick={() => onSelectContract(f.contract)} className="text-[13px] font-medium text-teal-700 hover:text-teal-900 hover:underline">
                     #{f.contract.num} {f.contract.displayName}
                   </button>
                 </td>
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-1">
                     {statusOverrides[`${f.contract.num}_${f.field}_${i}`] === 'remediated' ? (
-                      <span className="text-[9px] text-emerald-600 font-bold">✓ Done</span>
+                      <span className="text-[11px] text-emerald-600 font-bold">✓ Done</span>
                     ) : statusOverrides[`${f.contract.num}_${f.field}_${i}`] === 'accepted' ? (
-                      <span className="text-[9px] text-slate-500">Accepted</span>
+                      <span className="text-[11px] text-slate-500">Accepted</span>
                     ) : resolvedFlags?.has(`f-${f.contract.num}-${f.field}`) ? (
-                      <span className="text-[9px] text-emerald-600 font-bold">✓ Resolved</span>
+                      <span className="text-[11px] text-emerald-600 font-bold">✓ Resolved</span>
                     ) : (
-                      <button onClick={(e) => { e.stopPropagation(); onConfirmAction?.(`Resolve Flag`, `"${f.field}"\n\nDocument: ${f.contract.displayName} (#${f.contract.num})\nSeverity: ${f.severity}\nL×I: ${f.likelihood}×${f.impact} = ${f.risk_score}`, () => { setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })); onFix?.(`f-${f.contract.num}-${f.field}`) }, true, getAIProposal(f.field, f.contract.displayName)) }} className="text-[9px] px-1.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded hover:bg-emerald-100 transition">Fix</button>
+                      <button onClick={(e) => { e.stopPropagation(); onConfirmAction?.(`Resolve Flag`, `"${f.field}"\n\nDocument: ${f.contract.displayName} (#${f.contract.num})\nSeverity: ${f.severity}\nL×I: ${f.likelihood}×${f.impact} = ${f.risk_score}`, () => { setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })); onFix?.(`f-${f.contract.num}-${f.field}`) }, true, getAIProposal(f.field, f.contract.displayName)) }} className="text-[11px] font-bold px-2 py-0.5 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition">Fix</button>
                     )}
                   </div>
                 </td>
@@ -507,7 +507,7 @@ function CriteriaPanel({ contracts: allContracts }: { contracts: ContractDoc[] }
     <div className="bg-white border border-slate-200 rounded-lg p-4">
       <div className="flex items-center gap-2 mb-3">
         <h3 className="text-sm font-bold text-slate-800">Criteria-Based Compliance</h3>
-        <span className="text-[10px] text-slate-400">Applicability varies by document type</span>
+        <span className="text-[11px] text-slate-400">Applicability varies by document type</span>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {Object.entries(byType).map(([type, docs]) => {
@@ -520,17 +520,17 @@ function CriteriaPanel({ contracts: allContracts }: { contracts: ContractDoc[] }
             <div key={type} className="border border-slate-100 rounded p-3">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-bold text-slate-700">{type}</span>
-                <span className="text-[10px] text-slate-400">{total} docs</span>
+                <span className="text-[11px] text-slate-400">{total} docs</span>
               </div>
-              <div className="text-[10px] text-slate-500 mb-2">{clean}/{total} clean · {hardGaps} hard gaps</div>
+              <div className="text-[11px] text-slate-500 mb-2">{clean}/{total} clean · {hardGaps} hard gaps</div>
               {/* Progress bar */}
               <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full ${rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                  style={{ width: `${Math.min(100, rate)}%` }}
+                  style={{ width: `${Math.min(100, Math.max(0, rate))}%` }}
                 />
               </div>
-              <div className="text-[10px] text-slate-400 mt-1">{rate}% criteria met</div>
+              <div className={`text-[11px] mt-1 ${rate < 0 ? 'text-red-600 font-medium' : 'text-slate-500'}`}>{rate < 0 ? `${Math.abs(rate)}% below target — hard gaps outweigh the document set` : `${rate}% criteria met`}</div>
             </div>
           )
         })}
@@ -574,7 +574,7 @@ function ContractList({
               {/* Left: number + type + confidentiality */}
               <div className="flex items-center gap-2 w-24 shrink-0">
                 <span className="text-xs font-mono text-slate-400">#{c.num}</span>
-                <span className="text-[10px] text-slate-400 uppercase">{c.type}</span>
+                <span className="text-[11px] text-slate-400 uppercase">{c.type}</span>
                 {role && (
                   <span className={`text-[8px] font-bold px-1 py-0.5 rounded border ${CONF_BADGE[c.confidentiality]}`}>
                     {CONF_LABEL[c.confidentiality]}
@@ -584,7 +584,7 @@ function ContractList({
 
               {/* Middle: name */}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-800 truncate flex items-center gap-1.5">
+                <p className="text-[15px] font-semibold text-slate-900 truncate flex items-center gap-1.5">
                   {locked && (
                     <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v2h8z" />
@@ -596,10 +596,10 @@ function ContractList({
                   <p className="text-xs text-slate-400">Content restricted — not viewable by role “{role?.label}”</p>
                 ) : (
                   <>
-                    <p className="text-xs text-slate-400 truncate">{c.summary}</p>
+                    <p className="text-[13px] text-slate-500 truncate" title={c.summary}>{c.summary}</p>
                     {/* Repository row: status · storage location · related documents */}
-                    <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-1">
-                      <span className={`font-bold ${expired ? 'text-slate-500' : 'text-emerald-600'}`}>{expired ? 'EXPIRED' : 'ACTIVE'}</span>
+                    <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-1">
+                      <span className={`font-bold ${expired ? 'text-red-600' : 'text-emerald-600'}`}>{expired ? 'EXPIRED' : 'ACTIVE'}</span>
                       <span className="text-slate-300">·</span>
                       <span className="font-mono truncate" title={c.filePath}>📁 {c.filePath}</span>
                       <span className="text-slate-300">·</span>
@@ -612,31 +612,31 @@ function ContractList({
               {/* Right: risk indicators + badges */}
               <div className="flex items-center gap-3 shrink-0">
                 {c.baseContractId != null && (
-                  <span className="text-[9px] font-bold bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded border border-purple-200">
+                  <span className="text-[11px] font-bold bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded border border-purple-200">
                     AMENDMENT
                   </span>
                 )}
                 {c.flags.some((f) => f.field === 'duplicate_version') && (
-                  <span className="text-[9px] font-bold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">
+                  <span className="text-[11px] font-bold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">
                     SUPERSEDED
                   </span>
                 )}
                 {c.flags.length === 0 && (
-                  <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200">
+                  <span className="text-[11px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200">
                     CLEAN ✓
                   </span>
                 )}
                 {locked ? (
-                  <span className="text-[10px] text-slate-400 italic">restricted</span>
+                  <span className="text-[11px] text-slate-400 italic">restricted</span>
                 ) : (
                   <>
                     <div className="text-right">
                       <div className="text-xs font-bold text-slate-700">{c.riskScore.toFixed(1)}</div>
-                      <div className="text-[10px] text-slate-400">score</div>
+                      <div className="text-[11px] text-slate-400">score</div>
                     </div>
                     <div className="flex flex-col items-center gap-0.5">
                       <span className={`w-2.5 h-2.5 rounded-full ${c.riskLevel === 'Critical' ? 'bg-red-500' : c.riskLevel === 'High' ? 'bg-orange-500' : 'bg-emerald-500'}`} />
-                      <span className={`text-[10px] font-medium ${c.riskLevel === 'Critical' ? 'text-red-600' : c.riskLevel === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>
+                      <span className={`text-[11px] font-medium ${c.riskLevel === 'Critical' ? 'text-red-600' : c.riskLevel === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>
                         {c.riskLevel}
                       </span>
                     </div>
@@ -671,7 +671,7 @@ function RestrictedAccessPanel({ doc, role }: { doc: ContractDoc; role: Role }) 
       <div className="bg-white border border-slate-200 rounded-lg p-4 text-xs space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-slate-400">Classification</span>
-          <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${CONF_BADGE[doc.confidentiality]}`}>
+          <span className={`text-[11px] font-bold px-2 py-0.5 rounded border ${CONF_BADGE[doc.confidentiality]}`}>
             {CONF_LABEL[doc.confidentiality]}
           </span>
         </div>
@@ -683,7 +683,7 @@ function RestrictedAccessPanel({ doc, role }: { doc: ContractDoc; role: Role }) 
           <span className="text-slate-400 shrink-0">To gain access</span>
           <span className="text-slate-600 text-right">Request via Records Management — <b>{doc.retentionOwner}</b>, or your department head.</span>
         </div>
-        <p className="text-[10px] text-slate-400 border-t border-slate-100 pt-3">
+        <p className="text-[11px] text-slate-400 border-t border-slate-100 pt-3">
           Role-based access control: employees only see documents authorized for their role.
           Confidential &amp; PHI-restricted agreements are hidden from non-legal roles.
         </p>
@@ -727,14 +727,14 @@ function RetentionBoard({
     <div>
       <div className="flex items-center justify-between mb-2 mt-6">
         <div className="text-xs font-bold text-slate-700">Document Retention &amp; Disposition</div>
-        <span className="text-[10px] text-slate-400">Reference date {DEMO_TODAY} · alerts notify the document owner</span>
+        <span className="text-[11px] text-slate-400">Reference date {DEMO_TODAY} · alerts notify the document owner</span>
       </div>
       {/* Summary chips */}
       <div className="flex gap-4 mb-3">
         {(['elapsed', 'imminent', 'retained'] as const).map((u) => (
           <div key={u} className={`flex-1 border rounded-lg p-3 text-center ${statusMeta[u].chip}`}>
             <div className="text-2xl font-bold">{counts[u]}</div>
-            <div className="text-[10px] font-bold uppercase tracking-wide mt-0.5">{statusMeta[u].label}</div>
+            <div className="text-[11px] font-bold uppercase tracking-wide mt-0.5">{statusMeta[u].label}</div>
           </div>
         ))}
       </div>
@@ -761,7 +761,7 @@ function RetentionBoard({
                   <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">#{c.num}</td>
                   <td className="px-4 py-2.5">
                     <div className="text-sm text-slate-800">{c.displayName}</div>
-                    <div className="text-[10px] text-slate-400">{c.retentionBasis}</div>
+                    <div className="text-[11px] text-slate-400">{c.retentionBasis}</div>
                   </td>
                   <td className="px-4 py-2.5 text-xs text-slate-600 font-mono">{until}</td>
                   <td className={`px-4 py-2.5 text-xs font-bold ${sm.text}`}>
@@ -772,7 +772,7 @@ function RetentionBoard({
                     {c.paper ? (
                       <div>
                         <div className="font-bold">{c.paper.copies} {c.paper.copies > 1 ? 'copies' : 'copy'}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">{c.paper.location}</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">{c.paper.location}</div>
                       </div>
                     ) : (
                       <span className="text-slate-300">digital only</span>
@@ -782,16 +782,16 @@ function RetentionBoard({
                     {status === 'elapsed' ? (
                       isApproved ? (
                         <div className="space-y-1">
-                          <span className="text-[10px] font-bold text-emerald-600">✓ Destruction approved</span>
+                          <span className="text-[11px] font-bold text-emerald-600">✓ Destruction approved</span>
                           {c.paper && (
                             disposed?.has(String(c.num)) ? (
-                              <span className="text-[10px] font-bold text-emerald-600">✓ Paper copies disposed</span>
+                              <span className="text-[11px] font-bold text-emerald-600">✓ Paper copies disposed</span>
                             ) : (
                               <button
                                 onClick={() => onDispose?.(c)}
                                 disabled={!manageable}
                                 title={!manageable ? 'Paper disposal sign-off is restricted to the Legal role (demo RBAC)' : undefined}
-                                className="text-[10px] font-bold text-slate-600 border border-slate-200 bg-slate-50 hover:bg-slate-100 rounded px-2 py-1 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                className="text-[11px] font-bold text-slate-600 border border-slate-200 bg-slate-50 hover:bg-slate-100 rounded px-2 py-1 transition disabled:opacity-40 disabled:cursor-not-allowed"
                               >
                                 Dispose {c.paper.copies} paper {c.paper.copies > 1 ? 'copies' : 'copy'} →
                               </button>
@@ -803,13 +803,13 @@ function RetentionBoard({
                           onClick={() => onApprove(c)}
                           disabled={!manageable}
                           title={!manageable ? 'Destruction approval is restricted to the Legal role (demo RBAC)' : undefined}
-                          className="text-[10px] font-bold text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 rounded px-2 py-1 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                          className="text-[11px] font-bold text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 rounded px-2 py-1 transition disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           Approve discard →
                         </button>
                       )
                     ) : (
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${sm.chip}`}>{sm.label}</span>
+                      <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded border ${sm.chip}`}>{sm.label}</span>
                     )}
                   </td>
                 </tr>
@@ -818,7 +818,7 @@ function RetentionBoard({
           </tbody>
         </table>
       </div>
-      <p className="text-[10px] text-slate-400 mt-2">
+      <p className="text-[11px] text-slate-400 mt-2">
         Retention periods follow Southlake’s records schedule. When a document reaches its legally required
         retention deadline, the owner is alerted; after approval it is routed to Records Management for discard.
       </p>
@@ -886,7 +886,7 @@ function DocSearch({ contracts: allContracts, onSelect, role }: { contracts: Con
         <div className="mt-3 space-y-4">
           {/* Demo document matches */}
           <div>
-            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
               Demo documents <span className="text-teal-600">({local.length})</span>
             </div>
             {local.length === 0 && <div className="text-[11px] text-slate-400">No matching demo documents.</div>}
@@ -896,7 +896,7 @@ function DocSearch({ contracts: allContracts, onSelect, role }: { contracts: Con
                   <span className="font-mono text-slate-400">#{c.num}</span> {c.displayName}
                   <span className="text-slate-400"> · {c.department}</span>
                 </div>
-                <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                <div className="text-[11px] text-slate-500 truncate mt-0.5">
                   <Highlight text={c.summary} q={needle} />
                 </div>
               </button>
@@ -905,7 +905,7 @@ function DocSearch({ contracts: allContracts, onSelect, role }: { contracts: Con
           {/* On-disk archive matches (RBAC-gated: files above the role's access level are hidden) */}
           {hits !== null ? (
             <div>
-              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
                 On-disk archive <span className="text-teal-600">({gatedDiskCount ?? 0} files)</span>
                 <span className="font-normal normal-case text-slate-400"> · data/archive, verified from disk</span>
                 {role && (hits || []).length > (gatedHits || []).length && (
@@ -916,14 +916,14 @@ function DocSearch({ contracts: allContracts, onSelect, role }: { contracts: Con
               {(gatedHits || []).map((h, i) => (
                 <div key={i} className="px-3 py-2 -mx-3 hover:bg-slate-50 rounded transition-colors">
                   <div className="text-xs font-medium text-slate-700 truncate">{h.path}</div>
-                  <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+                  <div className="text-[11px] text-slate-500 mt-0.5 truncate">
                     <Highlight text={h.snippet} q={needle} />
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="text-[10px] text-slate-400">Archive search offline — start the API server (server.py, port 8000) to search on-disk files.</div>
+            <div className="text-[11px] text-slate-400">Archive search offline — start the API server (server.py, port 8000) to search on-disk files.</div>
           )}
         </div>
       )}
@@ -1235,22 +1235,22 @@ function DeadlinesTimeline({ contracts: allContracts, onSelectContract }: { cont
         <div className="absolute top-1/2 left-0 right-0 h-1 bg-slate-200 rounded" />
         {/* Today marker */}
         <div className="absolute top-0 bottom-0 w-0.5 bg-red-400 opacity-50" style={{ left: `${pos(today)}%` }} />
-        <span className="absolute text-[9px] text-red-500 -translate-x-1/2" style={{ left: `${pos(today)}%`, top: '-12px' }}>Today</span>
+        <span className="absolute text-[11px] text-red-500 -translate-x-1/2" style={{ left: `${pos(today)}%`, top: '-12px' }}>Today</span>
         {/* Contract dots */}
         {sorted.map((c) => (
           <div key={c.num} className="absolute top-1/2 -translate-y-1/2 group cursor-pointer" style={{ left: `${pos(c.expiryDate!)}%` }} onClick={() => onSelectContract?.(c)}>
             <div className={`w-3 h-3 rounded-full border-2 border-white shadow ${c.expiryDate! < today ? 'bg-red-500' : c.expiryDate!.slice(0, 7) === today.slice(0, 7) ? 'bg-amber-500' : 'bg-teal-500'} group-hover:scale-125 transition-transform`} />
-            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[9px] px-1.5 py-0.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition">
+            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[11px] px-1.5 py-0.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition">
               #{c.num} {c.expiryDate} · click →
             </div>
           </div>
         ))}
         {/* Axis labels */}
-        <div className="absolute bottom-0 left-0 text-[9px] text-slate-400">{minDate}</div>
-        <div className="absolute bottom-0 right-0 text-[9px] text-slate-400">{maxDate}</div>
+        <div className="absolute bottom-0 left-0 text-[11px] text-slate-400">{minDate}</div>
+        <div className="absolute bottom-0 right-0 text-[11px] text-slate-400">{maxDate}</div>
       </div>
       {/* Legend */}
-      <div className="flex items-center gap-4 mt-2 text-[9px] text-slate-400">
+      <div className="flex items-center gap-4 mt-2 text-[11px] text-slate-400">
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> Expired</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> Expiring (this month)</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500" /> Future</span>
@@ -1299,14 +1299,14 @@ function DeadlinesTable({ contracts: allContracts, onSelectContract }: { contrac
           return (
             <div key={u} className={`flex-1 ${uc.bg} border border-slate-200 rounded-lg p-3 text-center`}>
               <div className={`text-2xl font-bold ${uc.text}`}>{count}</div>
-              <div className="text-[10px] text-slate-500 uppercase tracking-wide mt-0.5">{urgencyLabels[u]}</div>
+              <div className="text-[11px] text-slate-500 uppercase tracking-wide mt-0.5">{urgencyLabels[u]}</div>
             </div>
           )
         })}
       </div>
 
       {/* Source legend */}
-      <div className="flex items-center gap-4 mb-2 text-[10px] text-slate-400">
+      <div className="flex items-center gap-4 mb-2 text-[11px] text-slate-400">
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500" /> Rule-based</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500" /> AI-detected</span>
         <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> Open</span>
@@ -1336,7 +1336,7 @@ function DeadlinesTable({ contracts: allContracts, onSelectContract }: { contrac
                     <button onClick={() => onSelectContract?.(r.c)} className="text-sm text-slate-800 hover:text-teal-600 hover:underline text-left">
                       {r.c.displayName}
                     </button>
-                    <div className="text-[10px] text-slate-400">{r.c.department}</div>
+                    <div className="text-[11px] text-slate-400">{r.c.department}</div>
                   </td>
                   <td className="px-4 py-2.5 text-xs text-slate-600 font-mono">{r.c.expiryDate}</td>
                   <td className={`px-4 py-2.5 text-xs font-bold ${uc.text}`}>
@@ -1350,7 +1350,7 @@ function DeadlinesTable({ contracts: allContracts, onSelectContract }: { contrac
                   <td className="px-4 py-2.5">
                     <div className="flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full ${uc.bar}`} />
-                      <span className={`text-[10px] font-bold ${uc.text}`}>{urgencyLabels[r.urgency]}</span>
+                      <span className={`text-[11px] font-bold ${uc.text}`}>{urgencyLabels[r.urgency]}</span>
                     </div>
                     {/* Urgency bar */}
                     <div className="w-16 h-1 bg-slate-100 rounded-full mt-1 overflow-hidden">
@@ -1458,7 +1458,7 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contrac
       {/* 5×5 Grid — clickable cells */}
       <div className="bg-white border border-slate-200 rounded-lg p-5">
         <h3 className="text-sm font-bold text-slate-800 mb-1">Risk Matrix</h3>
-        <div className="text-[10px] text-slate-400 mb-2">{RISK_FRAMEWORK.source} · bands ≥{RISK_FRAMEWORK.bands.red} red / ≥{RISK_FRAMEWORK.bands.orange} orange / ≥{RISK_FRAMEWORK.bands.yellow} yellow</div>
+        <div className="text-[11px] text-slate-400 mb-2">{RISK_FRAMEWORK.source} · bands ≥{RISK_FRAMEWORK.bands.red} red / ≥{RISK_FRAMEWORK.bands.orange} orange / ≥{RISK_FRAMEWORK.bands.yellow} yellow</div>
         <p className="text-[11px] text-slate-400 mb-4">Click a cell to see which documents/flags fall in that risk band.</p>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px]">
@@ -1466,9 +1466,9 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contrac
               <tr>
                 <th className="w-8"></th>
                 {[1,2,3,4,5].map((i) => (
-                  <th key={i} className="text-center text-[10px] font-medium text-slate-500 pb-2">
+                  <th key={i} className="text-center text-[11px] font-medium text-slate-500 pb-2">
                     <div className="text-xs font-bold text-slate-700">{I_LABELS[i]}</div>
-                    <div className="text-[9px] text-slate-400">Impact {i}</div>
+                    <div className="text-[11px] text-slate-400">Impact {i}</div>
                   </th>
                 ))}
               </tr>
@@ -1478,7 +1478,7 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contrac
                 <tr key={l}>
                   <td className="text-right pr-2">
                     <div className="text-xs font-bold text-slate-700">{L_LABELS[l]}</div>
-                    <div className="text-[9px] text-slate-400">L={l}</div>
+                    <div className="text-[11px] text-slate-400">L={l}</div>
                   </td>
                   {[1,2,3,4,5].map((i) => {
                     const count = grid[5-l][i-1]
@@ -1487,7 +1487,7 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contrac
                       <td key={i} onClick={() => count > 0 && setSelectedCell(isActive ? null : [l, i])} className={`border p-2 text-center cursor-pointer transition ${cellColor(l,i)} ${isActive ? 'ring-2 ring-teal-500 ring-inset' : ''} ${count > 0 ? 'hover:brightness-95' : 'opacity-50 cursor-default'}`}>
                         <div className={`text-lg font-bold ${cellText(l,i)}`}>{l*i}</div>
                         {count > 0 && (
-                          <div className="text-[10px] font-medium text-slate-600 mt-0.5">{count} flag{count>1?'s':''}</div>
+                          <div className="text-[11px] font-medium text-slate-600 mt-0.5">{count} flag{count>1?'s':''}</div>
                         )}
                       </td>
                     )
@@ -1505,7 +1505,7 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contrac
               <span className="text-xs font-bold text-slate-700">
                 L={selectedCell[0]} × I={selectedCell[1]} = {selectedCell[0]*selectedCell[1]} · {cellFlags.length} flag{cellFlags.length>1?'s':''}
               </span>
-              <button onClick={() => setSelectedCell(null)} className="text-[10px] text-slate-400 hover:text-slate-600">✕ Close</button>
+              <button onClick={() => setSelectedCell(null)} className="text-[11px] text-slate-400 hover:text-slate-600">✕ Close</button>
             </div>
             <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto">
               {cellFlags.map((f, idx) => (
@@ -1514,16 +1514,16 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contrac
                     <div className="text-xs font-medium text-slate-700">
                       Contract #{f.contract.num} · {f.contract.displayName}
                     </div>
-                    <div className="text-[10px] text-slate-400 mt-0.5">{f.field} · {f.flag_if?.slice(0, 60)}</div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">{f.field} · {f.flag_if?.slice(0, 60)}</div>
                   </div>
-                  <span className="text-[10px] text-teal-600 font-medium whitespace-nowrap ml-3">Open →</span>
+                  <span className="text-[11px] text-teal-600 font-medium whitespace-nowrap ml-3">Open →</span>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        <div className="flex gap-4 mt-4 text-[10px] text-slate-500">
+        <div className="flex gap-4 mt-4 text-[11px] text-slate-500">
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100 border border-red-300"/>Critical (20–25)</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-50 border border-orange-200"/>High (12–19)</span>
           <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-50 border border-yellow-200"/>Moderate (6–11)</span>
@@ -1545,7 +1545,7 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contrac
               <div key={cat} className="border border-slate-200 rounded-lg p-3">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold text-slate-700">{cat}</span>
-                  <span className="text-[10px] text-slate-400">{catFlags.length} flags</span>
+                  <span className="text-[11px] text-slate-400">{catFlags.length} flags</span>
                 </div>
                 {top.length > 0 ? (
                   top.map(([n, c]) => (
@@ -1554,7 +1554,7 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contrac
                 ) : (
                   <div className="text-[11px] text-slate-300">no flags in current register</div>
                 )}
-                <div className="text-[9px] text-slate-300 mt-1.5">{riskNames.length} risk names in category</div>
+                <div className="text-[11px] text-slate-300 mt-1.5">{riskNames.length} risk names in category</div>
               </div>
             )
           })}
@@ -1619,10 +1619,10 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
                 {i < WF_STEPS.length - 1 && <div className={`w-5 h-0.5 ${i < stepIdx ? 'bg-teal-300' : 'bg-slate-200'}`} />}
               </div>
             ))}
-            <span className={`ml-2 text-[10px] font-bold px-2 py-0.5 rounded border ${WF_STEPS[stepIdx]?.color}`}>
+            <span className={`ml-2 text-[11px] font-bold px-2 py-0.5 rounded border ${WF_STEPS[stepIdx]?.color}`}>
               {WF_STEPS[stepIdx]?.label}
             </span>
-            <span className="ml-auto text-[10px] text-slate-400">{isExpanded ? '▲' : '▼ details'}</span>
+            <span className="ml-auto text-[11px] text-slate-400">{isExpanded ? '▲' : '▼ details'}</span>
           </div>
 
           <div className="flex items-start gap-3">
@@ -1643,7 +1643,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
               {stepIdx < 4 && !isSynced && (
                 <button
                   onClick={(e) => { e.stopPropagation(); setWizard(link); setExpanded((p) => ({ ...p, [key]: true })) }}
-                  className="text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded px-2 py-1 hover:bg-teal-100 transition shrink-0"
+                  className="text-[11px] font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded px-2 py-1 hover:bg-teal-100 transition shrink-0"
                 >
                   ▶ Open Workflow
                 </button>
@@ -1656,11 +1656,11 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
         {isExpanded && (
           <div className="px-4 pb-4 border-t border-slate-100 bg-slate-50/50 space-y-3">
             <div>
-              <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">What changed</div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase mb-1">What changed</div>
               <div className="text-xs text-slate-700 bg-white rounded border border-slate-200 p-2">{link.changeDescription}</div>
             </div>
             <div>
-              <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Risk if not updated</div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase mb-1">Risk if not updated</div>
               <div className={`text-xs p-2 rounded border ${state === 'closed' ? 'text-slate-500 bg-slate-50 border-slate-200' : 'text-red-700 bg-red-50 border-red-200'}`}>
                 {link.riskIfNotUpdated}
               </div>
@@ -1668,7 +1668,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
 
             {/* Workflow button */}
             <div>
-              <div className="text-[10px] font-bold text-slate-500 uppercase mb-2">Workflow</div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase mb-2">Workflow</div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={(e) => { e.stopPropagation(); setWizard(link) }}
@@ -1681,7 +1681,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
                 >
                   {isSynced ? '✓ Resolved' : state === 'closed' ? 'Reopen' : `Continue from "${WF_STEPS[stepIdx]?.label}"`}
                 </button>
-                <span className="text-[10px] text-slate-400">
+                <span className="text-[11px] text-slate-400">
                   {isSynced ? 'No action needed' : `${4 - stepIdx} steps remaining`}
                 </span>
               </div>
@@ -1690,7 +1690,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
             {/* Verification checklist */}
             {state === 'fixing' && (
               <div className="bg-amber-50 border border-amber-200 rounded p-2">
-                <div className="text-[10px] font-bold text-amber-700 uppercase mb-1">Before verifying, confirm:</div>
+                <div className="text-[11px] font-bold text-amber-700 uppercase mb-1">Before verifying, confirm:</div>
                 <div className="text-[11px] text-slate-600 space-y-0.5">
                   <div>□ Target document ({link.targetName}) has been updated</div>
                   <div>□ Clause {link.targetClause} now matches the new requirement</div>
@@ -1713,7 +1713,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
           return (
             <div key={s.id} className="flex-1 bg-white border border-slate-200 rounded-lg p-3 text-center">
               <div className={`text-xl font-bold ${s.id==='detected'?'text-red-600':s.id==='acknowledged'?'text-amber-600':s.id==='fixing'?'text-blue-600':s.id==='verified'?'text-emerald-600':'text-slate-500'}`}>{count}</div>
-              <div className="text-[10px] text-slate-400">{s.label}</div>
+              <div className="text-[11px] text-slate-400">{s.label}</div>
             </div>
           )
         })}
@@ -1744,7 +1744,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
                 <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-800">
                   <b>Gap:</b> {w.beforeText}
                 </div>
-                <div className="text-[10px] text-slate-400">Suggested owner: document custodian · SLA: 5 business days</div>
+                <div className="text-[11px] text-slate-400">Suggested owner: document custodian · SLA: 5 business days</div>
               </div>
             )
             case 'fixing': return (
@@ -1752,16 +1752,16 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
                 <div className="text-sm text-slate-600">Target document will be <b>updated</b> to match source requirement.</div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <div className="text-[10px] font-bold text-red-400 uppercase mb-1">Current</div>
+                    <div className="text-[11px] font-bold text-red-400 uppercase mb-1">Current</div>
                     <div className="text-xs text-slate-700 bg-red-50 border border-red-100 rounded p-3">{w.beforeText}</div>
                   </div>
                   <div>
-                    <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Required</div>
+                    <div className="text-[11px] font-bold text-emerald-600 uppercase mb-1">Required</div>
                     <div className="text-xs text-slate-700 bg-emerald-50 border border-emerald-100 rounded p-3">{w.afterText}</div>
                   </div>
                 </div>
-                {w.keyChanges.length > 0 && <div className="text-[10px] text-slate-500"><b>Changes:</b> {w.keyChanges.join(' · ')}</div>}
-                <div className="text-[10px] text-slate-400">SLA: 30 days · Notify: custodian + Legal</div>
+                {w.keyChanges.length > 0 && <div className="text-[11px] text-slate-500"><b>Changes:</b> {w.keyChanges.join(' · ')}</div>}
+                <div className="text-[11px] text-slate-400">SLA: 30 days · Notify: custodian + Legal</div>
               </div>
             )
             case 'verified': return (
@@ -1773,7 +1773,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
                   <div>□ Clause {w.targetClause} now matches: "{w.afterText}"</div>
                   <div>□ No other documents reference the old value</div>
                 </div>
-                <div className="text-[10px] text-slate-400">Verifier: Risk team · Evidence: revised doc version</div>
+                <div className="text-[11px] text-slate-400">Verifier: Risk team · Evidence: revised doc version</div>
               </div>
             )
             case 'closed': return (
@@ -1782,7 +1782,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
                 <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-xs text-emerald-800">
                   ✓ {w.beforeText} → {w.afterText}
                 </div>
-                <div className="text-[10px] text-slate-400">Permanent. To reopen, set back to "Detected".</div>
+                <div className="text-[11px] text-slate-400">Permanent. To reopen, set back to "Detected".</div>
               </div>
             )
             default: return <div className="text-[11px] text-slate-500">Review and continue.</div>
@@ -1925,7 +1925,7 @@ function AmendmentsView({ contracts: allContracts, onSelect }: { contracts: Cont
   }) {
     return (
       <div>
-        <div className="text-[10px] font-bold text-slate-500 uppercase mb-1.5">Status</div>
+        <div className="text-[11px] font-bold text-slate-500 uppercase mb-1.5">Status</div>
         <div className="flex flex-wrap gap-1.5">
           {A_STEPS.map((s) => {
             const isActive = state === s.id
@@ -1968,10 +1968,10 @@ function AmendmentsView({ contracts: allContracts, onSelect }: { contracts: Cont
             <button onClick={(e) => { e.stopPropagation(); onSelect(c) }} className="text-xs font-medium text-teal-600 hover:underline">
               #{c.num} {c.displayName}
             </button>
-            <span className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded border ${A_STEPS.find((s) => s.id === state)?.color}`}>
+            <span className={`ml-auto text-[11px] font-bold px-2 py-0.5 rounded border ${A_STEPS.find((s) => s.id === state)?.color}`}>
               {A_STEPS.find((s) => s.id === state)?.label}
             </span>
-            <span className="text-[10px] text-slate-400">{isExp ? '▲' : '▼'}</span>
+            <span className="text-[11px] text-slate-400">{isExp ? '▲' : '▼'}</span>
           </div>
           {!isExp && c.flags.length > 0 && (
             <div className="text-[11px] text-slate-500">{c.flags.length} open risk{c.flags.length > 1 ? 's' : ''} · top: {c.flags[0].flag_if.slice(0, 60)}…</div>
@@ -1982,20 +1982,20 @@ function AmendmentsView({ contracts: allContracts, onSelect }: { contracts: Cont
           <div className="px-4 pb-4 border-t border-slate-100 bg-slate-50/50 space-y-3">
             {c.flags.length > 0 && (
               <div>
-                <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Risk Flags</div>
+                <div className="text-[11px] font-bold text-slate-500 uppercase mb-1">Risk Flags</div>
                 <div className="space-y-1.5">
                   {c.flags.map((f, i) => (
                     <div key={i} className="flex items-center gap-2 text-xs bg-white rounded border border-slate-200 p-2">
                       <span className={`w-2 h-2 rounded-full flex-shrink-0 ${SEV_DOT[f.severity]}`} />
                       <span className="text-slate-600 flex-1">{f.flag_if}</span>
-                      <span className="text-slate-400 font-mono text-[10px] flex-shrink-0">L{f.likelihood}×I{f.impact}={f.risk_score}</span>
+                      <span className="text-slate-400 font-mono text-[11px] flex-shrink-0">L{f.likelihood}×I{f.impact}={f.risk_score}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
             <div>
-              <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Key Fields</div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase mb-1">Key Fields</div>
               <div className="grid grid-cols-2 gap-1.5">
                 {c.extractedFields.map((f, i) => (
                   <div key={i} className="text-[11px] bg-white rounded border border-slate-100 p-1.5">
@@ -2034,11 +2034,11 @@ function AmendmentsView({ contracts: allContracts, onSelect }: { contracts: Cont
           <div className="flex items-center gap-2">
             <span className={`w-2 h-2 rounded-full flex-shrink-0 ${a.supersedesOriginal ? 'bg-red-500' : 'bg-teal-500'}`} />
             <span className="text-xs font-bold text-slate-700 flex-1">{a.label}</span>
-            {a.supersedesOriginal && <span className="text-[9px] font-bold bg-red-50 text-red-600 px-1.5 rounded">SUPERSEDES</span>}
-            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${A_STEPS.find((s) => s.id === state)?.color}`}>
+            {a.supersedesOriginal && <span className="text-[11px] font-bold bg-red-50 text-red-600 px-1.5 rounded">SUPERSEDES</span>}
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded border ${A_STEPS.find((s) => s.id === state)?.color}`}>
               {A_STEPS.find((s) => s.id === state)?.label}
             </span>
-            <span className="text-[10px] text-slate-400">{a.effectiveDate}</span>
+            <span className="text-[11px] text-slate-400">{a.effectiveDate}</span>
             <span className="text-slate-300 text-xs">{isExp ? '▲' : '▼'}</span>
           </div>
         </div>
@@ -2046,10 +2046,10 @@ function AmendmentsView({ contracts: allContracts, onSelect }: { contracts: Cont
         {isExp && (
           <div className="px-3 pb-3 border-t border-slate-100 bg-slate-50/50 space-y-2.5">
             <div>
-              <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Key Changes</div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase mb-1">Key Changes</div>
               <div className="flex flex-wrap gap-1">
                 {a.keyChanges.map((k2, j) => (
-                  <span key={j} className="text-[10px] bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-600">{k2}</span>
+                  <span key={j} className="text-[11px] bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-600">{k2}</span>
                 ))}
               </div>
             </div>
@@ -2103,13 +2103,13 @@ function AmendmentsView({ contracts: allContracts, onSelect }: { contracts: Cont
         >
           <div className="space-y-3">
             <div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Document</div>
+              <div className="text-[11px] font-bold text-slate-400 uppercase mb-1">Document</div>
               <div className="text-xs text-slate-700 font-medium">{modal.label}</div>
             </div>
 
             {modal.keyChanges && modal.keyChanges.length > 0 && (
               <div>
-                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Key Changes</div>
+                <div className="text-[11px] font-bold text-slate-400 uppercase mb-1">Key Changes</div>
                 <div className="space-y-1">
                   {modal.keyChanges.map((k, i) => (
                     <div key={i} className="text-[11px] text-slate-600 flex items-start gap-1.5">
@@ -2123,20 +2123,20 @@ function AmendmentsView({ contracts: allContracts, onSelect }: { contracts: Cont
 
             {modal.beforeContext && (
               <div>
-                <div className="text-[10px] font-bold text-red-400 uppercase mb-1">Before (current state)</div>
+                <div className="text-[11px] font-bold text-red-400 uppercase mb-1">Before (current state)</div>
                 <div className="text-[11px] text-slate-700 bg-red-50 border border-red-100 rounded p-2 leading-relaxed">{modal.beforeContext}</div>
               </div>
             )}
 
             {modal.afterContext && (
               <div>
-                <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">After (this change)</div>
+                <div className="text-[11px] font-bold text-emerald-600 uppercase mb-1">After (this change)</div>
                 <div className="text-[11px] text-slate-700 bg-emerald-50 border border-emerald-100 rounded p-2 leading-relaxed">{modal.afterContext}</div>
               </div>
             )}
 
             <div>
-              <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Status Change</div>
+              <div className="text-[11px] font-bold text-slate-400 uppercase mb-1">Status Change</div>
               <div className="flex items-center gap-2 text-xs">
                 <span className={`px-2 py-0.5 rounded border ${A_STEPS.find((s) => s.id === modal.context)?.color}`}>
                   {A_STEPS.find((s) => s.id === modal.context)?.label}
@@ -2193,9 +2193,9 @@ function ContractDetail({
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] text-slate-400 uppercase tracking-wide">{s.type}</span>
-            <span className="text-[10px] text-slate-300">·</span>
-            <span className="text-[10px] text-slate-400">{s.displayName}</span>
+            <span className="text-[11px] text-slate-400 uppercase tracking-wide">{s.type}</span>
+            <span className="text-[11px] text-slate-300">·</span>
+            <span className="text-[11px] text-slate-400">{s.displayName}</span>
           </div>
           <h2 className="text-lg font-bold text-slate-900">{s.displayName}</h2>
           <p className="text-sm text-slate-500 mt-1">{s.summary}</p>
@@ -2235,13 +2235,13 @@ function ContractDetail({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap mb-0.5">
                       <span className={`text-xs font-bold ${SEV_TEXT[f.severity]}`}>{f.severity}</span>
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${COMP_TYPE_BG[f.compliance_type] || ''}`}>
+                      <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${COMP_TYPE_BG[f.compliance_type] || ''}`}>
                         {f.compliance_type === 'hard' ? 'HARD' : 'BP'}
                       </span>
                       <span className="text-xs text-slate-400">
                         L{f.likelihood}×I{f.impact} = <span className="font-bold text-slate-600">{f.risk_score}</span>
                       </span>
-                      <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{flagHiroc(f.field).cat} · {flagHiroc(f.field).riskName}</span>
+                      <span className="text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{flagHiroc(f.field).cat} · {flagHiroc(f.field).riskName}</span>
                     </div>
                     <p className="text-sm text-slate-800">{f.flag_if}</p>
                   </div>
@@ -2307,7 +2307,7 @@ function ContractDetail({
                   <div key={a.id} className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                     <div className="text-xs font-bold text-amber-800">{a.label}</div>
                     <div className="text-[11px] text-amber-700 mt-0.5">Effective: {a.effectiveDate} {a.supersedesOriginal && '· supersedes original'}</div>
-                    {a.keyChanges.length > 0 && <div className="text-[10px] text-amber-600 mt-0.5">{a.keyChanges.join(' · ')}</div>}
+                    {a.keyChanges.length > 0 && <div className="text-[11px] text-amber-600 mt-0.5">{a.keyChanges.join(' · ')}</div>}
                   </div>
                 ))
               ) : (
@@ -2353,13 +2353,13 @@ function AmendmentTimeline({ amendments }: { amendments: Amendment[] }) {
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold text-slate-700">{a.label}</span>
               {a.supersedesOriginal && (
-                <span className="text-[10px] font-bold bg-red-50 text-red-600 px-1.5 py-0.5 rounded">SUPERSEDES</span>
+                <span className="text-[11px] font-bold bg-red-50 text-red-600 px-1.5 py-0.5 rounded">SUPERSEDES</span>
               )}
               <span className="text-xs text-slate-400 ml-auto">{a.effectiveDate}</span>
             </div>
             <div className="flex flex-wrap gap-1 mt-1.5">
               {a.keyChanges.map((k, j) => (
-                <span key={j} className="text-[10px] bg-slate-100 rounded px-1.5 py-0.5 text-slate-600">{k}</span>
+                <span key={j} className="text-[11px] bg-slate-100 rounded px-1.5 py-0.5 text-slate-600">{k}</span>
               ))}
             </div>
           </div>
@@ -2571,25 +2571,25 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
       <div className="grid grid-cols-5 gap-3 mb-5">
         <button onClick={() => setFilter('critical')} className={`text-left p-3 rounded-lg border transition ${filter === 'critical' ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
           <div className="text-2xl font-bold text-red-600">{counts.critical}</div>
-          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Critical</div>
+          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Critical</div>
         </button>
         <button onClick={() => setFilter('high')} className={`text-left p-3 rounded-lg border transition ${filter === 'high' ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
           <div className="text-2xl font-bold text-amber-600">{counts.high}</div>
-          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">High</div>
+          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">High</div>
         </button>
         <button onClick={() => setFilter('crossref')} className={`text-left p-3 rounded-lg border transition ${filter === 'crossref' ? 'border-teal-300 bg-teal-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
           <div className="text-2xl font-bold text-teal-600">{counts.crossref}</div>
-          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Cross-Refs</div>
+          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Cross-Refs</div>
         </button>
         <button onClick={() => setFilter('expiring')} className={`text-left p-3 rounded-lg border transition ${filter === 'expiring' ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
           <div className="text-2xl font-bold text-blue-600">{counts.expiring}</div>
-          <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Expiring</div>
+          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Expiring</div>
         </button>
         <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50">
           <div className="text-2xl font-bold text-emerald-600">{totalResolved}</div>
-          <div className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide mt-0.5">Resolved</div>
+          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wide mt-0.5">Resolved</div>
           {totalResolved > 0 && (
-            <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); window.location.reload() }} className="mt-1 text-[9px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
+            <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); window.location.reload() }} className="mt-1 text-[11px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
           )}
         </div>
       </div>
@@ -2608,41 +2608,37 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
         <button onClick={() => setFilter('high')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'high' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-amber-600 border-amber-200 hover:border-amber-400'}`}>High</button>
         <button onClick={() => setFilter('crossref')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'crossref' ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-teal-600 border-teal-200 hover:border-teal-400'}`}>Cross-Ref</button>
         <button onClick={() => setFilter('expiring')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'expiring' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-200 hover:border-blue-400'}`}>Expiring</button>
-        <span className="ml-auto text-[10px] text-slate-400">Showing {filtered.length} of {allItems.length}</span>
+        <span className="ml-auto text-[11px] text-slate-400">Showing {filtered.length} of {allItems.length}</span>
       </div>
 
       {/* Task Table */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <table className="w-full text-left">
           <thead>
-            <tr className="border-b border-slate-100 bg-slate-50/50">
-              <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wide w-8"></th>
-              <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wide">Issue</th>
-              <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wide">Document</th>
-              <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wide">Severity</th>
-              <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wide">Status</th>
-              <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-wide text-right">Action</th>
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Issue</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Document</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Severity</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Status</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide text-right">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-50">
+          <tbody className="divide-y divide-slate-100">
             {filtered.slice(0, 15).map((item) => (
-              <tr key={item.id} className="hover:bg-slate-50/50 cursor-pointer transition" onClick={() => onSelectContract(item.contract)}>
-                <td className="px-4 py-2.5">
-                  <span className={`inline-block w-2 h-2 rounded-full ${item.severity === 'critical' ? 'bg-red-500' : item.severity === 'high' ? 'bg-amber-500' : 'bg-blue-400'}`} />
-                </td>
-                <td className="px-4 py-2.5 text-xs text-slate-700 font-medium max-w-[200px] truncate">{item.what}</td>
-                <td className="px-4 py-2.5 text-xs text-slate-500">
-                  <span className="font-mono text-[10px] text-slate-400">#{item.docNum}</span>
+              <tr key={item.id} className={`hover:bg-slate-50/70 cursor-pointer transition ${item.severity === 'critical' ? 'bg-red-50/30' : ''}`} onClick={() => onSelectContract(item.contract)}>
+                <td className="px-4 py-2.5 text-[13px] font-medium text-slate-800 max-w-[340px] truncate" title={item.what}>{item.what}</td>
+                <td className="px-4 py-2.5 text-[13px] text-slate-700">
+                  <span className="font-mono text-[11px] text-slate-400">#{item.docNum}</span>
                   <span className="ml-1.5">{item.docLabel}</span>
                 </td>
                 <td className="px-4 py-2.5">
-                  <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                    item.severity === 'critical' ? 'bg-red-100 text-red-700' :
-                    item.severity === 'high' ? 'bg-amber-100 text-amber-700' :
-                    'bg-blue-100 text-blue-700'
+                  <span className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded ${
+                    item.severity === 'critical' ? 'bg-red-600 text-white' :
+                    item.severity === 'high' ? 'bg-amber-500 text-white' :
+                    'bg-blue-500 text-white'
                   }`}>{item.severity}</span>
                 </td>
-                <td className="px-4 py-2.5 text-xs text-slate-500">{item.status}</td>
+                <td className="px-4 py-2.5 text-[13px] font-medium text-slate-700">{item.status}</td>
                 <td className="px-4 py-2.5 text-right">
                   <button
                     onClick={(e) => {
@@ -2668,7 +2664,11 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                     }}
                     disabled={!manageable}
                     title={!manageable ? 'Edit / manage actions are restricted to the Legal role (demo RBAC)' : undefined}
-                    className="text-[11px] font-medium text-teal-600 hover:text-teal-800 bg-teal-50 hover:bg-teal-100 rounded px-2 py-1 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                    className={`text-[12px] font-semibold text-white rounded px-2.5 py-1.5 transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                      item.action === 'Fix' || item.action === 'Review' ? 'bg-teal-600 hover:bg-teal-700' :
+                      item.action === 'Renew' || item.action === 'Schedule' ? 'bg-blue-600 hover:bg-blue-700' :
+                      'bg-slate-600 hover:bg-slate-700'
+                    }`}
                   >
                     {item.action} →
                   </button>
@@ -2692,7 +2692,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
         <div className="mt-4 border border-emerald-200 rounded-lg overflow-hidden">
           <button onClick={() => setShowResolved((v) => !v)} className="w-full flex items-center justify-between px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 transition">
             <span className="text-xs font-bold text-emerald-700">✓ Resolved ({resolvedLog.length})</span>
-            <span className="text-[10px] text-emerald-500">{showResolved ? '▲ Hide' : '▼ Show'}</span>
+            <span className="text-[11px] text-emerald-500">{showResolved ? '▲ Hide' : '▼ Show'}</span>
           </button>
           {showResolved && (
             <div className="divide-y divide-emerald-100 max-h-48 overflow-y-auto">
@@ -2702,7 +2702,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                     <span className="font-medium text-slate-700">{entry.label}</span>
                     <span className="text-slate-400">{entry.time}</span>
                   </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
+                  <div className="text-[11px] text-slate-400 mt-0.5">
                     Resolved by: <span className="font-medium text-slate-500">{entry.who || 'You'}</span> · {entry.type === 'workflow' ? 'Cross-Ref' : 'Flag'}
                   </div>
                 </div>
@@ -2889,7 +2889,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-xs text-amber-700">
           ⚠ <b>Upload service is not available right now.</b> Try again in a moment — if it persists, ask your system administrator to restart the document service.
           {import.meta.env.DEV && (
-            <div className="text-[10px] text-amber-600/80 mt-1">(Dev: run <code className="bg-amber-100 px-1 rounded">python3 server.py</code> in <code className="bg-amber-100 px-1 rounded">web-dashboard/</code> — port 8000.)</div>
+            <div className="text-[11px] text-amber-600/80 mt-1">(Dev: run <code className="bg-amber-100 px-1 rounded">python3 server.py</code> in <code className="bg-amber-100 px-1 rounded">web-dashboard/</code> — port 8000.)</div>
           )}
         </div>
       )}
@@ -2922,16 +2922,16 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         >
           {uploading ? 'Uploading…' : '📤 Choose Files to Upload'}
         </button>
-        <p className="text-[10px] text-slate-400 mt-2">Drag & drop or click · PDF, images, DOCX, TXT, MD</p>
+        <p className="text-[11px] text-slate-400 mt-2">Drag & drop or click · PDF, images, DOCX, TXT, MD</p>
         <div className="mt-2 space-y-1">
           {uploading && <p className="text-[11px] text-teal-600 animate-pulse">⏳ AI is reading your file and filing it — takes about 15–40 s…</p>}
           {uploadError && <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded p-1.5">⚠ {uploadError}</p>}
-          {!uploading && !uploadError && uploaded.length === 0 && <p className="text-[10px] text-slate-300">Waiting for files…</p>}
-          {!uploading && !uploadError && uploaded.length > 0 && <p className="text-[10px] text-emerald-600">✓ {uploaded.length} file(s) processed</p>}
+          {!uploading && !uploadError && uploaded.length === 0 && <p className="text-[11px] text-slate-300">Waiting for files…</p>}
+          {!uploading && !uploadError && uploaded.length > 0 && <p className="text-[11px] text-emerald-600">✓ {uploaded.length} file(s) processed</p>}
         </div>
         {uploaded.length > 0 && (
           <div className="mt-3 text-left">
-            <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Uploaded ({uploaded.length})</div>
+            <div className="text-[11px] font-bold text-slate-500 uppercase mb-1">Uploaded ({uploaded.length})</div>
             <div className="space-y-1 max-h-32 overflow-y-auto">
               {uploaded.map((u, i) => {
                 const loc = filedLoc(u)
@@ -2941,7 +2941,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
                     <span className="text-slate-700 truncate flex-1" title={u.filename}>{u.filename}</span>
                     <span className="text-slate-400 shrink-0">{u.document_type}</span>
                     <span className="text-slate-400 shrink-0">{u.flags_count} flags</span>
-                    <span className={`text-[10px] font-bold shrink-0 ${u.risk_level === 'Critical' ? 'text-red-600' : u.risk_level === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>{u.risk_level}</span>
+                    <span className={`text-[11px] font-bold shrink-0 ${u.risk_level === 'Critical' ? 'text-red-600' : u.risk_level === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>{u.risk_level}</span>
                     {loc ? (
                       <button
                         onClick={() => {
@@ -2949,12 +2949,12 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
                           document.getElementById('sf-folder-tree')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
                         }}
                         title="Open this folder in the structure below"
-                        className="shrink-0 text-[10px] text-teal-700 font-medium border border-teal-200 rounded px-1.5 py-0.5 hover:bg-teal-50 transition"
+                        className="shrink-0 text-[11px] text-teal-700 font-medium border border-teal-200 rounded px-1.5 py-0.5 hover:bg-teal-50 transition"
                       >
                         📁 {loc.cat} › {loc.sub.replace(/_/g, ' ')} · View
                       </button>
                     ) : (
-                      <span className="text-[9px] text-teal-600 font-mono shrink-0">→ {u.filed_to}</span>
+                      <span className="text-[11px] text-teal-600 font-mono shrink-0">→ {u.filed_to}</span>
                     )}
                   </div>
                 )
@@ -2996,10 +2996,10 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
                   className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-slate-50 transition"
                   onClick={() => setSelectedFolder(isExpanded ? null : cat)}
                 >
-                  <span className={`text-[10px] transition ${isExpanded ? 'text-teal-600' : 'text-slate-400'}`}>{isExpanded ? '▼' : '▶'}</span>
+                  <span className={`text-[11px] transition ${isExpanded ? 'text-teal-600' : 'text-slate-400'}`}>{isExpanded ? '▼' : '▶'}</span>
                   <span className="text-sm font-bold text-slate-800">{icons[cat]} {cat}</span>
                   <div className="ml-auto flex items-center gap-3">
-                    {diskFileCount > 0 && <span className="text-[10px] text-slate-400">{diskFileCount} on disk</span>}
+                    {diskFileCount > 0 && <span className="text-[11px] text-slate-400">{diskFileCount} on disk</span>}
                     <span className={`text-[11px] font-medium ${totalVisible > 0 ? 'text-slate-600' : 'text-slate-300'}`}>
                       {totalVisible > 0 ? `${totalVisible} docs` : 'empty'}
                     </span>
@@ -3010,21 +3010,21 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
                   <div className="ml-8 space-y-2 pb-3">
                     {diskSubsWithFiles.length > 0 && (
                       <div>
-                        <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">Disk Files (data/archive/{cat}/)</div>
+                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1">Disk Files (data/archive/{cat}/)</div>
                         {diskSubsWithFiles.map(([sub, files]) => (
                           <div key={sub} className="ml-3 mb-1.5">
                             <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-medium">
                               <span>📂</span>
                               <span>{sub.replace(/_/g, ' ')}</span>
-                              <span className="text-[9px] text-slate-400">({files.length})</span>
-                              {(() => { const d = SUBCAT_DEPTS[sub.replace(/_/g, ' ')]; return d ? <span className="text-[9px] text-slate-300">→ {d.slice(0,2).join(', ')}{d.length>2?` +${d.length-2}`:''}</span> : null })()}
+                              <span className="text-[11px] text-slate-400">({files.length})</span>
+                              {(() => { const d = SUBCAT_DEPTS[sub.replace(/_/g, ' ')]; return d ? <span className="text-[11px] text-slate-300">→ {d.slice(0,2).join(', ')}{d.length>2?` +${d.length-2}`:''}</span> : null })()}
                             </div>
                             <div className="ml-5 space-y-0.5">
                               {files.map((f) => (
                                 <button key={f} onClick={(e) => { e.stopPropagation(); setFileDetail(f) }} className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded px-1 py-0.5 w-full text-left transition">
                                   <span className="text-slate-300">📄</span>
                                   <span className="truncate max-w-md" title={f}>{f}</span>
-                                  <span className="text-[9px] text-slate-300 ml-auto shrink-0">→</span>
+                                  <span className="text-[11px] text-slate-300 ml-auto shrink-0">→</span>
                                 </button>
                               ))}
                             </div>
@@ -3048,7 +3048,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
 
       {/* Filing rules */}
       <div className="bg-slate-50 border border-slate-200 rounded p-3">
-        <div className="text-[10px] font-bold text-slate-500 uppercase mb-1.5">Filing Logic</div>
+        <div className="text-[11px] font-bold text-slate-500 uppercase mb-1.5">Filing Logic</div>
         <ul className="text-[11px] text-slate-600 space-y-0.5 list-disc pl-4">
           <li><b>Upload</b> → local AI reads the file (Ollama, on this machine) + rules engine</li>
           <li><b>Category</b> → client 12-category Southlake/HIROC taxonomy, from the highest-score flag</li>
@@ -3164,7 +3164,7 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {/* Health score */}
         <div className="bg-white border border-slate-200 rounded-lg p-4 text-center">
-          <div className="text-[10px] font-bold text-slate-500 uppercase mb-2">Portfolio Health</div>
+          <div className="text-[11px] font-bold text-slate-500 uppercase mb-2">Portfolio Health</div>
           <div className="relative w-20 h-20 mx-auto">
             <svg className="w-20 h-20 -rotate-90" viewBox="0 0 36 36">
               <circle cx="18" cy="18" fill="none" stroke="#e2e8f0" strokeWidth="3" r="16" />
@@ -3175,15 +3175,15 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
               <span className="text-xl font-bold text-slate-800">{healthScore}</span>
             </div>
           </div>
-          <div className="text-[10px] text-slate-400 mt-2">{healthScore >= 70 ? 'Good posture' : healthScore >= 40 ? 'Needs attention' : 'High risk exposure'}</div>
+          <div className="text-[11px] text-slate-400 mt-2">{healthScore >= 70 ? 'Good posture' : healthScore >= 40 ? 'Needs attention' : 'High risk exposure'}</div>
         </div>
 
         {/* What-If */}
         <div className="bg-white border border-slate-200 rounded-lg p-4">
           <div className="flex items-center gap-2">
-              <div className="text-[10px] font-bold text-slate-500 uppercase">What-If: Fix Top 3 Patterns</div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase">What-If: Fix Top 3 Patterns</div>
               {resolvedFlags && resolvedFlags.size > 0 && (
-                <span className="text-[9px] bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-bold">{resolvedFlags.size} resolved</span>
+                <span className="text-[11px] bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-bold">{resolvedFlags.size} resolved</span>
               )}
             </div>
           <div className="space-y-2">
@@ -3220,7 +3220,7 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
 
         {/* Expiring soon */}
         <div className="bg-white border border-slate-200 rounded-lg p-4">
-          <div className="text-[10px] font-bold text-slate-500 uppercase mb-2">Expiring &lt; 90 Days</div>
+          <div className="text-[11px] font-bold text-slate-500 uppercase mb-2">Expiring &lt; 90 Days</div>
           {(() => {
             const today = new Date().toISOString().slice(0, 10)
             const in90 = allContracts.filter((c) => c.expiryDate && c.expiryDate > today && c.expiryDate < '2026-01-14')
@@ -3245,18 +3245,18 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
           {systemicPatterns.map((p) => (
             <div key={p.field} className="px-4 py-3">
               <div className="flex items-center gap-2 mb-1">
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${p.hasCritical ? 'bg-red-100 text-red-700' : p.hasHigh ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${p.hasCritical ? 'bg-red-100 text-red-700' : p.hasHigh ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'}`}>
                   {p.hasCritical ? 'CRITICAL' : p.hasHigh ? 'HIGH' : 'MEDIUM'}
                 </span>
                 <span className="text-xs font-bold text-slate-800">{p.field.replace(/_/g, ' ')}</span>
-                <span className="text-[10px] text-slate-400 ml-auto">{p.count} flags · {p.contractNums.length} contracts</span>
+                <span className="text-[11px] text-slate-400 ml-auto">{p.count} flags · {p.contractNums.length} contracts</span>
               </div>
-              <div className="flex items-center gap-1 text-[10px] text-slate-400 mb-1.5">
+              <div className="flex items-center gap-1 text-[11px] text-slate-400 mb-1.5">
                 {p.contractNums.slice(0, 6).map((n) => (
-                  <button key={n} onClick={() => { const c = allContracts.find((cc) => cc.num === n); if (c) onJumpToContract?.(c) }} className="bg-slate-100 hover:bg-teal-100 text-teal-700 rounded px-1.5 text-[10px] font-medium cursor-pointer transition">#{n}</button>
+                  <button key={n} onClick={() => { const c = allContracts.find((cc) => cc.num === n); if (c) onJumpToContract?.(c) }} className="bg-slate-100 hover:bg-teal-100 text-teal-700 rounded px-1.5 text-[11px] font-medium cursor-pointer transition">#{n}</button>
                 ))}
                 {p.contractNums.length > 6 && <span>+{p.contractNums.length - 6} more</span>}
-                <button onClick={() => onSwitchTab?.('risk-register')} className="ml-2 text-[10px] font-bold text-teal-600 hover:text-teal-800 hover:underline">View All →</button>
+                <button onClick={() => onSwitchTab?.('risk-register')} className="ml-2 text-[11px] font-bold text-teal-600 hover:text-teal-800 hover:underline">View All →</button>
               </div>
             </div>
           ))}
@@ -3274,19 +3274,19 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
         <div className="divide-y divide-slate-100">
           {playbook.map((item) => (
             <div key={item.priority} className="px-4 py-3 flex items-start gap-3">
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5 ${
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 ${
                 item.priority === 1 ? 'bg-red-100 text-red-700' : item.priority === 2 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600'
               }`}>{item.priority}</span>
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-bold text-slate-800">{item.pattern.replace(/_/g, ' ')}</div>
                 <div className="text-[11px] text-slate-600 mt-0.5">{item.action}</div>
                 <div className="flex items-center gap-3 mt-1.5">
-                  <span className="text-[10px] text-teal-600 font-medium">Impact: {item.impact}</span>
-                  <span className="text-[10px] text-slate-400">Affects: {item.affected} contracts</span>
+                  <span className="text-[11px] text-teal-600 font-medium">Impact: {item.impact}</span>
+                  <span className="text-[11px] text-slate-400">Affects: {item.affected} contracts</span>
                 </div>
                 <button
                   onClick={() => onSwitchTab?.('work-queue')}
-                  className="mt-2 text-[10px] font-medium text-teal-600 hover:text-teal-800"
+                  className="mt-2 text-[11px] font-medium text-teal-600 hover:text-teal-800"
                 >
                   → Address in Work Queue
                 </button>
@@ -3360,20 +3360,20 @@ function ProcessWizardInner({ link, onDone, onComplete }: { link: DocLink; onDon
         {step === 2 && (
           <div className="space-y-3">
             <div>
-              <div className="text-[10px] font-bold text-red-500 uppercase mb-1">Current text (target doc)</div>
+              <div className="text-[11px] font-bold text-red-500 uppercase mb-1">Current text (target doc)</div>
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-slate-700 font-mono whitespace-pre-wrap">
                 {link.beforeText || "No prior text recorded"}
               </div>
             </div>
             <div>
-              <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Required text (after amendment)</div>
+              <div className="text-[11px] font-bold text-emerald-600 uppercase mb-1">Required text (after amendment)</div>
               <textarea
                 defaultValue={link.afterText || link.changeDescription || "Update to match source clause..."}
                 rows={3}
                 className="w-full bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-300"
               />
             </div>
-            <div className="text-[10px] text-slate-400">Edit the required text above, then advance to Verify.</div>
+            <div className="text-[11px] text-slate-400">Edit the required text above, then advance to Verify.</div>
           </div>
         )}
         {step === 3 && <div className="text-xs text-emerald-600">Verify the fix. Both documents are now in sync.</div>}
@@ -3384,11 +3384,11 @@ function ProcessWizardInner({ link, onDone, onComplete }: { link: DocLink; onDon
       {step >= 1 && step !== 3 && step <= 4 && (
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-            <div className="text-[10px] font-bold text-red-600 uppercase mb-1">Before (current)</div>
+            <div className="text-[11px] font-bold text-red-600 uppercase mb-1">Before (current)</div>
             <div className="text-[11px] text-slate-700">{link.beforeText || "No prior text"}</div>
           </div>
           <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-            <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">After (required)</div>
+            <div className="text-[11px] font-bold text-emerald-600 uppercase mb-1">After (required)</div>
             <div className="text-[11px] text-slate-700">{link.afterText || "Update to match source"}</div>
           </div>
         </div>
@@ -3593,7 +3593,7 @@ function App() {
                 Sign in
               </button>
             </div>
-            <p className="text-[10px] text-slate-400 mt-4 text-center">PHI is not transmitted. All data stays on-site.</p>
+            <p className="text-[11px] text-slate-400 mt-4 text-center">PHI is not transmitted. All data stays on-site.</p>
           </div>
         </div>
       </div>
@@ -3612,13 +3612,13 @@ function App() {
             <div>
               <h1 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 Document Risk Management
-                <span className="text-[9px] font-bold text-amber-700 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5 uppercase tracking-wide">Pilot</span>
+                <span className="text-[11px] font-bold text-amber-700 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5 uppercase tracking-wide">Pilot</span>
               </h1>
               <p className="text-[11px] text-slate-400">Southlake Health</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-[10px] text-slate-400 hidden lg:block">{visible.length} contracts · {openFlagsCount} open flags · {avgCompliance}% compliance</span>
+            <span className="text-[11px] text-slate-400 hidden lg:block">{visible.length} contracts · {openFlagsCount} open flags · {avgCompliance}% compliance</span>
             {/* ── RBAC role switcher ── */}
             <div className="flex items-center gap-1.5" title="Role-based access control — switch the active role to see which documents your role can access">
               <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -3627,7 +3627,7 @@ function App() {
               <select
                 value={roleId}
                 onChange={(e) => setRole(e.target.value)}
-                className="text-[10px] font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
+                className="text-[11px] font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
               >
                 {ROLES.map((r) => (
                   <option key={r.id} value={r.id}>{r.label}</option>
@@ -3635,8 +3635,8 @@ function App() {
               </select>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded px-2 py-0.5">{role.user}</span>
-              <button onClick={handleLogout} className="text-[10px] text-slate-400 hover:text-slate-600 transition">Sign out</button>
+              <span className="text-[11px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded px-2 py-0.5">{role.user}</span>
+              <button onClick={handleLogout} className="text-[11px] text-slate-400 hover:text-slate-600 transition">Sign out</button>
             </div>
             {/* Mobile sidebar toggle */}
             <button
@@ -3694,14 +3694,14 @@ function App() {
                   <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
                     <div className={`h-full rounded-full ${palette[i]}`} style={{ width: `${Math.round((n / total) * 100)}%` }} />
                   </div>
-                  <span className="text-[10px] text-slate-400 w-16 text-right">{n} flags ({Math.round((n / total) * 100)}%)</span>
+                  <span className="text-[11px] text-slate-400 w-16 text-right">{n} flags ({Math.round((n / total) * 100)}%)</span>
                 </div>
               ))
             })()}
-            <div className="text-[9px] text-slate-300 mt-1">12-category taxonomy from Southlake's HIROC risk register (Jul 2019) · top 5 shown</div>
+            <div className="text-[11px] text-slate-300 mt-1">12-category taxonomy from Southlake's HIROC risk register (Jul 2019) · top 5 shown</div>
             {/* Remediation progress */}
             <div className="mt-4 pt-3 border-t border-slate-100">
-              <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Remediation Progress</div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase mb-1">Remediation Progress</div>
               {(() => {
                 const allFlags = visible.flatMap((c) => c.flags)
                 const remediated = allFlags.filter((f) => f.status === 'remediated').length
@@ -3714,7 +3714,7 @@ function App() {
                       <div className="h-full bg-gradient-to-r from-teal-400 to-emerald-500 rounded-full" style={{ width: `${pct}%` }} />
                     </div>
                     <span className="text-[11px] font-bold text-emerald-600">{pct}%</span>
-                    <span className="text-[10px] text-slate-400">{remediated + accepted}/{total} resolved</span>
+                    <span className="text-[11px] text-slate-500">{remediated + accepted} of {total} flags resolved</span>
                   </div>
                 )
               })()}
@@ -3733,15 +3733,15 @@ function App() {
                 .slice(0, 5)
               if (openFlags.length === 0) return <div className="text-[11px] text-slate-400">All flags resolved. 🎉</div>
               return openFlags.map((f, i) => (
-                <div key={i} className="flex items-start gap-2 py-1.5 border-b border-slate-50 last:border-0">
-                  <span className={`text-[10px] font-bold w-5 text-center ${i === 0 ? 'text-red-600' : i < 3 ? 'text-orange-600' : 'text-slate-400'}`}>{i + 1}</span>
+                <div key={i} className="flex items-start gap-2 py-1.5 border-b border-slate-100 last:border-0">
+                  <span className={`text-[11px] font-bold w-5 text-center ${i === 0 ? 'text-red-600' : i < 3 ? 'text-orange-600' : 'text-slate-500'}`}>{i + 1}</span>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[11px] font-medium text-slate-700 truncate">{f.flag_if}</div>
-                    <div className="text-[10px] text-slate-400">
+                    <div className="text-[13px] font-medium text-slate-800 truncate" title={f.flag_if}>{f.flag_if}</div>
+                    <div className="text-[11px] text-slate-500">
                       #{f.contractNum} {f.contractName} · {f.severity} · {f.risk_score}pts
                     </div>
                   </div>
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${f.severity === 'Critical' ? 'bg-red-100 text-red-700' : f.severity === 'High' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${f.severity === 'Critical' ? 'bg-red-600 text-white' : f.severity === 'High' ? 'bg-amber-500 text-white' : 'bg-blue-500 text-white'}`}>
                     {f.severity}
                   </span>
                 </div>
@@ -3791,7 +3791,7 @@ function App() {
             </button>
 
             {sidebarCollapsed ? (
-              <div className="hidden lg:block text-center text-[9px] text-slate-400 mt-2">Settings</div>
+              <div className="hidden lg:block text-center text-[11px] text-slate-400 mt-2">Settings</div>
             ) : (
               <SettingsSidebar
                 selectedType={filterType} onSelectType={setFilterType}
@@ -3823,8 +3823,8 @@ function App() {
                 {activeTab === 'risk-register' && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-slate-400">Showing {visible.length} contracts · {visible.flatMap((c) => c.flags).filter((f) => f.status === 'open').length} open flags</span>
-                      <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); window.location.reload() }} className="text-[9px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
+                      <span className="text-[11px] text-slate-400">Showing {visible.length} contracts · {visible.flatMap((c) => c.flags).filter((f) => f.status === 'open').length} open flags</span>
+                      <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); window.location.reload() }} className="text-[11px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
                     </div>
                     <RiskMatrixView contracts={visible} onSelectContract={(c) => { setSelected(c); }} />
                     <RiskRegisterTable
