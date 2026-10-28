@@ -105,19 +105,19 @@ export interface Role {
 
 export const ROLES: Role[] = [
   {
-    id: 'legal', label: 'Legal & Compliance', user: 'Tanya Howell · Legal Counsel',
+    id: 'legal', label: 'Legal & Compliance', user: 'Legal Counsel',
     access: ['public', 'internal', 'confidential', 'restricted'],
   },
   {
-    id: 'clinical', label: 'Clinical Operations', user: 'Sonia Pagura · CPO',
+    id: 'clinical', label: 'Clinical Operations', user: 'Clinical Operations Lead',
     access: ['public', 'internal', 'confidential'],
   },
   {
-    id: 'finance', label: 'Finance & Procurement', user: 'David Kumar · VP Finance',
+    id: 'finance', label: 'Finance & Procurement', user: 'Finance & Procurement Lead',
     access: ['public', 'internal', 'confidential'],
   },
   {
-    id: 'readonly', label: 'General Staff (Read-only)', user: 'Wilson · Executive Assistant',
+    id: 'readonly', label: 'General Staff (Read-only)', user: 'Executive Assistant',
     access: ['public', 'internal'],
   },
 ]
@@ -168,7 +168,7 @@ export function retentionState(c: Pick<ContractDoc, 'expiryDate' | 'retentionYea
 
 // ── Risk framework (2026-10-17 meeting, item 3) ────────────────────────────
 // Single integration point for Southlake's internal risk scoring / risk
-// register framework. When the client's register arrives (Matthew → Brian
+// register framework. When the client's register arrives (client risk-register
 // request in flight), its likelihood/impact labels, band thresholds, and any
 // custom scoring weights replace the values below — no UI changes needed.
 // Current values are the AI default: 5×5 Likelihood×Impact, score bands
@@ -426,8 +426,8 @@ const CLAUSE_CHECKS: Array<{
   },
 ]
 
-// Field weights: execution/PHI/cap clauses carry more (Luca's "97% similar"
-// case should be dominated by the few clauses that actually matter).
+// Field weights: execution/PHI/cap clauses carry more (the "97% similar"
+// review case should be dominated by the few clauses that actually matter).
 const FIELD_WEIGHTS: Record<string, number> = {
   'VP Signatures': 3, 'PHIPA Compliance': 3, 'Breach Notification': 3,
   'Indemnity Cap': 3, 'Governing Law': 3, 'Binding Language': 3,
@@ -743,7 +743,7 @@ export const contracts: ContractDoc[] = [
       { label: "Parties", value: "Southlake Health, Community Care Partners Inc.", status: "✓" },
       { label: "Effective Date", value: "March 15, 2024", status: "✓" },
       { label: "Expiry Date", value: "March 15, 2029 (5 years)", status: "✓" },
-      { label: "VP Signatures", value: "2 (Maria Gonzalez VP Ops, James Chen VP Finance)", status: "✓" },
+      { label: "VP Signatures", value: "2 (VP Operations, VP Finance)", status: "✓" },
       { label: "PHIPA Compliance", value: "Yes — detailed clause in Section 3", status: "✓" },
       { label: "Breach Notification", value: "48 hours", status: "✓" },
       { label: "Return/Destruction", value: "Yes — 30-day window with certification", status: "✓" },
@@ -761,13 +761,13 @@ export const contracts: ContractDoc[] = [
     filePath: "research/contracts/02_MOU_Missing_Second_Signature_2024.md",
     riskScore: 25.0, riskLevel: "Critical", flagsCount: 3, flags: [
       { severity: "Critical", field: "signatories", flag_if: "Only 0 VP signatures found — signed by Executive Director & CMO", likelihood: 5, impact: 5, risk_score: 25, compliance_type: "hard", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance", status: "open", source: "rule",
-    ai_suggestion: 'Review and update signatories per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update signatories per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "High", field: "expiry_date", flag_if: "Contract expired 119 days ago (May 31, 2026)", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule",
     ai_suggestion: 'Add clause: This agreement expires on [DATE]. Either party may terminate with 60 days written notice.',
   },
       { severity: "High", field: "binding_language", flag_if: "Both binding and non-binding language present — creates legal ambiguity", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Financial", subcategory: "Contract Pricing", department: "Finance & Procurement", status: "open", source: "rule",
-    ai_suggestion: 'Review and update binding language per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update binding language per Southlake Health compliance policy. Consult Legal for clause language.',
   }
   
 
@@ -777,7 +777,7 @@ export const contracts: ContractDoc[] = [
       { label: "Parties", value: "Southlake Health, York Region Community Health Network", status: "✓" },
       { label: "Effective Date", value: "June 1, 2024", status: "✓" },
       { label: "Expiry Date", value: "May 31, 2026", status: "✓" },
-      { label: "VP Signatures", value: "0 — Robert Thompson (Exec Dir), Dr. Amanda Lee (CMO)", status: "✗" },
+      { label: "VP Signatures", value: "0 — Executive Director, Chief Medical Officer", status: "✗" },
       { label: "Financial Cap", value: "$250,000/year", status: "✓" },
       { label: "Termination", value: "90 days written notice", status: "✓" },
       { label: "Binding Language", value: "Mixed — says not binding BUT has binding financial commitments", status: "✗" },
@@ -797,16 +797,16 @@ export const contracts: ContractDoc[] = [
     ai_suggestion: 'Add clause: This agreement expires on [DATE]. Either party may terminate with 60 days written notice.',
   },
       { severity: "High", field: "indemnity_cap", highlightField: "a monetary cap", flag_if: "Indemnity clause has no monetary cap", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance", status: "open", source: "rule",
-    ai_suggestion: 'Review and update indemnity cap per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update indemnity cap per Southlake Health compliance policy. Consult Legal for clause language.',
   },
 
       { severity: "Medium", field: "termination_conv", highlightField: "ninety", flag_if: "Convenience termination notice period of 90 days is excessive", likelihood: 2, impact: 2, risk_score: 4, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule",
-    ai_suggestion: 'Review and update termination conv per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update termination conv per Southlake Health compliance policy. Consult Legal for clause language.',
   }
   
     ],
     textHighlights: [
-      { text: "Robert Thompson", severity: "Critical", reason: "Signatory is Executive Director, not an authorized VP" },
+      { text: "Unapproved signatory", severity: "Critical", reason: "Signatory is Executive Director, not an authorized VP" },
       { text: "not intended to create legally binding obligations", severity: "High", reason: "Non-binding language creates legal ambiguity" },
       { text: "shall be binding", severity: "High", reason: "Conflicting binding language" },
       { text: "ninety (90) days", severity: "Medium", reason: "Termination notice period of 90 days is excessive" },
@@ -815,7 +815,7 @@ export const contracts: ContractDoc[] = [
       { label: "Parties", value: "Southlake Health, MedSoft Solutions Inc.", status: "✓" },
       { label: "Effective Date", value: "January 1, 2023", status: "✓" },
       { label: "Expiry Date", value: "December 31, 2025", status: "✓" },
-      { label: "VP Signatures", value: "2 (Patricia Wong VP IT, David Kumar VP Finance)", status: "✓" },
+      { label: "VP Signatures", value: "2 (VP IT, VP Finance)", status: "✓" },
       { label: "Annual Fee", value: "$180,000 + $45,000 support (+ $15K/module)", status: "✓" },
       { label: "Indemnity Cap", value: "None — uncapped mutual indemnification", status: "✗" },
       { label: "Fee Increase", value: "5% annual auto-increase or CPI, whichever greater — no overall cap", status: "✗" },
@@ -833,27 +833,27 @@ export const contracts: ContractDoc[] = [
     filePath: "research/contracts/04_DSA_Provider_Data_Sharing_2024.md",
     riskScore: 25.0, riskLevel: "Critical", flagsCount: 7, flags: [
       { severity: "Critical", field: "signatories", flag_if: "Only 0 VP signatures found — Director & CRO signed", likelihood: 5, impact: 5, risk_score: 25, compliance_type: "hard", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance", status: "open", source: "rule",
-    ai_suggestion: 'Review and update signatories per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update signatories per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "Critical", field: "phia_compliance", flag_if: "Missing PHIPA compliance declaration entirely", likelihood: 5, impact: 5, risk_score: 25, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office", status: "open", source: "rule",
-    ai_suggestion: 'Review and update phia compliance per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update phia compliance per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "High", field: "purpose_limitation", flag_if: "Data use purpose too broad — allows publication and sharing with collaborators", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office", status: "open", source: "rule",
-    ai_suggestion: 'Review and update purpose limitation per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update purpose limitation per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "High", field: "breach_timeline", flag_if: "Missing breach notification timeline", likelihood: 4, impact: 4, risk_score: 16, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office", status: "open", source: "rule",
-    ai_suggestion: 'Review and update breach timeline per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update breach timeline per Southlake Health compliance policy. Consult Legal for clause language.',
   },
 
       { severity: "High", field: "security_standards", flag_if: "No security standards specified", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office", status: "open", source: "rule",
-    ai_suggestion: 'Review and update security standards per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update security standards per Southlake Health compliance policy. Consult Legal for clause language.',
   },
 
       { severity: "Medium", field: "audit_rights", flag_if: "No audit rights clause", likelihood: 2, impact: 3, risk_score: 6, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule",
-    ai_suggestion: 'Review and update audit rights per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update audit rights per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "Medium", field: "data_minimization", flag_if: "No data minimization principle stated", likelihood: 2, impact: 3, risk_score: 6, compliance_type: "best_practice", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office", status: "open", source: "rule",
-    ai_suggestion: 'Review and update data minimization per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update data minimization per Southlake Health compliance policy. Consult Legal for clause language.',
   }
   
 
@@ -865,7 +865,7 @@ export const contracts: ContractDoc[] = [
     ],
     extractedFields: [
       { label: "Parties", value: "Southlake Health, University Health Research Institute", status: "✓" },
-      { label: "VP Signatures", value: "0 — Susan Park (Director), Dr. Richard Foster (CRO)", status: "✗" },
+      { label: "VP Signatures", value: "0 — Director, Chief Research Officer", status: "✗" },
       { label: "PHIPA Compliance", value: "NOT MENTIONED anywhere in document", status: "✗" },
       { label: "Breach Notification", value: "Not mentioned", status: "✗" },
       { label: "Purpose Limitation", value: "Too broad — academic research, publication, conferences, collaborators", status: "✗" },
@@ -886,28 +886,28 @@ export const contracts: ContractDoc[] = [
     ai_suggestion: 'Add clause: This agreement expires on [DATE]. Either party may terminate with 60 days written notice.',
   },
       { severity: "Critical", field: "phia_compliance", flag_if: "Missing PHIPA compliance declaration entirely", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office", status: "open", source: "rule",
-    ai_suggestion: 'Review and update phia compliance per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update phia compliance per Southlake Health compliance policy. Consult Legal for clause language.',
   },
 
       { severity: "High", field: "breach_notification", flag_if: "Missing breach notification requirement", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office", status: "open", source: "rule",
     ai_suggestion: `Add §12.3: `,
   },
       { severity: "Medium", field: "return_destruction", flag_if: "Missing return or destruction clause", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule",
-    ai_suggestion: 'Review and update return destruction per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update return destruction per Southlake Health compliance policy. Consult Legal for clause language.',
   },
           { severity: "High", field: "governing_law", flag_if: "Governing law references Alberta instead of Ontario — creates jurisdictional conflict for Southlake", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "hard", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance", status: "open", source: "rule",
-    ai_suggestion: 'Review and update governing law per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update governing law per Southlake Health compliance policy. Consult Legal for clause language.',
   },
 ],
     textHighlights: [
-      { text: "Susan Park", severity: "Critical", reason: "Signatory is Director, not authorized VP" },
+      { text: "Unapproved signatory", severity: "Critical", reason: "Signatory is Director, not authorized VP" },
       { text: "Publication in peer-reviewed journals", severity: "High", reason: "Data use purpose too broad" },
     ],
     extractedFields: [
       { label: "Parties", value: "Southlake Health, HealthTech Ventures Ltd.", status: "✓" },
       { label: "Effective Date", value: "February 14, 2022", status: "✓" },
       { label: "Expiry Date", value: "February 14, 2024 (EXPIRED ~956 days ago)", status: "✗" },
-      { label: "VP Signatures", value: "2 (Lisa Martinez VP Ops, Tom Anderson VP Procurement)", status: "✓" },
+      { label: "VP Signatures", value: "2 (VP Operations, VP Procurement)", status: "✓" },
       { label: "PHIPA Compliance", value: "Not mentioned", status: "✗" },
       { label: "Confidential Scope", value: "Vague — 'all non-public information'", status: "✗" },
       { label: "Return/Destruction", value: "Not mentioned", status: "✗" },
@@ -927,7 +927,7 @@ export const contracts: ContractDoc[] = [
     ai_suggestion: 'Add clause: This agreement expires on [DATE]. Either party may terminate with 60 days written notice.',
   },
       { severity: "High", field: "indemnity_clause", flag_if: "Missing indemnity clause entirely", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance", status: "open", source: "rule",
-    ai_suggestion: 'Review and update indemnity clause per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update indemnity clause per Southlake Health compliance policy. Consult Legal for clause language.',
   }
   
 
@@ -939,7 +939,7 @@ export const contracts: ContractDoc[] = [
       { label: "Parties", value: "Southlake Health, SecurePro Services Inc.", status: "✓" },
       { label: "Effective Date", value: "April 1, 2024", status: "✓" },
       { label: "Expiry Date", value: "March 31, 2025", status: "✓" },
-      { label: "VP Signatures", value: "2 (Mark Johnson VP Ops, Amanda White VP Finance)", status: "✓" },
+      { label: "VP Signatures", value: "2 (VP Operations, VP Finance)", status: "✓" },
       { label: "Annual Fee", value: "$420,000 ($35,000/month)", status: "✓" },
       { label: "SLA", value: "15-min urgent / 30-min standard response, 24/7 coverage", status: "✓" },
       { label: "Indemnity Clause", value: "Not present", status: "✗" },
@@ -959,18 +959,18 @@ export const contracts: ContractDoc[] = [
     ai_suggestion: 'Add clause: This agreement expires on [DATE]. Either party may terminate with 60 days written notice.',
   },
       { severity: "High", field: "binding_language", flag_if: "V1 non-binding vs V2 partially binding — creates legal ambiguity", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Financial", subcategory: "Contract Pricing", department: "Finance & Procurement" , status: "open", source: "rule",
-    ai_suggestion: 'Review and update binding language per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update binding language per Southlake Health compliance policy. Consult Legal for clause language.',
   },
 
       { severity: "High", field: "duplicate_version", flag_if: "Two active versions in circulation with conflicting terms", likelihood: 4, impact: 4, risk_score: 16, compliance_type: "hard", risk_category: "Financial", subcategory: "Budget & Licensing", department: "Finance & Procurement" , status: "open", source: "rule",
-    ai_suggestion: 'Review and update duplicate version per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update duplicate version per Southlake Health compliance policy. Consult Legal for clause language.',
   },
 
       { severity: "High", field: "conflicting_finance", flag_if: "$100K vs $150K annual commitment between versions", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "hard", risk_category: "Financial", subcategory: "Budget & Licensing", department: "Finance & Procurement" , status: "open", source: "rule",
-    ai_suggestion: 'Review and update conflicting finance per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update conflicting finance per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "Medium", field: "termination_clause", flag_if: "Missing termination clause in both versions", likelihood: 2, impact: 3, risk_score: 6, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule",
-    ai_suggestion: 'Review and update termination clause per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update termination clause per Southlake Health compliance policy. Consult Legal for clause language.',
   }
   
 
@@ -1018,19 +1018,19 @@ export const contracts: ContractDoc[] = [
     filePath: "research/contracts/08_Legacy_IT_Contract_2019_Scan.md",
     riskScore: 25.0, riskLevel: "Critical", flagsCount: 6, flags: [
       { severity: "Critical", field: "signatories", flag_if: "Cannot verify — names and titles obscured by scan quality", likelihood: 5, impact: 5, risk_score: 25, compliance_type: "hard", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance", status: "open", source: "rule",
-    ai_suggestion: 'Review and update signatories per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update signatories per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "Critical", field: "missing_fields", flag_if: "Cannot verify key clauses due to scan quality", likelihood: 5, impact: 4, risk_score: 20, compliance_type: "hard", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance", status: "open", source: "rule",
-    ai_suggestion: 'Review and update missing fields per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update missing fields per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "High", field: "effective_date", flag_if: "Missing effective date — only approximate 'March 2019' readable", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule",
-    ai_suggestion: 'Review and update effective date per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update effective date per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "High", field: "indemnity_cap", flag_if: "Indemnity clause has no monetary cap (partially visible but unverifiable)", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance", status: "open", source: "rule",
-    ai_suggestion: 'Review and update indemnity cap per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update indemnity cap per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "Medium", field: "ocr_quality", flag_if: "Low-quality scan — key fields illegible (150 DPI, stains, rotation)", likelihood: 4, impact: 3, risk_score: 12, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement" , status: "open", source: "rule",
-    ai_suggestion: 'Review and update ocr quality per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update ocr quality per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "Medium", field: "expiry_date", flag_if: "Missing expiry date — cannot determine from scan", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule",
     ai_suggestion: 'Add clause: This agreement expires on [DATE]. Either party may terminate with 60 days written notice.',
@@ -1064,13 +1064,13 @@ export const contracts: ContractDoc[] = [
     filePath: "research/contracts/09_IT_Master_Services_Agreement_2024.md",
     riskScore: 15.5, riskLevel: "High", flagsCount: 2, flags: [
       { severity: "High", field: "indemnity_cap", highlightField: "not subject to a monetary cap", flag_if: "Indemnity clause explicitly states no monetary cap", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "best_practice", risk_category: "Financial", subcategory: "IP & Indemnity", department: "Legal & Compliance", status: "open", source: "rule",
-    ai_suggestion: 'Review and update indemnity cap per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update indemnity cap per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "High", field: "conflicting_finance", flag_if: "Detected different annual fee amounts: 320,000 vs 45,000", likelihood: 3, impact: 5, risk_score: 15, compliance_type: "hard", risk_category: "Financial", subcategory: "Budget & Licensing", department: "Finance & Procurement", status: "open", source: "ai_scan",
-    ai_suggestion: 'Review and update conflicting finance per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update conflicting finance per Southlake Health compliance policy. Consult Legal for clause language.',
   },
           { severity: "Medium", field: "auto_renewal", flag_if: "Contract auto-renews for 1-year periods — no explicit opt-out mechanism beyond 60-day notice window", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule",
-    ai_suggestion: 'Review and update auto renewal per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update auto renewal per Southlake Health compliance policy. Consult Legal for clause language.',
   },
 ],
     textHighlights: [
@@ -1082,7 +1082,7 @@ export const contracts: ContractDoc[] = [
       { label: "Parties", value: "Southlake Health, CloudWorks Infrastructure Inc.", status: "✓" },
       { label: "Effective Date", value: "June 1, 2024", status: "✓" },
       { label: "Expiry Date", value: "May 31, 2027 (3-year term)", status: "✓" },
-      { label: "VP Signatures", value: "2 (Patricia Wong VP IT, Mark Johnson VP Ops)", status: "✓" },
+      { label: "VP Signatures", value: "2 (VP IT, VP Operations)", status: "✓" },
       { label: "Annual Fee", value: "$320,000 base + $45,000 support", status: "✓" },
       { label: "SLA", value: "99.9% uptime, 2-hour P1 response, 5% credit/hr downtime", status: "✓" },
       { label: "Indemnity Cap", value: "None — explicitly uncapped", status: "✗" },
@@ -1106,10 +1106,10 @@ export const contracts: ContractDoc[] = [
     ai_suggestion: 'Add clause: This agreement expires on [DATE]. Either party may terminate with 60 days written notice.',
   },
       { severity: "High", field: "breach_timeline", flag_if: "No breach notification timeline specified", likelihood: 4, impact: 4, risk_score: 16, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office", status: "open", source: "rule",
-    ai_suggestion: 'Review and update breach timeline per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update breach timeline per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "Medium", field: "audit_rights", flag_if: "No audit rights clause in base or amendment", likelihood: 2, impact: 3, risk_score: 6, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule",
-    ai_suggestion: 'Review and update audit rights per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update audit rights per Southlake Health compliance policy. Consult Legal for clause language.',
   }
   
 
@@ -1123,7 +1123,7 @@ export const contracts: ContractDoc[] = [
       { label: "Parties", value: "Southlake Health, Regional Hospital Authority", status: "✓" },
       { label: "Effective Date", value: "September 1, 2024", status: "✓" },
       { label: "Expiry Date", value: "August 1, 2026 (EXPIRED 45 days)", status: "✗" },
-      { label: "VP Signatures", value: "2 (Lisa Martinez VP Ops, David Kumar VP Finance)", status: "✓" },
+      { label: "VP Signatures", value: "2 (VP Operations, VP Finance)", status: "✓" },
       { label: "PHIPA Compliance", value: "Yes — Section 4", status: "✓" },
       { label: "Breach Notification", value: "Not mentioned in base or amendment", status: "✗" },
       { label: "Audit Rights", value: "Not mentioned", status: "✗" },
@@ -1160,13 +1160,13 @@ export const contracts: ContractDoc[] = [
     filePath: "research/contracts/11_DSA_Amendment_No1_Extended_Retention_2026.md",
     riskScore: 18.0, riskLevel: "High", flagsCount: 4, flags: [
       { severity: "High", field: "signatories", flag_if: "Amendment pending execution — both VP signatures missing", likelihood: 4, impact: 5, risk_score: 20, compliance_type: "hard", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Legal & Compliance", status: "open", source: "rule",
-    ai_suggestion: 'Review and update signatories per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update signatories per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "High", field: "breach_timeline", flag_if: "Amends breach notification from 48h to 24h — not yet in force until executed", likelihood: 3, impact: 4, risk_score: 12, compliance_type: "hard", risk_category: "Reputational", subcategory: "Data Privacy & PHIPA", department: "Data Privacy Office", status: "open", source: "rule",
-    ai_suggestion: 'Review and update breach timeline per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update breach timeline per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "Medium", field: "security_standards", flag_if: "New ICD-10 data elements require AES-256 encryption — compliance unverified", likelihood: 3, impact: 3, risk_score: 9, compliance_type: "best_practice", risk_category: "Operational", subcategory: "Procurement & Vendors", department: "Finance & Procurement", status: "open", source: "rule",
-    ai_suggestion: 'Review and update security standards per Southlake Health compliance policy. Consult Legal (Tanya Howell) for clause language.',
+    ai_suggestion: 'Review and update security standards per Southlake Health compliance policy. Consult Legal for clause language.',
   },
       { severity: "Medium", field: "expiry_date", flag_if: "Parent DSA expired 45 days ago — amendment extends to Jan 2028 but gap exists", likelihood: 4, impact: 4, risk_score: 16, compliance_type: "hard", risk_category: "Continuity", subcategory: "Termination & Exit", department: "Legal & Compliance", status: "open", source: "rule",
     ai_suggestion: 'Add clause: "This agreement expires on [DATE]. Either party may terminate with 60 days written notice." Insert into §Termination.',
