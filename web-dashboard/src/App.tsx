@@ -2819,14 +2819,32 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         filed_to: r.filed_to || undefined,
       }))
       setUploaded((prev) => [...prev, ...results])
+      // Auto-open the target folder so the user immediately sees where their file landed
+      const firstFileTo = results.map((r) => r.filed_to).find(Boolean)
+      if (firstFileTo) {
+        const s = firstFileTo.split('/').filter(Boolean)
+        setSelectedFolder(s.length >= 3 && firstFileTo.startsWith('data/') ? s[s.length - 3] : s[0])
+      }
       if (errors.length > 0) {
         setUploadError(errors.map((e: any) => `${e.filename}: ${e.error}`).join(' | '))
       }
     } catch (e: any) {
-      setUploadError(`Upload failed: ${e.message || e}. Is API running on port 8000? (Check terminal)`)
+      setUploadError(import.meta.env.DEV
+        ? `Upload failed: ${e.message || e} (dev: is the API running on port 8000? — python3 server.py)`
+        : 'Upload failed — the document service is not reachable. Please retry in a moment; if it persists, contact your system administrator.')
     } finally {
       setUploading(false)
     }
+  }
+
+  // Parse 'data/archive/Financial/NDA/file.pdf' (or offline 'Financial/auto') → { cat, sub }
+  const filedLoc = (u: UploadedDoc): { cat: string; sub: string } | null => {
+    if (!u.filed_to) return null
+    const s = u.filed_to.split('/').filter(Boolean)
+    if (s.length === 0) return null
+    const cat = u.filed_to.startsWith('data/') && s.length >= 3 ? s[s.length - 3] : s[0]
+    const sub = u.filed_to.startsWith('data/') && s.length >= 3 ? s[s.length - 2] : (s[1] || 'Auto')
+    return { cat, sub }
   }
 
   // Build folder tree from BOTH static contracts AND uploaded docs
@@ -2872,10 +2890,13 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         <p className="text-xs text-slate-500 mt-0.5">Upload → AI classifies → auto-files to HIROC folders. No manual step needed.</p>
       </div>
 
-      {/* API Server Warning */}
+      {/* Upload service status */}
       {uploadError && /port 8000|API/i.test(uploadError) && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-xs text-amber-700">
-          ⚠ <b>Upload requires local API server.</b> Run <code className="bg-amber-100 px-1 rounded">python3 server.py</code> in <code className="bg-amber-100 px-1 rounded">web-dashboard/</code> (port 8000).
+          ⚠ <b>Upload service is not available right now.</b> Try again in a moment — if it persists, ask your system administrator to restart the document service.
+          {import.meta.env.DEV && (
+            <div className="text-[10px] text-amber-600/80 mt-1">(Dev: run <code className="bg-amber-100 px-1 rounded">python3 server.py</code> in <code className="bg-amber-100 px-1 rounded">web-dashboard/</code> — port 8000.)</div>
+          )}
         </div>
       )}
 
@@ -2909,7 +2930,7 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
         </button>
         <p className="text-[10px] text-slate-400 mt-2">Drag & drop or click · PDF, images, DOCX, TXT, MD</p>
         <div className="mt-2 space-y-1">
-          {uploading && <p className="text-[11px] text-teal-600 animate-pulse">⏳ Processing via AI… (OCR → Rules → Filing)</p>}
+          {uploading && <p className="text-[11px] text-teal-600 animate-pulse">⏳ AI is reading your file and filing it — takes about 15–40 s…</p>}
           {uploadError && <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded p-1.5">⚠ {uploadError}</p>}
           {!uploading && !uploadError && uploaded.length === 0 && <p className="text-[10px] text-slate-300">Waiting for files…</p>}
           {!uploading && !uploadError && uploaded.length > 0 && <p className="text-[10px] text-emerald-600">✓ {uploaded.length} file(s) processed</p>}
@@ -2918,16 +2939,32 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
           <div className="mt-3 text-left">
             <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Uploaded ({uploaded.length})</div>
             <div className="space-y-1 max-h-32 overflow-y-auto">
-              {uploaded.map((u, i) => (
-                <div key={i} className="flex items-center gap-2 text-[11px]">
-                  <span className={`w-2 h-2 rounded-full ${u.risk_level === 'Critical' ? 'bg-red-500' : u.risk_level === 'High' ? 'bg-orange-500' : u.risk_level === 'Medium' ? 'bg-yellow-500' : 'bg-emerald-500'}`} />
-                  <span className="text-slate-700 truncate flex-1">{u.filename}</span>
-                  <span className="text-slate-400">{u.document_type}</span>
-                  <span className="text-slate-400">{u.flags_count} flags</span>
-                  <span className={`text-[10px] font-bold ${u.risk_level === 'Critical' ? 'text-red-600' : u.risk_level === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>{u.risk_level}</span>
-                  {u.filed_to && <span className="text-[9px] text-teal-600 font-mono">→ {u.filed_to}</span>}
-                </div>
-              ))}
+              {uploaded.map((u, i) => {
+                const loc = filedLoc(u)
+                return (
+                  <div key={i} className="flex items-center gap-2 text-[11px]">
+                    <span className={`w-2 h-2 rounded-full ${u.risk_level === 'Critical' ? 'bg-red-500' : u.risk_level === 'High' ? 'bg-orange-500' : u.risk_level === 'Medium' ? 'bg-yellow-500' : 'bg-emerald-500'}`} />
+                    <span className="text-slate-700 truncate flex-1" title={u.filename}>{u.filename}</span>
+                    <span className="text-slate-400 shrink-0">{u.document_type}</span>
+                    <span className="text-slate-400 shrink-0">{u.flags_count} flags</span>
+                    <span className={`text-[10px] font-bold shrink-0 ${u.risk_level === 'Critical' ? 'text-red-600' : u.risk_level === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>{u.risk_level}</span>
+                    {loc ? (
+                      <button
+                        onClick={() => {
+                          setSelectedFolder(loc.cat)
+                          document.getElementById('sf-folder-tree')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                        }}
+                        title="Open this folder in the structure below"
+                        className="shrink-0 text-[10px] text-teal-700 font-medium border border-teal-200 rounded px-1.5 py-0.5 hover:bg-teal-50 transition"
+                      >
+                        📁 {loc.cat} › {loc.sub.replace(/_/g, ' ')} · View
+                      </button>
+                    ) : (
+                      <span className="text-[9px] text-teal-600 font-mono shrink-0">→ {u.filed_to}</span>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
         )}
@@ -2936,12 +2973,12 @@ function SmartFilingView({ contracts: allContracts }: { contracts: ContractDoc[]
       {/* Filing status */}
       {uploaded.length > 0 && (
         <div className="text-xs text-emerald-600">
-          ✓ {uploaded.length} file(s) auto-classified and filed on upload
+          ✓ {uploaded.length} file(s) auto-classified and saved to the archive — open a folder below (or use its “View” button) to see where each file was filed
         </div>
       )}
 
       {/* Folder tree - unified view from disk */}
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+      <div id="sf-folder-tree" className="bg-white border border-slate-200 rounded-lg overflow-hidden scroll-mt-4">
         <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">
           FOLDER STRUCTURE
           <span className="font-normal text-slate-400 ml-2">
