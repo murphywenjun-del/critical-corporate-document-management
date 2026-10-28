@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import type { ReactNode } from 'react'
 import { contracts, docLinks, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type ContractDoc, type Amendment, type DocLink,
   ROLES, canView, canManage, archiveFileConf, contractToTemplateRef, DEMO_TODAY, CONF_LABEL, CONF_BADGE, retentionState, type Role,
   TEMPLATE_LIBRARY, matchTemplate, classifyType, RISK_FRAMEWORK,
@@ -108,7 +109,7 @@ function Modal({ title, children, onConfirm, onCancel, confirmLabel = 'Confirm' 
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm" onClick={onCancel}>
       <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-slate-100">
-          <h3 className="text-sm font-bold text-slate-800">{title}</h3>
+          <h3 className="text-[13px] font-semibold text-slate-900">{title}</h3>
         </div>
         <div className="px-5 py-4 max-h-[60vh] overflow-y-auto">{children}</div>
         <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex justify-end gap-2">
@@ -126,15 +127,35 @@ function Modal({ title, children, onConfirm, onCancel, confirmLabel = 'Confirm' 
 
 // ── KPI Card (flat, big number) ──────────────────────────────────────────────
 
-function KpiCard({ label, value, valueClass, onClick, title }: { label: string; value: number | string; valueClass?: string; onClick?: () => void; title?: string }) {
+// 16px line icons for KPI cards (consistent stroke width, muted slate)
+function KpiIcon({ d }: { d: string }) {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d={d} />
+    </svg>
+  )
+}
+const KPI_ICONS = {
+  docs: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 15h10',
+  alert: 'M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z',
+  flag: 'M3 3v18m0-18h13l-2.5 4L16 11H3',
+  check: 'M9 12l2 2 4-4m6 2a8 8 0 11-16 0 8 8 0 0116 0z',
+  gauge: 'M12 15a3 3 0 100-6 3 3 0 000 6zm0 0l4.5 4.5M5.6 5.6a9 9 0 1112.8 0',
+  clock: 'M12 8v4l3 3m5-1a9 9 0 11-18 0 9 9 0 0118 0z',
+}
+
+function KpiCard({ label, value, valueClass, onClick, title, icon }: { label: string; value: number | string; valueClass?: string; onClick?: () => void; title?: string; icon?: ReactNode }) {
   return (
     <div
-      className={`bg-white border border-slate-200 rounded-lg p-4 ${onClick ? 'cursor-pointer hover:border-teal-300 hover:shadow-sm transition' : ''}`}
+      className={`bg-white border border-slate-200 rounded-lg p-4 ${onClick ? 'cursor-pointer hover:border-slate-300 hover:shadow-sm transition' : ''}`}
       onClick={onClick}
       title={title}
     >
-      <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">{label}</div>
-      <div className={`text-3xl font-bold mt-1 ${valueClass || 'text-slate-900'}`}>{value}</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{label}</div>
+        {icon && <span className="text-slate-300 shrink-0">{icon}</span>}
+      </div>
+      <div className={`text-3xl font-bold mt-2 text-slate-900 tabular-nums ${valueClass || ''}`}>{value}</div>
     </div>
   )
 }
@@ -279,7 +300,7 @@ function RiskRegisterTable({
         const systemic = Object.entries(byField).filter(([, v]) => v >= 3)
         return systemic.length > 0 ? (
           <div className="bg-teal-50 border border-teal-200 rounded-lg px-4 py-2.5 mb-3 flex items-center gap-3">
-            <span className="text-teal-600 text-sm">💡</span>
+            <span className="text-teal-600 shrink-0"><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 18h6m-5 3h4M12 3a6 6 0 00-3.5 10.9c.7.5 1.2 1.2 1.4 2.1h4.2c.2-.9.7-1.6 1.4-2.1A6 6 0 0012 3z"/></svg></span>
             <span className="text-xs text-teal-700"><b>{systemic.length} systemic patterns</b> — same issue in 3+ contracts. Consider process-level fixes.</span>
             <button onClick={() => onSwitchTab?.('insights')} className="ml-auto text-xs font-bold text-teal-600 hover:text-teal-800 hover:underline shrink-0">View Prevention Playbook →</button>
           </div>
@@ -289,7 +310,7 @@ function RiskRegisterTable({
       {/* Collapsible L×I Distribution */}
       <details className="mt-4 bg-white border border-slate-200 rounded-lg">
         <summary className="px-4 py-2.5 text-xs font-bold text-slate-600 cursor-pointer select-none">
-          📊 L × I Risk Distribution <span className="font-normal text-slate-400">(click to expand)</span>
+          L × I Risk Distribution <span className="font-normal text-slate-400">(click to expand)</span>
         </summary>
         <div className="px-4 pb-4">
           {(() => {
@@ -381,7 +402,7 @@ function RiskRegisterTable({
           }}
           className="text-[11px] font-medium text-slate-500 hover:text-teal-600 border border-slate-200 rounded px-2 py-1.5 bg-white hover:bg-teal-50 transition"
         >
-          ⬇ Export CSV ({sorted.length})
+          Export CSV ({sorted.length})
         </button>
       </div>
 
@@ -509,7 +530,7 @@ function CriteriaPanel({ contracts: allContracts, resolvedFlags }: { contracts: 
   return (
     <div className="bg-white border border-slate-200 rounded-lg p-4">
       <div className="flex items-center gap-2 mb-3">
-        <h3 className="text-sm font-bold text-slate-800">Criteria-Based Compliance</h3>
+        <h3 className="text-[13px] font-semibold text-slate-900">Criteria-Based Compliance</h3>
         <span className="text-[11px] text-slate-400">Applicability varies by document type</span>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -617,7 +638,7 @@ function ContractList({
                     <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-1">
                       <span className={`font-bold ${expired ? 'text-red-600' : 'text-emerald-600'}`}>{expired ? 'EXPIRED' : 'ACTIVE'}</span>
                       <span className="text-slate-300">·</span>
-                      <span className="font-mono truncate" title={c.filePath}>📁 {c.filePath}</span>
+                      <span className="font-mono truncate" title={c.filePath} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg className="w-3 h-3 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>{c.filePath}</span>
                       <span className="text-slate-300">·</span>
                       <span>{relatedCount > 0 ? `${relatedCount} related doc${relatedCount > 1 ? 's' : ''}` : 'no linked docs'}</span>
                     </div>
@@ -686,7 +707,7 @@ function RestrictedAccessPanel({ doc, role }: { doc: ContractDoc; role: Role }) 
             <path strokeLinecap="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v2h8z" />
           </svg>
         </div>
-        <h3 className="text-sm font-bold text-slate-800">Access Restricted</h3>
+        <h3 className="text-[13px] font-semibold text-slate-900">Access Restricted</h3>
         <p className="text-xs text-slate-500 mt-1">#{doc.num} · {doc.displayName}</p>
       </div>
       <div className="bg-white border border-slate-200 rounded-lg p-4 text-xs space-y-3">
@@ -1445,7 +1466,7 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract, resolvedFla
     <div className="space-y-6">
       {/* Methodology header */}
       <div className="bg-white border border-slate-200 rounded-lg p-5">
-        <h3 className="text-sm font-bold text-slate-800 mb-1">How We Score Risk</h3>
+        <h3 className="text-[13px] font-semibold text-slate-900 mb-1">How We Score Risk</h3>
         <p className="text-xs text-slate-500 mb-4">
           Each risk gets two scores: how likely it is to happen (L) and how bad it would be (I). Multiply them to get a risk score out of 25.
         </p>
@@ -1480,7 +1501,7 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract, resolvedFla
 
       {/* 5×5 Grid — clickable cells */}
       <div className="bg-white border border-slate-200 rounded-lg p-5">
-        <h3 className="text-sm font-bold text-slate-800 mb-1">Risk Matrix</h3>
+        <h3 className="text-[13px] font-semibold text-slate-900 mb-1">Risk Matrix</h3>
         <div className="text-[11px] text-slate-400 mb-2">{RISK_FRAMEWORK.source} · bands ≥{RISK_FRAMEWORK.bands.red} red / ≥{RISK_FRAMEWORK.bands.orange} orange / ≥{RISK_FRAMEWORK.bands.yellow} yellow{hiddenCount > 0 ? ` · ${hiddenCount} resolved flag${hiddenCount > 1 ? 's' : ''} hidden` : ''}</div>
         <p className="text-[11px] text-slate-400 mb-4">Click a cell to see which documents/flags fall in that risk band.</p>
         <div className="overflow-x-auto">
@@ -1556,7 +1577,7 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract, resolvedFla
 
       {/* Southlake / HIROC risk taxonomy (client-provided, Jul 2019 register) */}
       <div className="bg-white border border-slate-200 rounded-lg p-5">
-        <h3 className="text-sm font-bold text-slate-800 mb-1">Southlake / HIROC Risk Taxonomy — 12 Categories (client-provided, Jul 2019 register)</h3>
+        <h3 className="text-[13px] font-semibold text-slate-900 mb-1">Southlake / HIROC Risk Taxonomy — 12 Categories (client-provided, Jul 2019 register)</h3>
         <p className="text-[11px] text-slate-400 mb-4">Each flag is auto-classified to a client category → risk name (nearest match). C×P scoring page pending — score bands remain AI 5×5 L×I meanwhile.</p>
         <div className="grid grid-cols-3 gap-3">
           {Object.entries(SOUTHLAKE_RISK_TAXONOMY).map(([cat, riskNames]) => {
@@ -1845,7 +1866,7 @@ function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }
               <div className="px-5 py-4">
                 {isDone ? (
                   <div className="text-center py-4">
-                    <div className="text-4xl mb-3">✅</div>
+                    <div className="mb-3"><svg className="w-10 h-10 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}><circle cx="12" cy="12" r="9"/><path strokeLinecap="round" strokeLinejoin="round" d="M8.5 12.5l2.5 2.5 4.5-5"/></svg></div>
                     <div className="text-base font-bold text-emerald-700">Workflow Complete</div>
                     <div className="text-[11px] text-slate-500 mt-1">All 5 steps completed for this cross-reference.</div>
                   </div>
@@ -2095,7 +2116,7 @@ function AmendmentsView({ contracts: allContracts, onSelect, resolvedFlags }: { 
     <div className="space-y-5">
       {amendmentDocs.length > 0 && (
         <div>
-          <h3 className="text-sm font-bold text-slate-800 mb-1">Amendment Documents</h3>
+          <h3 className="text-[13px] font-semibold text-slate-900 mb-1">Amendment Documents</h3>
           <p className="text-xs text-slate-500 mb-3">Click to expand. Status changes open a confirmation dialog with before/after content.</p>
           <div className="space-y-3">{amendmentDocs.map((c) => <DocCard key={c.num} c={c} />)}</div>
         </div>
@@ -2103,7 +2124,7 @@ function AmendmentsView({ contracts: allContracts, onSelect, resolvedFlags }: { 
 
       {withAmendments.length > 0 && (
         <div>
-          <h3 className="text-sm font-bold text-slate-800 mb-3">Amendment Timelines</h3>
+          <h3 className="text-[13px] font-semibold text-slate-900 mb-3">Amendment Timelines</h3>
           <div className="space-y-3">
             {withAmendments.map((c) => (
               <div key={c.num} className="bg-white border border-slate-200 rounded-lg p-4">
@@ -2426,7 +2447,7 @@ function SettingsSidebar({
     <div className="flex flex-col gap-6">
       {/* Filters */}
       <div>
-        <h3 className="text-sm font-bold text-slate-800 mb-3">Filters</h3>
+        <h3 className="text-[13px] font-semibold text-slate-900 mb-3">Filters</h3>
         <div className="space-y-3">
           <TagSelector label="Contract Type" options={types} selected={selectedType} onChange={onSelectType} />
           <TagSelector label="Risk Level" options={risks} selected={selectedRisk} onChange={onSelectRisk} />
@@ -2437,12 +2458,12 @@ function SettingsSidebar({
 
       {/* Upload — single clear path: the AI Smart Filing flow */}
       <div>
-        <h3 className="text-sm font-bold text-slate-800 mb-3">Upload</h3>
+        <h3 className="text-[13px] font-semibold text-slate-900 mb-3">Upload</h3>
         <button
           onClick={onGoToSmartFiling}
           className="w-full text-xs font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded px-3 py-2.5 hover:bg-teal-100 transition-colors"
         >
-          📤 Upload document (AI filing)
+          Upload document — AI filing
         </button>
         <p className="text-[11px] text-slate-400 mt-1.5">AI reads the file, classifies it, and files it automatically — you’ll see exactly where it was placed.</p>
       </div>
@@ -2978,7 +2999,7 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
     const topFlag = flags.slice().sort((a, b) => (a.severity === 'Critical' ? 3 : a.severity === 'High' ? 2 : 1) - (b.severity === 'Critical' ? 3 : b.severity === 'High' ? 2 : 1))[0]
     const cat = topFlag ? flagHiroc(topFlag.field).cat : (u.flags_count === 0 ? 'Clean' : 'Uncategorized')
     const sub = u.document_type || 'Other'
-    addToTree(cat, sub, { label: `📎 ${u.filename}`, riskLevel: u.risk_level, flagsCount: u.flags_count || flags.length, isUploaded: true })
+    addToTree(cat, sub, { label: u.filename, riskLevel: u.risk_level, flagsCount: u.flags_count || flags.length, isUploaded: true })
   }
 
   // Clean docs (no flags)
@@ -2987,7 +3008,7 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
     <div className="space-y-4">
       {/* Header */}
       <div>
-        <h2 className="text-sm font-bold text-slate-800">AI Smart Filing</h2>
+        <h2 className="text-[13px] font-semibold text-slate-900">AI Smart Filing</h2>
         <p className="text-xs text-slate-500 mt-0.5">Upload → AI classifies → auto-files to HIROC folders. No manual step needed.</p>
       </div>
 
@@ -3027,11 +3048,11 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
           disabled={uploading}
           className="bg-teal-600 text-white px-4 py-2 rounded text-xs font-medium hover:bg-teal-700 disabled:opacity-50"
         >
-          {uploading ? 'Uploading…' : '📤 Choose Files to Upload'}
+          {uploading ? 'Uploading…' : 'Choose files to upload'}
         </button>
         <p className="text-[11px] text-slate-400 mt-2">Drag & drop or click · PDF, images, DOCX, TXT, MD</p>
         <div className="mt-2 space-y-1">
-          {uploading && <p className="text-[11px] text-teal-600 animate-pulse">⏳ AI is reading your file and filing it — takes about 15–40 s…</p>}
+          {uploading && <p className="text-[11px] text-teal-600 animate-pulse">AI is reading your file and filing it — takes about 15–40 s…</p>}
           {uploadError && <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded p-1.5">⚠ {uploadError}</p>}
           {!uploading && !uploadError && uploaded.length === 0 && <p className="text-[11px] text-slate-300">Waiting for files…</p>}
           {!uploading && !uploadError && uploaded.length > 0 && <p className="text-[11px] text-emerald-600">✓ {uploaded.length} file(s) processed</p>}
@@ -3058,7 +3079,7 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
                         title="Open this folder in the structure below"
                         className="shrink-0 text-[11px] text-teal-700 font-medium border border-teal-200 rounded px-1.5 py-0.5 hover:bg-teal-50 transition"
                       >
-                        📁 {loc.cat} › {loc.sub.replace(/_/g, ' ')} · View
+                        {loc.cat} › {loc.sub.replace(/_/g, ' ')} — view in folder tree
                       </button>
                     ) : (
                       <span className="text-[11px] text-teal-600 font-mono shrink-0">→ {u.filed_to}</span>
@@ -3089,7 +3110,7 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
         </div>
         <div className="divide-y divide-slate-100">
           {[...Object.keys(SOUTHLAKE_RISK_TAXONOMY), 'Clean'].map((cat) => {
-            const icons: Record<string, string> = { 'Care': '🩺', 'Human Resources': '👥', 'Financial': '💰', 'Leadership': '🏛️', 'Information Management/Technology': '💻', 'Facilities': '🏥', 'Regulatory': '⚖️', 'External Relations': '🤝', 'Regulation - Professional': '📜', 'Teaching': '🎓', 'Research': '🔬', 'Community Health': '🏘️', 'Clean': '✅' }
+            const catColor: Record<string, string> = { 'Care': 'bg-teal-500', 'Human Resources': 'bg-indigo-500', 'Financial': 'bg-emerald-600', 'Leadership': 'bg-slate-700', 'Information Management/Technology': 'bg-sky-600', 'Facilities': 'bg-amber-600', 'Regulatory': 'bg-rose-600', 'External Relations': 'bg-purple-600', 'Regulation - Professional': 'bg-pink-700', 'Teaching': 'bg-cyan-700', 'Research': 'bg-violet-600', 'Community Health': 'bg-lime-700', 'Clean': 'bg-slate-400' }
             const diskSubs = diskTree[cat]?.subcategories || {}
             const diskSubsWithFiles = Object.entries(diskSubs).filter(([_ , files]) => files.length > 0)
             const diskFileCount = diskSubsWithFiles.reduce((a, [_, files]) => a + files.length, 0)
@@ -3105,7 +3126,8 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
                   onClick={() => setSelectedFolder(isExpanded ? null : cat)}
                 >
                   <span className={`text-[11px] transition ${isExpanded ? 'text-teal-600' : 'text-slate-400'}`}>{isExpanded ? '▼' : '▶'}</span>
-                  <span className="text-sm font-bold text-slate-800">{icons[cat]} {cat}</span>
+                  <span className={`w-2 h-2 rounded-[3px] shrink-0 ${catColor[cat]}`} />
+                  <span className="text-[13px] font-semibold text-slate-800">{cat}</span>
                   <div className="ml-auto flex items-center gap-3">
                     {diskFileCount > 0 && <span className="text-[11px] text-slate-400">{diskFileCount} on disk</span>}
                     <span className={`text-[11px] font-medium ${totalVisible > 0 ? 'text-slate-600' : 'text-slate-300'}`}>
@@ -3122,7 +3144,7 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
                         {diskSubsWithFiles.map(([sub, files]) => (
                           <div key={sub} className="ml-3 mb-1.5">
                             <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-medium">
-                              <span>📂</span>
+                              <svg className="w-3.5 h-3.5 text-teal-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
                               <span>{sub.replace(/_/g, ' ')}</span>
                               <span className="text-[11px] text-slate-400">({files.length})</span>
                               {(() => { const d = SUBCAT_DEPTS[sub.replace(/_/g, ' ')]; return d ? <span className="text-[11px] text-slate-300">→ {d.slice(0,2).join(', ')}{d.length>2?` +${d.length-2}`:''}</span> : null })()}
@@ -3130,7 +3152,7 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
                             <div className="ml-5 space-y-0.5">
                               {files.map((f) => (
                                 <button key={f} onClick={(e) => { e.stopPropagation(); setFileDetail(f) }} className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded px-1 py-0.5 w-full text-left transition">
-                                  <span className="text-slate-300">📄</span>
+                                  <svg className="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.41a2 2 0 00-.59-1.42l-2.42-2.42a2 2 0 00-1.41-.59H7a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                                   <span className="truncate max-w-md" title={f}>{f}</span>
                                   <span className="text-[11px] text-slate-300 ml-auto shrink-0">→</span>
                                 </button>
@@ -3170,7 +3192,7 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
       {fileDetail && (() => { const fd = fileDetail!; return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setFileDetail(null)}>
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="text-sm font-bold text-slate-800 mb-2">📄 {fd.split('/').pop()}</div>
+            <div className="text-[13px] font-semibold text-slate-900 mb-2">{fd.split('/').pop()}</div>
             <div className="text-xs text-slate-500 space-y-1.5">
               <div><b>Full path:</b> <code className="text-teal-700 break-all">{fd}</code></div>
               <div><b>Southlake/HIROC Category:</b> {fd.split('/').find((p) => [...Object.keys(SOUTHLAKE_RISK_TAXONOMY), 'Clean', 'Uncategorized'].includes(p)) || 'Unknown'}</div>
@@ -3264,7 +3286,7 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h2 className="text-sm font-bold text-slate-800">Risk Prevention Insights</h2>
+        <h2 className="text-[13px] font-semibold text-slate-900">Risk Prevention Insights</h2>
         <p className="text-xs text-slate-500 mt-0.5">Cross-document pattern analysis across {allContracts.length} monitored contracts · {allFlags.length} total flags</p>
       </div>
 
@@ -3409,7 +3431,7 @@ function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, 
 
       {/* Footer note */}
       <div className="bg-teal-50 border border-teal-200 rounded p-3 text-[11px] text-teal-700">
-        💡 <b>How this works:</b> The engine scans all {allContracts.length} monitored contracts, groups flags by field, and identifies patterns affecting 3+ documents. 
+        <b>How this works:</b> The engine scans all {allContracts.length} monitored contracts, groups flags by field, and identifies patterns affecting 3+ documents. 
         Systemic patterns indicate <b>process gaps</b> (not individual contract errors), so the recommendation targets the <b>control</b>, not the document. 
         This is the difference between reactive flagging and proactive risk prevention.
       </div>
@@ -3705,8 +3727,11 @@ function App() {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
         <div className="w-full max-w-sm">
           <div className="text-center mb-6">
-            <div className="w-12 h-12 rounded-xl bg-teal-600 flex items-center justify-center mx-auto mb-3">
-              <span className="text-white text-lg font-bold">S</span>
+            <div className="w-12 h-12 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center mx-auto mb-3">
+              <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v6M9 11h6" />
+              </svg>
             </div>
             <h1 className="text-white text-lg font-bold">Document Risk Management</h1>
             <p className="text-slate-400 text-xs mt-1">Southlake Health · Pilot</p>
@@ -3740,13 +3765,16 @@ function App() {
       <header className="bg-white border-b border-slate-200">
         <div className="flex items-center justify-between px-4 sm:px-6 py-3">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-teal-600 flex items-center justify-center shrink-0">
-              <span className="text-white text-xs font-bold">S</span>
+            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center shrink-0">
+              <svg className="w-4.5 h-4.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v6M9 11h6" />
+              </svg>
             </div>
             <div>
-              <h1 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <h1 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
                 Document Risk Management
-                <span className="text-[11px] font-bold text-amber-700 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5 uppercase tracking-wide">Pilot</span>
+                <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5 uppercase tracking-wide">Pilot</span>
               </h1>
               <p className="text-[11px] text-slate-400">Southlake Health</p>
             </div>
@@ -3791,12 +3819,12 @@ function App() {
       <div className="px-4 sm:px-6 py-4">
         <div className="max-w-screen-2xl mx-auto">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <KpiCard label="Documents" value={visible.length} onClick={() => setActiveTab('contracts')} />
-          <KpiCard label="Critical Flags" value={criticalOpenCount} valueClass="text-red-600" onClick={() => setActiveTab('risk-register')} />
-          <KpiCard label="Open Flags" value={openFlagsCount} valueClass="text-orange-600" onClick={() => setActiveTab('risk-register')} />
-          <KpiCard label="Remediated" value={remediatedCount} valueClass="text-emerald-600" onClick={() => setActiveTab('risk-register')} />
-          <KpiCard label="Criteria Met (avg)" value={`${avgCompliance}%`} valueClass="text-teal-600" onClick={() => setActiveTab('insights')} title="Portfolio-level, not per-document: for each visible contract with a criteria checklist, 100% − (open flags ÷ criteria applicable to that document type). Averaged across your visible contracts. Live — it rises as you resolve flags in Work Queue. Newly uploaded files without a defined checklist are excluded until one is mapped." />
-          <KpiCard label="Retention Alerts" value={retentionAlertCount} valueClass={retentionAlertCount > 0 ? 'text-amber-600' : 'text-emerald-600'} onClick={() => setActiveTab('deadlines')} />
+          <KpiCard label="Documents" value={visible.length} onClick={() => setActiveTab('contracts')} icon={<KpiIcon d={KPI_ICONS.docs} />} />
+          <KpiCard label="Critical Flags" value={criticalOpenCount} valueClass="text-red-600" onClick={() => setActiveTab('risk-register')} icon={<KpiIcon d={KPI_ICONS.alert} />} />
+          <KpiCard label="Open Flags" value={openFlagsCount} valueClass="text-orange-600" onClick={() => setActiveTab('risk-register')} icon={<KpiIcon d={KPI_ICONS.flag} />} />
+          <KpiCard label="Remediated" value={remediatedCount} valueClass="text-emerald-600" onClick={() => setActiveTab('risk-register')} icon={<KpiIcon d={KPI_ICONS.check} />} />
+          <KpiCard label="Criteria Met (avg)" value={`${avgCompliance}%`} valueClass="text-teal-600" onClick={() => setActiveTab('insights')} title="Portfolio-level, not per-document: for each visible contract with a criteria checklist, 100% − (open flags ÷ criteria applicable to that document type). Averaged across your visible contracts. Live — it rises as you resolve flags in Work Queue. Newly uploaded files without a defined checklist are excluded until one is mapped." icon={<KpiIcon d={KPI_ICONS.gauge} />} />
+          <KpiCard label="Retention Alerts" value={retentionAlertCount} valueClass={retentionAlertCount > 0 ? 'text-amber-600' : 'text-emerald-600'} onClick={() => setActiveTab('deadlines')} icon={<KpiIcon d={KPI_ICONS.clock} />} />
         </div>
 
         {/* RBAC banner */}
@@ -3858,14 +3886,14 @@ function App() {
           {/* Top 5 Action Items */}
           <div className="bg-white border border-slate-200 rounded-lg p-4">
             <div className="text-xs font-bold text-slate-700 mb-3">
-              ⚡ Top 5 Actions <span className="font-normal text-slate-400">(open flags, highest risk)</span>
+              Top 5 Actions <span className="font-normal text-slate-400">(open flags, highest risk)</span>
             </div>
             {(() => {
               const openFlags = visible.flatMap((c) => c.flags.map((f) => ({ ...f, contractNum: c.num, contractName: c.displayName })))
                 .filter((f) => f.status === 'open')
                 .sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0))
                 .slice(0, 5)
-              if (openFlags.length === 0) return <div className="text-[11px] text-slate-400">All flags resolved. 🎉</div>
+              if (openFlags.length === 0) return <div className="text-[11px] text-emerald-600 font-medium">All flags resolved</div>
               return openFlags.map((f, i) => (
                 <div key={i} className="flex items-start gap-2 py-1.5 border-b border-slate-100 last:border-0">
                   <span className={`text-[11px] font-bold w-5 text-center ${i === 0 ? 'text-red-600' : i < 3 ? 'text-orange-600' : 'text-slate-500'}`}>{i + 1}</span>
