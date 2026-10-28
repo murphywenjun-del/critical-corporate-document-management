@@ -60,11 +60,11 @@ done by cloning `murphywenjun-del/critical-corporate-document-management`, synci
 | Work Queue + 4-step process wizard | ✅ | AI-flagged action items; resolve loop with audit notes |
 | Risk Register (42 flags across 13 contracts) | ✅ | L×I scoring, clickable matrix cells |
 | Documents / centralized repository | ✅ | All 13 contracts (not just flagged), search, ACTIVE/EXPIRED status, storage location, related docs, amendment links |
-| Full-text search (demo docs + on-disk archive) | ✅ | `GET /api/search`; offline fallback message when API down |
-| RBAC (4 demo roles, 4 confidentiality levels) | ✅ (simulated) | Role switcher; hidden-doc banner; restricted panel with access-request paths. **Production SSO/RBAC = Phase 2** |
-| Retention & disposal board | ✅ (demo rules) | `expiry + retentionYears` vs. reference date 2026-10-15; eligible/imminent/retained; approve-discard → Records Management. **Rules are assumptions until Southlake Retention Policy is mapped** |
-| Template Match / AI comparison | ✅ (deterministic engine) | 5 reference templates; type auto-classification; weighted clause similarity; "Needs Attention" risk-ordered shortlist; full clause diff. **LLM clause-level matching = Phase 2 (local Ollama)** |
-| Risk matrix + portfolio insights | ✅ (client taxonomy adopted) | 12-category Southlake/HIROC taxonomy (client register, Jul 2019) drives classification across register/KPI/work queue/CSV (`SOUTHLAKE_RISK_TAXONOMY` + `flagHiroc`); score bands still AI 5×5 L×I — **C×P 3×3 scoring page pending (register continues on next page)**. Systemic patterns (same field ≥3 contracts) + What-If top-3 |
+| Full-text search (demo docs + on-disk archive) | ✅ | `GET /api/search` indexes .md/.txt/.csv/.json/.docx/.doc (python-docx); per-file RBAC gating — restricted archive files are hidden from roles below their level ("N hidden by role access"); offline fallback message when API down |
+| RBAC (4 demo roles, 4 confidentiality levels) | ✅ (simulated) | Role switcher; hidden-doc banner; restricted panel with access-request paths; **edit/manage actions gated by `canManage` (legal only)**: Work Queue buttons, retention approvals, paper disposal. **Production SSO/RBAC = Phase 2** |
+| Retention & disposal board | ✅ (demo rules) | `expiry + retentionYears` vs. reference date 2026-10-15; eligible/imminent/retained; approve-discard → Records Management; **paper-copy column + paper disposal sign-off** (5 contracts carry paper metadata, persisted to `sl_paper_disposed`). **Rules are assumptions until Southlake Retention Policy is mapped** |
+| Template Match / AI comparison | ✅ (deterministic + local LLM) | 5 reference templates **or any past signed contract** (contract-vs-contract mode); type auto-classification; weighted clause similarity; "Needs Attention" shortlist; full clause diff; **AI Clause Review = real local Ollama** (`POST /api/llm-compare`, strict-JSON summary/findings/focus; degrades to the deterministic diff when Ollama is down) |
+| Risk matrix + portfolio insights | ✅ (client taxonomy adopted) | 12-category Southlake/HIROC taxonomy (client register, Jul 2019) drives classification across register/KPI/work queue/CSV (`SOUTHLAKE_RISK_TAXONOMY` + `flagHiroc`); score bands still AI 5×5 L×I — **C×P scoring definitions pending**: the provided HIROC page contains taxonomy only, no scoring (its footnote points to a separate "Common Taxonomy" document, not yet provided). Systemic patterns (same field ≥3 contracts) + What-If top-3 |
 | Smart Filing (AI upload → auto-classify → HIROC archive) | ✅ | Rule engine prototype; disk-verified folder tree |
 | Cross-refs / Amendments closed loop | ✅ | Confirmed by client in 10-17 meeting — keep and extend |
 | Deep links for testing | ✅ | `?demo=1&role=…&tab=…` |
@@ -73,7 +73,7 @@ done by cloning `murphywenjun-del/critical-corporate-document-management`, synci
 
 - **RBAC is a frontend simulation** (role personas + localStorage), not enforced auth.
 - **Retention rules are assumptions** (`retentionYears` per contract type: PHI 10y, procurement 7y, superseded 1y…) — replace with the client's Retention Policy mapping when received.
-- **Template similarity is deterministic clause-field alignment**, not LLM semantic matching; percentages are honest demo figures, and the UI says so. "97%" from Luca is an illustrative example, not an accuracy target.
+- **Template similarity is deterministic clause-field alignment**; the deterministic diff is the system of record. The **AI Clause Review** panel adds real local-LLM judgment (summary / findings / focus) but is assistive only, and degrades gracefully to the deterministic diff when Ollama is unavailable. Similarity percentages are honest demo figures; "97%" from Luca is an illustrative example, not an accuracy target.
 - **Demo date is frozen** (`DEMO_TODAY = 2026-10-15`) so retention/deadline states stay stable for the demo; production would use real dates.
 - **13 synthetic contracts** — replace with de-identified real contracts (waiting on Alicia) for user testing.
 - No cloud: all LLM inference must stay **local Ollama** in production (hard constraint).
@@ -87,7 +87,7 @@ done by cloning `murphywenjun-del/critical-corporate-document-management`, synci
 | Southlake Retention Policy mapping | Policy received per client, **file not yet in project repo** | Wenjun | Retention rule accuracy |
 | De-identified real contracts | Waiting on Alicia | Client | Realistic user testing |
 | Research agreement samples (CDA/CTA/DSA) | Client to provide samples | Tanya/Luca | Item 6 (research tracking) scope |
-| LLM clause matching (local Ollama) | Phase 2 design | Team | Deeper template diffs |
+| LLM clause matching (local Ollama) | ✅ v45: `POST /api/llm-compare` (AI Clause Review) + Ollama structured extraction in classify-and-file; default engine gemma3:1b on 8GB RAM (`OLLAMA_MODEL` env to prefer a larger model; auto-fallback). **Open question: clause-TEXT-level matching (full document text vs. extracted fields)** | Team | Deeper template diffs |
 | User test feedback log | After 11/10–17 session | Adriana (scheduling) + team | Final doc §6 |
 | Production deployment | Phase 2 | Sam's IT | — |
 
@@ -100,8 +100,8 @@ done by cloning `murphywenjun-del/critical-corporate-document-management`, synci
 ## 7. How to continue (follow-on team)
 
 1. **Read** `项目日志.md` (project root, append-only session log, newest on top) — it records every build round, decisions, and demo numbers.
-2. **Run**: `cd web-dashboard && npm install && npm run dev` + `uvicorn server:app --port 8000` (API for disk search/tree/filing).
-3. **Code map**: UI = `App.tsx` (components are flat: `WorkQueueView`, `RiskRegisterTable`, `ContractList`, `TemplateMatchView`, `RetentionBoard`, `DocSearch`, `InsightsView`, …); domain + engines = `data.ts` (`ROLES`/`canView`, `retentionState`, `TEMPLATE_LIBRARY`/`matchTemplate`/`classifyType`, `RISK_FRAMEWORK`); API = `server.py`.
+2. **Run**: `cd web-dashboard && npm install && npm run dev` + `python3 server.py` (or `uvicorn server:app --port 8000`). For AI features: local Ollama (`ollama serve`, models `gemma3:1b` + optionally `llama3.1:latest`); without Ollama everything still works — the AI panel shows an offline notice and uploads degrade to rules-only.
+3. **Code map**: UI = `App.tsx` (components are flat: `WorkQueueView`, `RiskRegisterTable`, `ContractList`, `TemplateMatchView`, `RetentionBoard`, `DocSearch`, `InsightsView`, …); domain + engines = `data.ts` (`ROLES`/`canView`/`canManage`, `retentionState`, `TEMPLATE_LIBRARY`/`matchTemplate`/`classifyType`/`contractToTemplateRef`, `ARCHIVE_FILE_CONF`/`archiveFileConf`, `RISK_FRAMEWORK`); API = `server.py` (disk endpoints + Ollama glue: `ollama_chat_fallback`, `/api/llm-compare`); rules engine = `test_framework.py` (self-contained shim — **keep its flag `field` keys in sync with `SOUTHLAKE_FLAG_MAP` in server.py and `FLAG_TO_HIROC` in data.ts**).
 4. **Never** hardcode on-disk counts in UI; route through the API (client requirement).
 5. **Never** use cloud LLM APIs; local Ollama only.
 6. Test after changes: `npx tsc --noEmit && npm run build`, then headless-verify key tabs via deep links (`?demo=1&tab=…`).
