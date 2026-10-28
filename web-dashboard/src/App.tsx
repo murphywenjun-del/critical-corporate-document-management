@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import { contracts, portfolioStats, docLinks, HIROC_SUBCATS, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type ContractDoc, type Amendment, type DocLink } from './data'
+import { contracts, docLinks, HIROC_SUBCATS, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type ContractDoc, type Amendment, type DocLink,
+  ROLES, canView, DEMO_TODAY, CONF_LABEL, CONF_BADGE, retentionState, type Role,
+  TEMPLATE_LIBRARY, matchTemplate, classifyType, RISK_FRAMEWORK } from './data'
 
 
 // ── Toast Notification System ──────────────────────────────────────────────
@@ -137,12 +139,13 @@ function KpiCard({ label, value, valueClass, onClick }: { label: string; value: 
 
 // ── Tab Bar ───────────────────────────────────────────────────────────────────
 
-type TabId = 'work-queue' | 'risk-register' | 'contracts' | 'deadlines' | 'cross-refs' | 'smart-filing' | 'insights'
+type TabId = 'work-queue' | 'risk-register' | 'contracts' | 'template-match' | 'cross-refs' | 'deadlines' | 'smart-filing' | 'insights'
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'work-queue', label: 'Work Queue' },
   { id: 'risk-register', label: 'Risk Register' },
   { id: 'contracts', label: 'Documents' },
+  { id: 'template-match', label: 'Template Match' },
   { id: 'deadlines', label: 'Deadlines' },
   { id: 'smart-filing', label: 'Filing' },
   { id: 'insights', label: 'Insights' },
@@ -542,68 +545,515 @@ function ContractList({
   contracts: allContracts,
   selectedNum,
   onSelect,
+  role,
 }: {
   contracts: ContractDoc[]
   selectedNum: number | null
   onSelect: (c: ContractDoc) => void
+  role?: Role
 }) {
   return (
     <div className="bg-white border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100">
-      {allContracts.map((c) => (
-        <button
-          key={c.num}
-          onClick={() => onSelect(c)}
-          className={`w-full text-left px-4 py-3 transition-colors hover:bg-slate-50 ${
-            selectedNum === c.num ? 'bg-teal-50/50' : ''
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            {/* Left: number + type */}
-            <div className="flex items-center gap-2 w-24 shrink-0">
-              <span className="text-xs font-mono text-slate-400">#{c.num}</span>
-              <span className="text-[10px] text-slate-400 uppercase">{c.type}</span>
-            </div>
-
-            {/* Middle: name */}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-800 truncate">{c.displayName}</p>
-              <p className="text-xs text-slate-400 truncate">{c.summary}</p>
-            </div>
-
-            {/* Right: risk indicators + badges */}
-            <div className="flex items-center gap-3 shrink-0">
-              {c.baseContractId != null && (
-                <span className="text-[9px] font-bold bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded border border-purple-200">
-                  AMENDMENT
-                </span>
-              )}
-              {c.flags.some((f) => f.field === 'duplicate_version') && (
-                <span className="text-[9px] font-bold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">
-                  SUPERSEDED
-                </span>
-              )}
-              {c.flags.length === 0 && (
-                <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200">
-                  CLEAN ✓
-                </span>
-              )}
-              <div className="text-right">
-                <div className="text-xs font-bold text-slate-700">{c.riskScore.toFixed(1)}</div>
-                <div className="text-[10px] text-slate-400">score</div>
+      {allContracts.map((c) => {
+        const locked = role ? !canView(role, c) : false
+        // Repository meta (item 5, 2026-10-17: centralized contract repository)
+        const expired = !!c.expiryDate && c.expiryDate < DEMO_TODAY
+        const relatedCount =
+          (c.amendments?.length ?? 0) +
+          (c.baseContractId != null ? 1 : 0) +
+          docLinks.filter((l) => l.sourceNum === c.num).length
+        return (
+          <button
+            key={c.num}
+            onClick={() => onSelect(c)}
+            className={`w-full text-left px-4 py-3 transition-colors hover:bg-slate-50 ${
+              selectedNum === c.num ? 'bg-teal-50/50' : ''
+            } ${locked ? 'opacity-70' : ''}`}
+          >
+            <div className="flex items-center gap-3">
+              {/* Left: number + type + confidentiality */}
+              <div className="flex items-center gap-2 w-24 shrink-0">
+                <span className="text-xs font-mono text-slate-400">#{c.num}</span>
+                <span className="text-[10px] text-slate-400 uppercase">{c.type}</span>
+                {role && (
+                  <span className={`text-[8px] font-bold px-1 py-0.5 rounded border ${CONF_BADGE[c.confidentiality]}`}>
+                    {CONF_LABEL[c.confidentiality]}
+                  </span>
+                )}
               </div>
-              <div className="flex flex-col items-center gap-0.5">
-                <span className={`w-2.5 h-2.5 rounded-full ${c.riskLevel === 'Critical' ? 'bg-red-500' : c.riskLevel === 'High' ? 'bg-orange-500' : 'bg-emerald-500'}`} />
-                <span className={`text-[10px] font-medium ${c.riskLevel === 'Critical' ? 'text-red-600' : c.riskLevel === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>
-                  {c.riskLevel}
+
+              {/* Middle: name */}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-800 truncate flex items-center gap-1.5">
+                  {locked && (
+                    <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v2h8z" />
+                    </svg>
+                  )}
+                  {c.displayName}
+                </p>
+                {locked ? (
+                  <p className="text-xs text-slate-400">Content restricted — not viewable by role “{role?.label}”</p>
+                ) : (
+                  <>
+                    <p className="text-xs text-slate-400 truncate">{c.summary}</p>
+                    {/* Repository row: status · storage location · related documents */}
+                    <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-1">
+                      <span className={`font-bold ${expired ? 'text-slate-500' : 'text-emerald-600'}`}>{expired ? 'EXPIRED' : 'ACTIVE'}</span>
+                      <span className="text-slate-300">·</span>
+                      <span className="font-mono truncate" title={c.filePath}>📁 {c.filePath}</span>
+                      <span className="text-slate-300">·</span>
+                      <span>{relatedCount > 0 ? `${relatedCount} related doc${relatedCount > 1 ? 's' : ''}` : 'no linked docs'}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Right: risk indicators + badges */}
+              <div className="flex items-center gap-3 shrink-0">
+                {c.baseContractId != null && (
+                  <span className="text-[9px] font-bold bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded border border-purple-200">
+                    AMENDMENT
+                  </span>
+                )}
+                {c.flags.some((f) => f.field === 'duplicate_version') && (
+                  <span className="text-[9px] font-bold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">
+                    SUPERSEDED
+                  </span>
+                )}
+                {c.flags.length === 0 && (
+                  <span className="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200">
+                    CLEAN ✓
+                  </span>
+                )}
+                {locked ? (
+                  <span className="text-[10px] text-slate-400 italic">restricted</span>
+                ) : (
+                  <>
+                    <div className="text-right">
+                      <div className="text-xs font-bold text-slate-700">{c.riskScore.toFixed(1)}</div>
+                      <div className="text-[10px] text-slate-400">score</div>
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className={`w-2.5 h-2.5 rounded-full ${c.riskLevel === 'Critical' ? 'bg-red-500' : c.riskLevel === 'High' ? 'bg-orange-500' : 'bg-emerald-500'}`} />
+                      <span className={`text-[10px] font-medium ${c.riskLevel === 'Critical' ? 'text-red-600' : c.riskLevel === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>
+                        {c.riskLevel}
+                      </span>
+                    </div>
+                    <span className="text-xs text-slate-500 w-8 text-right">
+                      {c.flagsCount > 0 ? `${c.flagsCount} flags` : 'clean'}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Restricted Access panel (RBAC) ─────────────────────────────────────────
+
+function RestrictedAccessPanel({ doc, role }: { doc: ContractDoc; role: Role }) {
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-slate-200 rounded-lg p-6 text-center">
+        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+          <svg className="w-6 h-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v2h8z" />
+          </svg>
+        </div>
+        <h3 className="text-sm font-bold text-slate-800">Access Restricted</h3>
+        <p className="text-xs text-slate-500 mt-1">#{doc.num} · {doc.displayName}</p>
+      </div>
+      <div className="bg-white border border-slate-200 rounded-lg p-4 text-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-slate-400">Classification</span>
+          <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${CONF_BADGE[doc.confidentiality]}`}>
+            {CONF_LABEL[doc.confidentiality]}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-slate-400">Your role</span>
+          <span className="font-medium text-slate-700">{role.label}</span>
+        </div>
+        <div className="flex items-start justify-between gap-3">
+          <span className="text-slate-400 shrink-0">To gain access</span>
+          <span className="text-slate-600 text-right">Request via Records Management — <b>{doc.retentionOwner}</b>, or your department head.</span>
+        </div>
+        <p className="text-[10px] text-slate-400 border-t border-slate-100 pt-3">
+          Role-based access control: employees only see documents authorized for their role.
+          Confidential &amp; PHI-restricted agreements are hidden from non-legal roles.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ── Retention Board (retention period alerts, 2026-10-17 meeting) ─────────
+
+function RetentionBoard({
+  contracts: allContracts,
+  approved,
+  onApprove,
+}: {
+  contracts: ContractDoc[]
+  approved: Set<string>
+  onApprove: (c: ContractDoc) => void
+}) {
+  const rows = allContracts
+    .filter((c) => c.expiryDate)
+    .map((c) => ({ c, ...retentionState(c) }))
+    .sort((a, b) => a.daysLeft - b.daysLeft)
+  const counts = {
+    elapsed: rows.filter((r) => r.status === 'elapsed').length,
+    imminent: rows.filter((r) => r.status === 'imminent').length,
+    retained: rows.filter((r) => r.status === 'retained').length,
+  }
+  const statusMeta: Record<string, { label: string; chip: string; text: string }> = {
+    elapsed: { label: 'ELIGIBLE FOR DISCARD', chip: 'bg-red-50 border-red-200 text-red-700', text: 'text-red-600' },
+    imminent: { label: 'DUE ≤ 90 DAYS', chip: 'bg-amber-50 border-amber-200 text-amber-700', text: 'text-amber-600' },
+    retained: { label: 'IN RETENTION', chip: 'bg-emerald-50 border-emerald-200 text-emerald-700', text: 'text-emerald-600' },
+  }
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2 mt-6">
+        <div className="text-xs font-bold text-slate-700">Document Retention &amp; Disposition</div>
+        <span className="text-[10px] text-slate-400">Reference date {DEMO_TODAY} · alerts notify the document owner</span>
+      </div>
+      {/* Summary chips */}
+      <div className="flex gap-4 mb-3">
+        {(['elapsed', 'imminent', 'retained'] as const).map((u) => (
+          <div key={u} className={`flex-1 border rounded-lg p-3 text-center ${statusMeta[u].chip}`}>
+            <div className="text-2xl font-bold">{counts[u]}</div>
+            <div className="text-[10px] font-bold uppercase tracking-wide mt-0.5">{statusMeta[u].label}</div>
+          </div>
+        ))}
+      </div>
+      {/* Table */}
+      <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+        <table className="w-full text-sm min-w-[700px]">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-12">Num</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Document</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-28">Retention Until</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-24">Days Left</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-28">Notify</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-32">Status / Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ c, until, daysLeft, status }) => {
+              const sm = statusMeta[status]
+              const isApproved = approved.has(String(c.num))
+              return (
+                <tr key={c.num} className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${status === 'elapsed' ? 'bg-red-50/20' : ''}`}>
+                  <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">#{c.num}</td>
+                  <td className="px-4 py-2.5">
+                    <div className="text-sm text-slate-800">{c.displayName}</div>
+                    <div className="text-[10px] text-slate-400">{c.retentionBasis}</div>
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-slate-600 font-mono">{until}</td>
+                  <td className={`px-4 py-2.5 text-xs font-bold ${sm.text}`}>
+                    {daysLeft < 0 ? `${Math.abs(daysLeft)}d ago` : `${daysLeft}d`}
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-slate-500">{c.retentionOwner}</td>
+                  <td className="px-4 py-2.5">
+                    {status === 'elapsed' ? (
+                      isApproved ? (
+                        <span className="text-[10px] font-bold text-emerald-600">✓ Destruction approved</span>
+                      ) : (
+                        <button
+                          onClick={() => onApprove(c)}
+                          className="text-[10px] font-bold text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 rounded px-2 py-1 transition"
+                        >
+                          Approve discard →
+                        </button>
+                      )
+                    ) : (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${sm.chip}`}>{sm.label}</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[10px] text-slate-400 mt-2">
+        Retention periods follow Southlake’s records schedule. When a document reaches its legally required
+        retention deadline, the owner is alerted; after approval it is routed to Records Management for discard.
+      </p>
+    </div>
+  )
+}
+
+// ── Full-text Search (demo documents + on-disk archive) ────────────────────
+
+function Highlight({ text, q }: { text: string; q: string }) {
+  if (!q) return <>{text}</>
+  const idx = text.toLowerCase().indexOf(q.toLowerCase())
+  if (idx < 0) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-amber-100 text-amber-800 rounded-sm">{text.slice(idx, idx + q.length)}</mark>
+      {text.slice(idx + q.length)}
+    </>
+  )
+}
+
+function matchDoc(c: ContractDoc, needle: string): boolean {
+  const hay = [
+    c.name, c.displayName, c.type, c.summary, c.department,
+    ...c.extractedFields.map((f) => `${f.label} ${f.value}`),
+    ...c.flags.map((f) => f.flag_if),
+    ...c.textHighlights.map((t) => t.text),
+  ].join(' ').toLowerCase()
+  return hay.includes(needle)
+}
+
+function DocSearch({ contracts: allContracts, onSelect }: { contracts: ContractDoc[]; onSelect: (c: ContractDoc) => void }) {
+  const [q, setQ] = useState('')
+  const [hits, setHits] = useState<{ file: string; path: string; snippet: string; size_bytes: number; source: string }[] | null>(null)
+  const [diskCount, setDiskCount] = useState<number | null>(null)
+  const needle = q.trim().toLowerCase()
+  useEffect(() => {
+    if (needle.length < 2) { setHits(null); setDiskCount(null); return }
+    let cancelled = false
+    fetch(`/api/search?q=${encodeURIComponent(needle)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled) { setHits(d ? d.results : []); setDiskCount(d ? d.count : 0) } })
+      .catch(() => { if (!cancelled) { setHits([]); setDiskCount(0) } })
+    return () => { cancelled = true }
+  }, [needle])
+  const local = needle.length >= 2 ? allContracts.filter((c) => matchDoc(c, needle)) : []
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <div className="relative">
+        <svg className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Full-text search across documents & on-disk archive (e.g. “PHIPA”, “indemnity”, “$150,000”)…"
+          className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+        />
+      </div>
+      {needle.length >= 2 && (
+        <div className="mt-3 space-y-4">
+          {/* Demo document matches */}
+          <div>
+            <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+              Demo documents <span className="text-teal-600">({local.length})</span>
+            </div>
+            {local.length === 0 && <div className="text-[11px] text-slate-400">No matching demo documents.</div>}
+            {local.map((c) => (
+              <button key={c.num} onClick={() => onSelect(c)} className="w-full text-left px-3 py-2 -mx-3 hover:bg-slate-50 rounded transition-colors">
+                <div className="text-xs font-medium text-slate-800">
+                  <span className="font-mono text-slate-400">#{c.num}</span> {c.displayName}
+                  <span className="text-slate-400"> · {c.department}</span>
+                </div>
+                <div className="text-[10px] text-slate-500 truncate mt-0.5">
+                  <Highlight text={c.summary} q={needle} />
+                </div>
+              </button>
+            ))}
+          </div>
+          {/* On-disk archive matches */}
+          {hits !== null ? (
+            <div>
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                On-disk archive <span className="text-teal-600">({diskCount ?? 0} files)</span>
+                <span className="font-normal normal-case text-slate-400"> · data/archive, verified from disk</span>
+              </div>
+              {hits.length === 0 && <div className="text-[11px] text-slate-400">No matches in the on-disk archive.</div>}
+              {hits.map((h, i) => (
+                <div key={i} className="px-3 py-2 -mx-3 hover:bg-slate-50 rounded transition-colors">
+                  <div className="text-xs font-medium text-slate-700 truncate">{h.path}</div>
+                  <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+                    <Highlight text={h.snippet} q={needle} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-[10px] text-slate-400">Archive search offline — start the API server (server.py, port 8000) to search on-disk files.</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Template Match (2026-10-17 meeting, item 2) ─────────────────────────
+// AI contract comparison: incoming document vs approved template / executed
+// reference — type classification, similarity estimate, clause-level diff,
+// and a "needs attention" shortlist so Legal skips the boilerplate.
+
+const RISK_BADGE: Record<string, { bg: string; fg: string; label: string }> = {
+  Critical: { bg: '#fef2f2', fg: '#b91c1c', label: 'CRITICAL' },
+  High: { bg: '#fff7ed', fg: '#c2410c', label: 'HIGH' },
+  Medium: { bg: '#fffbeb', fg: '#b45309', label: 'MEDIUM' },
+  Low: { bg: '#eff6ff', fg: '#1d4ed8', label: 'LOW' },
+}
+
+function TemplateMatchView({ allContracts, role }: { allContracts: ContractDoc[]; role: Role }) {
+  const visibleDocs = allContracts.filter((c) => canView(role, c))
+  const [incomingNum, setIncomingNum] = useState<number | ''>('')
+  const [tplId, setTplId] = useState('tpl-dsa')
+
+  // Auto-suggest the best reference when the incoming document changes
+  const prevNum = useRef<number | ''>('')
+  useEffect(() => {
+    if (incomingNum === '' || prevNum.current === incomingNum) { prevNum.current = incomingNum; return }
+    const inc = allContracts.find((c) => c.num === incomingNum)
+    if (inc) {
+      const cls = classifyType(inc)
+      const t = TEMPLATE_LIBRARY.find((x) => x.type === cls.type)
+      if (t) setTplId(t.id)
+    }
+    prevNum.current = incomingNum
+  }, [incomingNum, allContracts])
+
+  const incoming = incomingNum !== '' ? visibleDocs.find((c) => c.num === incomingNum) || null : null
+  const tpl = TEMPLATE_LIBRARY.find((t) => t.id === tplId) || TEMPLATE_LIBRARY[0]
+  const result = incoming ? matchTemplate(incoming, tpl) : null
+  const simColor = !result ? '#64748b' : result.similarity >= 90 ? '#10b981' : result.similarity >= 70 ? '#f59e0b' : '#ef4444'
+
+  const selStyle: React.CSSProperties = {
+    fontSize: 12, border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px',
+    background: '#fff', color: '#0f172a', minWidth: 240,
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div style={{ flex: 1, minWidth: 280, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>INCOMING AGREEMENT (select a Southlake contract to compare)</div>
+          <select style={selStyle} value={incomingNum} onChange={(e) => setIncomingNum(e.target.value ? Number(e.target.value) : '')}>
+            <option value="">— Select document —</option>
+            {visibleDocs.map((c) => (
+              <option key={c.num} value={c.num}>#{c.num} · {c.displayName} ({c.type})</option>
+            ))}
+          </select>
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8 }}>
+            <b>{role.label}</b> role can view {visibleDocs.length} of {allContracts.length} documents ({allContracts.length - visibleDocs.length} restricted, hidden from this list).
+          </div>
+        </div>
+        <div style={{ minWidth: 280, flex: 1, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>COMPARE AGAINST (template / executed reference)</div>
+          <select style={{ ...selStyle, width: '100%' }} value={tplId} onChange={(e) => setTplId(e.target.value)}>
+            {TEMPLATE_LIBRARY.map((t) => (
+              <option key={t.id} value={t.id}>{t.name} · {t.type} · {t.kind}</option>
+            ))}
+          </select>
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>{tpl.notes}</div>
+        </div>
+      </div>
+
+      {!incoming && (
+        <div style={{ fontSize: 12, color: '#94a3b8', padding: 30, textAlign: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14 }}>
+          Select an incoming agreement to run the comparison.
+        </div>
+      )}
+
+      {incoming && result && (
+        <>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
+            {/* Classification */}
+            <div style={{ flex: 1, minWidth: 260, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>DETECTED TYPE</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 16, fontWeight: 800 }}>{result.classifiedType.replace('_', ' ')}</span>
+                <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: '#eef2ff', color: '#4338ca', fontWeight: 700 }}>
+                  {(result.typeConfidence * 100).toFixed(0)}% confidence
                 </span>
               </div>
-              <span className="text-xs text-slate-500 w-8 text-right">
-                {c.flagsCount > 0 ? `${c.flagsCount} flags` : 'clean'}
-              </span>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8 }}>Keyword evidence: {result.typeEvidence}</div>
+            </div>
+            {/* Similarity */}
+            <div style={{ flex: 1, minWidth: 300, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>CLAUSE SIMILARITY vs {tpl.name}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                <span style={{ fontSize: 36, fontWeight: 800, color: simColor }}>{result.similarity}%</span>
+                <span style={{ fontSize: 11, color: '#64748b', lineHeight: 1.5 }}>{result.verdict}<br />
+                  {result.alignedCount} of {result.totalClauses} reference clauses align.</span>
+              </div>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 10, lineHeight: 1.5 }}>
+                Deterministic clause alignment over extracted fields (demo engine). Phase 2: LLM clause
+                matching via local Ollama — same UI, clause-text-level diffs.
+              </div>
             </div>
           </div>
-        </button>
-      ))}
+
+          {/* Needs attention */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 18, marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 14, fontWeight: 800 }}>Needs Attention</span>
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: '#fef2f2', color: '#b91c1c', fontWeight: 800 }}>{result.attention.length}</span>
+              <span style={{ fontSize: 10, color: '#94a3b8' }}>— reviewer focus: skip the aligned boilerplate, review these</span>
+            </div>
+            {result.attention.length === 0 && (
+              <div style={{ fontSize: 12, color: '#16a34a' }}>No clause deviations detected against this reference. Routine sign-off.</div>
+            )}
+            {result.attention.map((d, i) => {
+              const badge = RISK_BADGE[d.risk!] || RISK_BADGE.Medium
+              return (
+                <div key={i} style={{
+                  display: 'flex', gap: 10, alignItems: 'flex-start', padding: '9px 10px', marginBottom: 8,
+                  background: badge.bg, borderRadius: 10, border: `1px solid ${badge.fg}22`,
+                }}>
+                  <span style={{ fontSize: 9, fontWeight: 800, color: badge.fg, background: '#fff', border: `1px solid ${badge.fg}44`, borderRadius: 4, padding: '2px 6px', marginTop: 1, whiteSpace: 'nowrap' }}>{badge.label}</span>
+                  <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.5 }}>
+                    <b>{d.field}</b> · reference: “{d.refValue}” → incoming: “{d.incomingValue}”
+                    {d.reason && <span style={{ color: '#64748b' }}> — {d.reason}</span>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Full clause diff */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 18 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>Full Clause Diff ({result.diffs.length} clauses)</div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                <thead>
+                  <tr style={{ color: '#94a3b8' }}>
+                    {['Clause', tpl.kind === 'executed' ? 'Executed reference' : 'Template', 'Incoming #' + incoming.num, 'Status', 'Risk'].map((h) => (
+                      <th key={h} style={{ textAlign: 'left', padding: '7px 8px', borderBottom: '1px solid #e2e8f0', fontSize: 10, fontWeight: 700 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.diffs.map((d, i) => (
+                    <tr key={i} style={{ background: d.risk === 'Critical' ? '#fef2f2' : i % 2 ? '#f8fafc' : '#fff' }}>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f1f5f9', fontWeight: 700 }}>{d.field}</td>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>{d.refValue}</td>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f1f5f9', color: d.status === 'aligned' ? '#334155' : '#b91c1c', fontWeight: d.status === 'aligned' ? 400 : 700 }}>{d.incomingValue}</td>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f1f5f9', fontWeight: 700, color: d.status === 'aligned' ? '#16a34a' : d.status === 'missing' ? '#94a3b8' : '#b91c1c' }}>
+                        {d.status === 'aligned' ? '✓ aligned' : d.status === 'missing' ? '— missing' : '✗ changed'}
+                      </td>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f1f5f9' }}>
+                        {d.risk ? <span style={{ fontSize: 9, fontWeight: 800, color: RISK_BADGE[d.risk].fg, background: RISK_BADGE[d.risk].bg, padding: '2px 6px', borderRadius: 4 }}>{RISK_BADGE[d.risk].label}</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 10, lineHeight: 1.5 }}>
+              “Needs Attention” = clauses where the incoming document deviates from the approved reference
+              and the deviation triggers a risk rule. All other clauses are treated as boilerplate and skipped in review.
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -658,7 +1108,7 @@ function DeadlinesTimeline({ contracts: allContracts, onSelectContract }: { cont
 }
 
 function DeadlinesTable({ contracts: allContracts, onSelectContract }: { contracts: ContractDoc[]; onSelectContract?: (c: ContractDoc) => void }) {
-  const today = new Date('2026-10-15') // demo reference date
+  const today = new Date(DEMO_TODAY) // demo reference date
   const rows = allContracts
     .filter((c) => c.expiryDate)
     .map((c) => {
@@ -769,8 +1219,10 @@ function DeadlinesTable({ contracts: allContracts, onSelectContract }: { contrac
 
 // ── 5×5 L×I Risk Matrix ──────────────────────────────────────────────────────
 
-const L_LABELS = ['', 'Rare', 'Unlikely', 'Might happen', 'Likely', 'Will happen']
-const I_LABELS = ['', 'Tiny', 'Small', 'Noticeable', 'Major', 'Severe']
+// Risk labels + bands come from RISK_FRAMEWORK (data.ts) — the single
+// integration point for Southlake's internal risk register (item 3, 2026-10-17).
+const L_LABELS = ['', ...RISK_FRAMEWORK.likelihoodLabels]
+const I_LABELS = ['', ...RISK_FRAMEWORK.impactLabels]
 
 // @ts-ignore - inlined into Risk Register collapsible
 function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contracts: ContractDoc[]; onSelectContract?: (c: ContractDoc) => void }) {
@@ -789,19 +1241,20 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contrac
     grid[5 - l][i - 1]++ // row 0 = L5 (top), col 0 = I1 (left)
   })
 
-  // Color based on L×I score
+  // Color based on L×I score (bands from RISK_FRAMEWORK — swappable when the
+  // Southlake internal risk register arrives)
   function cellColor(l: number, i: number): string {
     const score = l * i
-    if (score >= 20) return 'bg-red-100 border-red-300'
-    if (score >= 12) return 'bg-orange-50 border-orange-200'
-    if (score >= 6) return 'bg-yellow-50 border-yellow-200'
+    if (score >= RISK_FRAMEWORK.bands.red) return 'bg-red-100 border-red-300'
+    if (score >= RISK_FRAMEWORK.bands.orange) return 'bg-orange-50 border-orange-200'
+    if (score >= RISK_FRAMEWORK.bands.yellow) return 'bg-yellow-50 border-yellow-200'
     return 'bg-emerald-50 border-emerald-200'
   }
   function cellText(l: number, i: number): string {
     const score = l * i
-    if (score >= 20) return 'text-red-700'
-    if (score >= 12) return 'text-orange-700'
-    if (score >= 6) return 'text-yellow-700'
+    if (score >= RISK_FRAMEWORK.bands.red) return 'text-red-700'
+    if (score >= RISK_FRAMEWORK.bands.orange) return 'text-orange-700'
+    if (score >= RISK_FRAMEWORK.bands.yellow) return 'text-yellow-700'
     return 'text-emerald-700'
   }
 
@@ -852,6 +1305,7 @@ function RiskMatrixView({ contracts: allContracts, onSelectContract }: { contrac
       {/* 5×5 Grid — clickable cells */}
       <div className="bg-white border border-slate-200 rounded-lg p-5">
         <h3 className="text-sm font-bold text-slate-800 mb-1">Risk Matrix</h3>
+        <div className="text-[10px] text-slate-400 mb-2">{RISK_FRAMEWORK.source} · bands ≥{RISK_FRAMEWORK.bands.red} red / ≥{RISK_FRAMEWORK.bands.orange} orange / ≥{RISK_FRAMEWORK.bands.yellow} yellow</div>
         <p className="text-[11px] text-slate-400 mb-4">Click a cell to see which documents/flags fall in that risk band.</p>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px]">
@@ -2776,8 +3230,25 @@ function ProcessWizardInner({ link, onDone, onComplete }: { link: DocLink; onDon
 
 function App() {
   const { toasts, show } = useToast()
-  const [activeTab, setActiveTab] = useState<TabId>('work-queue')
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    // ?tab= deep-link for demo links (work-queue | risk-register | contracts | template-match | deadlines | cross-refs | smart-filing | insights)
+    const p = new URLSearchParams(window.location.search).get('tab')
+    const valid: string[] = ['work-queue', 'risk-register', 'contracts', 'template-match', 'deadlines', 'cross-refs', 'smart-filing', 'insights']
+    return p && valid.includes(p) ? (p as TabId) : 'work-queue'
+  })
   const [selected, setSelected] = useState<ContractDoc | null>(null)
+  // ── RBAC: active role (persisted; ?role= deep-link override for demo links) ──
+  const [roleId, setRoleId] = useState<string>(() => {
+    const saved = localStorage.getItem('sl_role')
+    if (saved) return saved
+    const p = new URLSearchParams(window.location.search).get('role')
+    return p && ROLES.some((r) => r.id === p) ? p : 'admin'
+  })
+  const role = ROLES.find((r) => r.id === roleId) ?? ROLES[0]
+  const [approvedDestruction, setApprovedDestruction] = useState<Set<string>>(() => {
+    try { const r = localStorage.getItem('sl_approved_destruction'); return r ? new Set(JSON.parse(r)) : new Set() } catch { return new Set() }
+  })
+  const setRole = (id: string) => { setRoleId(id); localStorage.setItem('sl_role', id) }
   const [filterType, setFilterType] = useState('All')
   const [filterRisk, setFilterRisk] = useState('All')
   const [filterDept, setFilterDept] = useState('All')
@@ -2852,8 +3323,7 @@ function App() {
     }
   }
 
-  const s = portfolioStats
-  const today = new Date('2026-10-15')
+  const today = new Date(DEMO_TODAY)
   const filtered = contracts.filter((c) => {
     if (filterType !== 'All' && c.type !== filterType) return false
     if (filterRisk !== 'All' && c.riskLevel !== filterRisk) return false
@@ -2869,7 +3339,43 @@ function App() {
     return true
   })
 
-  const [logged_in, setLoggedIn] = useState(() => localStorage.getItem('sl_auth') === '1')
+  // ── RBAC: documents visible to the active role ──
+  const visible = filtered.filter((c) => canView(role, c))
+  const hiddenCount = filtered.length - visible.length
+  const visibleFlags = visible.flatMap((c) => c.flags)
+  const openFlagsCount = visibleFlags.filter((f) => f.status === 'open').length
+  const criticalOpenCount = visibleFlags.filter((f) => f.severity === 'Critical' && f.status === 'open').length
+  const remediatedCount = visibleFlags.filter((f) => f.status === 'remediated').length
+  const avgCompliance = visible.length > 0
+    ? Math.round(visible.reduce((sum, c) => sum + c.compliance.complianceRate, 0) / visible.length * 100)
+    : 0
+  const retentionAlertCount = visible.filter((c) => retentionState(c).status !== 'retained').length
+
+  // Retention: approve discard (with confirmation) → persist
+  const approveDestruction = (c: ContractDoc) => {
+    const until = retentionState(c).until
+    setConfirmState({
+      title: `Approve discard of #${c.num} ${c.displayName}?`,
+      message: `Retention deadline (${until}) has passed. Approving routes this document to Records Management for destruction. This action is logged.`,
+      onConfirm: () => {
+        setApprovedDestruction((prev) => {
+          const next = new Set(prev)
+          next.add(String(c.num))
+          localStorage.setItem('sl_approved_destruction', JSON.stringify([...next]))
+          return next
+        })
+        show(`#${c.num} discard approved — routed to ${c.retentionOwner} (Records Management)`, 'success')
+      },
+      showNote: true,
+      defaultNote: 'Approved for discard per records schedule.',
+    })
+  }
+
+  const [logged_in, setLoggedIn] = useState(() => localStorage.getItem('sl_auth') === '1' || new URLSearchParams(window.location.search).has('demo'))
+  // ?demo=1 (demo links): persist the session so tab-switching/navigation keeps it
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('demo')) localStorage.setItem('sl_auth', '1')
+  }, [])
   const [loginId, setLoginId] = useState('')
   const [loginPw, setLoginPw] = useState('')
   const [loginError, setLoginError] = useState('')
@@ -2938,9 +3444,24 @@ function App() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-[10px] text-slate-400 hidden lg:block">13 contracts · 41 flags · 58% compliance</span>
+            <span className="text-[10px] text-slate-400 hidden lg:block">{visible.length} contracts · {openFlagsCount} open flags · {avgCompliance}% compliance</span>
+            {/* ── RBAC role switcher ── */}
+            <div className="flex items-center gap-1.5" title="Role-based access control — switch the active role to see which documents your role can access">
+              <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v2h8z" />
+              </svg>
+              <select
+                value={roleId}
+                onChange={(e) => setRole(e.target.value)}
+                className="text-[10px] font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
+              >
+                {ROLES.map((r) => (
+                  <option key={r.id} value={r.id}>{r.label}</option>
+                ))}
+              </select>
+            </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded px-2 py-0.5">SL1123</span>
+              <span className="text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded px-2 py-0.5">{role.user}</span>
               <button onClick={handleLogout} className="text-[10px] text-slate-400 hover:text-slate-600 transition">Sign out</button>
             </div>
             {/* Mobile sidebar toggle */}
@@ -2960,13 +3481,25 @@ function App() {
 
       {/* ── KPI Row ────────────────────────────────────────────────────────── */}
       <div className="px-4 sm:px-6 py-4">
-        <div className="max-w-screen-2xl mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <KpiCard label="Documents" value={s.totalContracts} onClick={() => setActiveTab('contracts')} />
-          <KpiCard label="Critical Flags" value={s.criticalCount} valueClass="text-red-600" onClick={() => setActiveTab('risk-register')} />
-          <KpiCard label="Open Flags" value={contracts.flatMap((c) => c.flags).filter((f) => f.status === 'open').length} valueClass="text-orange-600" onClick={() => setActiveTab('risk-register')} />
-          <KpiCard label="Remediated" value={contracts.flatMap((c) => c.flags).filter((f) => f.status === 'remediated').length} valueClass="text-emerald-600" onClick={() => setActiveTab('risk-register')} />
-          <KpiCard label="Avg Compliance" value={`${Math.round(s.avgComplianceRate * 100)}%`} valueClass="text-teal-600" onClick={() => setActiveTab('insights')} />
-          <KpiCard label="Clean Docs" value={contracts.filter((c) => c.flags.length === 0).length} valueClass="text-emerald-600" onClick={() => setActiveTab('contracts')} />
+        <div className="max-w-screen-2xl mx-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <KpiCard label="Documents" value={visible.length} onClick={() => setActiveTab('contracts')} />
+          <KpiCard label="Critical Flags" value={criticalOpenCount} valueClass="text-red-600" onClick={() => setActiveTab('risk-register')} />
+          <KpiCard label="Open Flags" value={openFlagsCount} valueClass="text-orange-600" onClick={() => setActiveTab('risk-register')} />
+          <KpiCard label="Remediated" value={remediatedCount} valueClass="text-emerald-600" onClick={() => setActiveTab('risk-register')} />
+          <KpiCard label="Avg Compliance" value={`${avgCompliance}%`} valueClass="text-teal-600" onClick={() => setActiveTab('insights')} />
+          <KpiCard label="Retention Alerts" value={retentionAlertCount} valueClass={retentionAlertCount > 0 ? 'text-amber-600' : 'text-emerald-600'} onClick={() => setActiveTab('deadlines')} />
+        </div>
+
+        {/* RBAC banner */}
+        {hiddenCount > 0 && (
+          <div className="mt-3 flex items-center gap-2 text-[11px] bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2">
+            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v2h8z" />
+            </svg>
+            <span><b>{hiddenCount} document{hiddenCount > 1 ? 's' : ''}</b> hidden by role-based access control (role: {role.label}). Switch role in the top bar to change visibility.</span>
+          </div>
+        )}
         </div>
 
         {/* Risk Distribution + Top Actions */}
@@ -2975,8 +3508,8 @@ function App() {
           <div className="bg-white border border-slate-200 rounded-lg p-4">
             <div className="text-xs font-bold text-slate-700 mb-3">Risk Distribution by HIROC Category</div>
             {(['Operational', 'Financial', 'Reputational', 'Continuity'] as const).map((cat) => {
-              const catFlags = contracts.flatMap((c) => c.flags).filter((f) => f.risk_category === cat)
-              const total = contracts.flatMap((c) => c.flags).length || 1
+              const catFlags = visible.flatMap((c) => c.flags).filter((f) => f.risk_category === cat)
+              const total = visible.flatMap((c) => c.flags).length || 1
               const pct = Math.round((catFlags.length / total) * 100)
               const colors: Record<string, string> = { Operational: 'bg-teal-500', Financial: 'bg-amber-500', Reputational: 'bg-purple-500', Continuity: 'bg-blue-500' }
               return (
@@ -2993,7 +3526,7 @@ function App() {
             <div className="mt-4 pt-3 border-t border-slate-100">
               <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Remediation Progress</div>
               {(() => {
-                const allFlags = contracts.flatMap((c) => c.flags)
+                const allFlags = visible.flatMap((c) => c.flags)
                 const remediated = allFlags.filter((f) => f.status === 'remediated').length
                 const accepted = allFlags.filter((f) => f.status === 'accepted').length
                 const total = allFlags.length || 1
@@ -3017,7 +3550,7 @@ function App() {
               ⚡ Top 5 Actions <span className="font-normal text-slate-400">(open flags, highest risk)</span>
             </div>
             {(() => {
-              const openFlags = contracts.flatMap((c) => c.flags.map((f) => ({ ...f, contractNum: c.num, contractName: c.displayName })))
+              const openFlags = visible.flatMap((c) => c.flags.map((f) => ({ ...f, contractNum: c.num, contractName: c.displayName })))
                 .filter((f) => f.status === 'open')
                 .sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0))
                 .slice(0, 5)
@@ -3105,7 +3638,7 @@ function App() {
             <div className="flex-1 min-w-0">
               <>
                 {activeTab === 'work-queue' && (
-                  <WorkQueueView contracts={contracts} onSelectContract={(c) => setSelected(c)}
+                  <WorkQueueView contracts={visible} onSelectContract={(c) => setSelected(c)}
                     onProcess={(link) => { setProcessLink(link); setSelected(null) }}
                     resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} onResolveFlag={(id) => markFlagResolved(id)}
                     resolvedLog={resolvedLog}
@@ -3115,12 +3648,12 @@ function App() {
                 {activeTab === 'risk-register' && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-slate-400">Showing {filtered.length} contracts · {filtered.flatMap((c) => c.flags).filter((f) => f.status === 'open').length} open flags</span>
+                      <span className="text-[10px] text-slate-400">Showing {visible.length} contracts · {visible.flatMap((c) => c.flags).filter((f) => f.status === 'open').length} open flags</span>
                       <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); window.location.reload() }} className="text-[9px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
                     </div>
-                    <RiskMatrixView contracts={filtered} onSelectContract={(c) => { setSelected(c); }} />
+                    <RiskMatrixView contracts={visible} onSelectContract={(c) => { setSelected(c); }} />
                     <RiskRegisterTable
-                    contracts={filtered}
+                    contracts={visible}
                     onSelectContract={(c) => { setSelected(c); }}
                     onSwitchTab={(tab) => setActiveTab(tab)}
                     onFix={(flagId) => markFlagResolved(flagId)}
@@ -3131,30 +3664,38 @@ function App() {
                 )}
                 {activeTab === 'contracts' && (
                   <div className="space-y-4">
+                    {/* Full-text search (demo docs + on-disk archive) */}
+                    <DocSearch contracts={filtered} onSelect={(c) => { setSelected(c); }} />
+
                     {/* Criteria-based compliance panel (F) */}
-                    <CriteriaPanel contracts={filtered} />
+                    <CriteriaPanel contracts={visible} />
 
                     <ContractList
                       contracts={filtered}
                       selectedNum={selected?.num ?? null}
                       onSelect={(c) => setSelected(c)}
+                      role={role}
                     />
                   </div>
                 )}
+                {activeTab === 'template-match' && (
+                  <TemplateMatchView allContracts={contracts} role={role} />
+                )}
                 {activeTab === 'deadlines' && (
                   <div>
-                    <DeadlinesTimeline contracts={filtered} onSelectContract={(c) => { setSelected(c); }} />
-                    <DeadlinesTable contracts={filtered} onSelectContract={(c) => { setSelected(c); }} />
+                    <DeadlinesTimeline contracts={visible} onSelectContract={(c) => { setSelected(c); }} />
+                    <DeadlinesTable contracts={visible} onSelectContract={(c) => { setSelected(c); }} />
+                    <RetentionBoard contracts={visible} approved={approvedDestruction} onApprove={approveDestruction} />
                   </div>
                 )}
                 {activeTab === 'cross-refs' && (
-                  <CrossRefsView contracts={filtered} />
+                  <CrossRefsView contracts={visible} />
                 )}
                 {activeTab === 'smart-filing' && (
-                  <SmartFilingView contracts={filtered} />
+                  <SmartFilingView contracts={visible} />
                 )}
                 {activeTab === 'insights' && (
-                  <InsightsView contracts={contracts} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} resolvedFlags={resolvedFlags} completedLinks={completedLinks} onSetFocusFields={setFocusFields} />
+                  <InsightsView contracts={visible} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} resolvedFlags={resolvedFlags} completedLinks={completedLinks} onSetFocusFields={setFocusFields} />
                 )}
               </>
             </div>
@@ -3166,7 +3707,9 @@ function App() {
                   <button onClick={() => setSelected(null)} className="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition text-sm">✕</button>
                 </div>
                 <div className="px-5 py-4">
-                  <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} onStatusOverride={(flagId) => { markFlagResolved(flagId) }} />
+                  {canView(role, selected)
+                    ? <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} onStatusOverride={(flagId) => { markFlagResolved(flagId) }} />
+                    : <RestrictedAccessPanel doc={selected} role={role} />}
                 </div>
               </aside>
             )}
