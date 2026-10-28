@@ -64,7 +64,7 @@ done by cloning `murphywenjun-del/critical-corporate-document-management`, synci
 | RBAC (4 demo roles, 4 confidentiality levels) | ✅ (simulated) | Role switcher; hidden-doc banner; restricted panel with access-request paths. **Production SSO/RBAC = Phase 2** |
 | Retention & disposal board | ✅ (demo rules) | `expiry + retentionYears` vs. reference date 2026-10-15; eligible/imminent/retained; approve-discard → Records Management. **Rules are assumptions until Southlake Retention Policy is mapped** |
 | Template Match / AI comparison | ✅ (deterministic engine) | 5 reference templates; type auto-classification; weighted clause similarity; "Needs Attention" risk-ordered shortlist; full clause diff. **LLM clause-level matching = Phase 2 (local Ollama)** |
-| Risk matrix + portfolio insights | ✅ (AI default framework) | `RISK_FRAMEWORK` config object = integration point for Southlake internal risk register. Systemic patterns (same field ≥3 contracts) + What-If top-3 |
+| Risk matrix + portfolio insights | ✅ (client taxonomy adopted) | 12-category Southlake/HIROC taxonomy (client register, Jul 2019) drives classification across register/KPI/work queue/CSV (`SOUTHLAKE_RISK_TAXONOMY` + `flagHiroc`); score bands still AI 5×5 L×I — **C×P 3×3 scoring page pending (register continues on next page)**. Systemic patterns (same field ≥3 contracts) + What-If top-3 |
 | Smart Filing (AI upload → auto-classify → HIROC archive) | ✅ | Rule engine prototype; disk-verified folder tree |
 | Cross-refs / Amendments closed loop | ✅ | Confirmed by client in 10-17 meeting — keep and extend |
 | Deep links for testing | ✅ | `?demo=1&role=…&tab=…` |
@@ -83,7 +83,7 @@ done by cloning `murphywenjun-del/critical-corporate-document-management`, synci
 
 | Item | Status | Owner | Blocks what |
 |---|---|---|---|
-| Southlake internal Risk Register | Requested (Matthew → Brian) | Client | Final risk-framework alignment (scaffold ready in `RISK_FRAMEWORK`) |
+| Southlake internal risk register | Taxonomy chart (12 categories, HIROC Risk Register Jul 2019 page) received & adopted in v43 ✓; **C×P scoring definitions still pending** — verified: provided page contains NO scoring content (footnote points to a separate HIROC "Common Taxonomy" document, also not provided). Ask client for their internal Risk Scoring Framework | Client (Matthew → Brian) | Score-band alignment (classification already done) |
 | Southlake Retention Policy mapping | Policy received per client, **file not yet in project repo** | Wenjun | Retention rule accuracy |
 | De-identified real contracts | Waiting on Alicia | Client | Realistic user testing |
 | Research agreement samples (CDA/CTA/DSA) | Client to provide samples | Tanya/Luca | Item 6 (research tracking) scope |

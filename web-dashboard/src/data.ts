@@ -174,7 +174,7 @@ export function retentionState(c: Pick<ContractDoc, 'expiryDate' | 'retentionYea
 // Current values are the AI default: 5×5 Likelihood×Impact, score bands
 // ≥20 red / 12–19 orange / 6–11 yellow / <6 green.
 export const RISK_FRAMEWORK = {
-  source: 'Southlake / HIROC risk taxonomy adopted (client-provided register, Jul 2019 — 12 categories). C×P 3×3 scoring page pending — AI 5×5 L×I in use meanwhile.',
+  source: 'Southlake / HIROC risk taxonomy adopted (client-provided register page, Jul 2019 — 12 categories; page contains taxonomy only, no scoring). C×P scoring definitions pending — client internal Risk Scoring Framework / HIROC "Common Taxonomy" not yet provided; AI 5×5 L×I in use meanwhile.',
   likelihoodLabels: ['Rare', 'Unlikely', 'Might happen', 'Likely', 'Will happen'],
   impactLabels: ['Tiny', 'Small', 'Noticeable', 'Major', 'Severe'],
   bands: { red: 20, orange: 12, yellow: 6 },
