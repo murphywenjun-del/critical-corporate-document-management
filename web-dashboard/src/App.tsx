@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { contracts, docLinks, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type ContractDoc, type Amendment, type DocLink,
   ROLES, canView, canManage, archiveFileConf, contractToTemplateRef, DEMO_TODAY, CONF_LABEL, CONF_BADGE, retentionState, type Role,
   TEMPLATE_LIBRARY, matchTemplate, classifyType, RISK_FRAMEWORK,
-  SOUTHLAKE_RISK_TAXONOMY, flagHiroc, CRITERIA_BY_TYPE } from './data'
+  SOUTHLAKE_RISK_TAXONOMY, flagHiroc, CRITERIA_BY_TYPE, RETENTION_BY_TYPE, DEFAULT_RETENTION, LITIGATION_HOLD_NOTE } from './data'
 
 
 // ── Toast Notification System ──────────────────────────────────────────────
@@ -765,7 +765,8 @@ function RestrictedAccessPanel({ doc, role }: { doc: ContractDoc; role: Role }) 
         </div>
         <p className="text-[11px] text-slate-400 border-t border-slate-100 pt-3">
           Role-based access control: employees only see documents authorized for their role.
-          Confidential &amp; PHI-restricted agreements are hidden from non-legal roles.
+          Confidential &amp; PHI-restricted agreements are hidden from non-legal roles, per Southlake’s
+          Confidentiality — Vendors/Third Parties and PHI Disclosure policies.
         </p>
       </div>
     </div>
@@ -796,11 +797,13 @@ function RetentionBoard({
   const counts = {
     elapsed: rows.filter((r) => r.status === 'elapsed').length,
     imminent: rows.filter((r) => r.status === 'imminent').length,
+    hold: rows.filter((r) => r.status === 'hold').length,
     retained: rows.filter((r) => r.status === 'retained').length,
   }
   const statusMeta: Record<string, { label: string; chip: string; text: string }> = {
     elapsed: { label: 'ELIGIBLE FOR DISCARD', chip: 'bg-red-50 border-red-200 text-red-700', text: 'text-red-600' },
     imminent: { label: 'DUE ≤ 90 DAYS', chip: 'bg-amber-50 border-amber-200 text-amber-700', text: 'text-amber-600' },
+    hold: { label: 'EXPIRED · IN RETENTION', chip: 'bg-slate-100 border-slate-300 text-slate-700', text: 'text-slate-600' },
     retained: { label: 'IN RETENTION', chip: 'bg-emerald-50 border-emerald-200 text-emerald-700', text: 'text-emerald-600' },
   }
   return (
@@ -811,7 +814,7 @@ function RetentionBoard({
       </div>
       {/* Summary chips */}
       <div className="flex gap-4 mb-3">
-        {(['elapsed', 'imminent', 'retained'] as const).map((u) => (
+        {(['elapsed', 'imminent', 'hold', 'retained'] as const).map((u) => (
           <div key={u} className={`flex-1 border rounded-lg p-3 text-center ${statusMeta[u].chip}`}>
             <div className="text-2xl font-bold">{counts[u]}</div>
             <div className="text-[11px] font-bold uppercase tracking-wide mt-0.5">{statusMeta[u].label}</div>
@@ -888,6 +891,11 @@ function RetentionBoard({
                           Approve discard →
                         </button>
                       )
+                    ) : status === 'hold' ? (
+                      <div>
+                        <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded border ${sm.chip}`}>{sm.label}</span>
+                        <div className="text-[11px] text-slate-400 mt-1">Deletion not allowed yet — keep until {until}</div>
+                      </div>
                     ) : (
                       <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded border ${sm.chip}`}>{sm.label}</span>
                     )}
@@ -899,8 +907,12 @@ function RetentionBoard({
         </table>
       </div>
       <p className="text-[11px] text-slate-400 mt-2">
-        Retention periods follow Southlake’s records schedule. When a document reaches its legally required
-        retention deadline, the owner is alerted; after approval it is routed to Records Management for discard.
+        Retention periods follow Southlake Health’s <b className="text-slate-500">Records Retention Schedule (Schedule A)</b> —
+        “Records Retention, Storage and Destruction,” PolicyStat #19415930 (rev. 12/2023). When a document reaches its
+        required retention deadline, the owner is alerted; after approval it is routed to Records Management for disposal.
+      </p>
+      <p className="text-[11px] text-slate-400 mt-1.5">
+        {LITIGATION_HOLD_NOTE}
       </p>
     </div>
   )
@@ -2954,9 +2966,12 @@ function uploadToContractDoc(u: UploadedDoc, idx: number): ContractDoc {
     },
     department: 'Operations', expiryDate: '',
     confidentiality: 'internal',
-    retentionYears: 7,
-    retentionBasis: 'New upload — retention pending classification to the records schedule',
-    retentionOwner: 'Records Management',
+    // Retention from Southlake's real records schedule (Schedule A, PolicyStat #19415930)
+    retentionYears: (RETENTION_BY_TYPE[u.document_type] || DEFAULT_RETENTION).years,
+    retentionBasis: u.document_type && RETENTION_BY_TYPE[u.document_type]
+      ? RETENTION_BY_TYPE[u.document_type].basis
+      : `New upload (classified: ${u.document_type || 'unknown'}) — ${DEFAULT_RETENTION.basis}`,
+    retentionOwner: (RETENTION_BY_TYPE[u.document_type] || DEFAULT_RETENTION).owner,
     isUpload: true,
   }
 }

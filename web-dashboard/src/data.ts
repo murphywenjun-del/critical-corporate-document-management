@@ -181,7 +181,7 @@ export function retentionUntil(c: Pick<ContractDoc, 'expiryDate' | 'retentionYea
   return d.toISOString().slice(0, 10)
 }
 
-export type RetentionStatus = 'elapsed' | 'imminent' | 'retained'
+export type RetentionStatus = 'elapsed' | 'imminent' | 'hold' | 'retained'
 
 export function retentionState(c: Pick<ContractDoc, 'expiryDate' | 'retentionYears'>): {
   until: string
@@ -191,7 +191,9 @@ export function retentionState(c: Pick<ContractDoc, 'expiryDate' | 'retentionYea
   if (!c.expiryDate) return { until: '', daysLeft: 0, status: 'retained' }
   const until = retentionUntil(c)
   const daysLeft = Math.ceil((new Date(until).getTime() - new Date(DEMO_TODAY).getTime()) / 86400000)
-  const status: RetentionStatus = daysLeft < 0 ? 'elapsed' : daysLeft <= 90 ? 'imminent' : 'retained'
+  // 'hold' = the agreement has already expired but its retention period is not
+  // complete yet: it must stay in the archive — disposal is NOT allowed.
+  const status: RetentionStatus = daysLeft < 0 ? 'elapsed' : daysLeft <= 90 ? 'imminent' : (c.expiryDate < DEMO_TODAY ? 'hold' : 'retained')
   return { until, daysLeft, status }
 }
 
@@ -824,7 +826,38 @@ export const CRITERIA_BY_TYPE: Record<string, string[]> = {
     'Governing law = Ontario',
     'Data retention period defined',
   ],
+  // Research agreement tracking (client ask: CDA / CTA / DSA key fields)
+  'Clinical_Trial': [
+    'REB approval on file before study start',
+    'Informed consent form per ICH GCP',
+    'Adverse event reporting process',
+    'Data retention: completion of study + 15 years (Schedule A R1/R7)',
+    'Intellectual property / commercialization terms',
+    'Conflict of interest disclosure on record',
+    'Governing law = Ontario',
+  ],
+  'CDA': [
+    'PHIPA / privacy compliance clause',
+    'Data return or destruction on termination',
+    'Audit rights clause',
+    'Governing law = Ontario',
+    'Minimum 2 VP-level signatures',
+  ],
 }
+
+// ── Retention mapping from Southlake's real policy ─────────────────────────
+// Source: "Records Retention, Storage and Destruction" — Southlake Health,
+// PolicyStat #19415930 (last revised 12/2023), Schedule A.
+export const RETENTION_BY_TYPE: Record<string, { years: number; owner: string; basis: string }> = {
+  NDA:          { years: 7,  owner: 'Legal Services', basis: 'Schedule A C21 — contracts/agreements: life of agreement + 7 years (Broader Public Sector Procurement Directive s.7.2.23; Limitations Act ss.4 & 15)' },
+  CDA:          { years: 7,  owner: 'Legal Services', basis: 'Schedule A C21 — confidential disclosure agreements: life of agreement + 7 years (Limitations Act ss.4 & 15)' },
+  MOU:          { years: 7,  owner: 'Legal Services', basis: 'Schedule A C21 — memoranda of understanding: life of agreement + 7 years (BPS Procurement Directive s.7.2.23)' },
+  Procurement:  { years: 7,  owner: 'Legal Services', basis: 'Schedule A C21 — service/commercial agreements: life of agreement + 7 years; real property: +10 years (Real Property Limitations Act)' },
+  Data_Sharing: { years: 7,  owner: 'Director of Research', basis: 'Schedule A R12 — agreements/contracts related to research: year of project expiry + 7 years (Tri-Agency Financial Administration Guide)' },
+  Clinical_Trial: { years: 15, owner: 'Principal Investigator / Director of Research', basis: 'Schedule A R1/R7 — regulated clinical studies: completion of study + 15 years (Food & Drug Regs C.05.012(3)&(4); ICH GCP s.8)' },
+}
+export const DEFAULT_RETENTION = { years: 7, owner: 'Legal Services', basis: 'Schedule A C21 — default for contracts/agreements: life of agreement + 7 years' }
+export const LITIGATION_HOLD_NOTE = 'Litigation / access hold (Schedule A R1): records tied to an active legal proceeding, FOI request, or PHI access/correction request are retained until the matter is finally resolved — Risk Management, Legal, and Privacy determine when disposal may proceed.'
 
 
 export const contracts: ContractDoc[] = [
@@ -848,7 +881,7 @@ export const contracts: ContractDoc[] = [
     jev: { riskSeverity: { choice: "medium", confidence: 0.48 }, needsHumanReview: 0.35, isComplianceRelated: 0.99, shouldAlert: 0.55, decisionConfidence: 2.19 },
     compliance: { hardGaps: 0, bpGaps: 0, complianceRate: 1.0, topRiskField: null },
     department: "Legal & Compliance", expiryDate: "2029-03-15",
-    confidentiality: "public", retentionYears: 5, retentionBasis: "NDA confidentiality period — 5 years post-term", retentionOwner: "Legal & Compliance", paper: { copies: 1, location: "Legal vault — signed original" },
+    confidentiality: "public", retentionYears: 7, retentionBasis: "Schedule A C21 — NDA: life of agreement + 7 years (Limitations Act ss.4 & 15)", retentionOwner: "Legal Services", paper: { copies: 1, location: "Legal vault — signed original" },
   },
   {
     num: 2, name: "MOU_Missing_Second_Signature_2024", displayName: "MOU — Missing VP Signatures",
@@ -881,7 +914,7 @@ export const contracts: ContractDoc[] = [
     jev: { riskSeverity: { choice: "high", confidence: 0.57 }, needsHumanReview: 0.49, isComplianceRelated: 0.96, shouldAlert: 0.68, decisionConfidence: 2.16 },
     compliance: { hardGaps: 3, bpGaps: 0, complianceRate: 0.57, topRiskField: "signatories" },
     department: "Quality & Patient Safety", expiryDate: "2026-05-31",
-    confidentiality: "internal", retentionYears: 7, retentionBasis: "Corporate records — 7 years post-termination", retentionOwner: "Quality & Patient Safety",
+    confidentiality: "internal", retentionYears: 7, retentionBasis: "Schedule A C21 — MOU: life of agreement + 7 years (BPS Procurement Directive s.7.2.23)", retentionOwner: "Legal Services",
   },
   {
     num: 3, name: "Procurement_HealthIT_Service_Agreement_2023", displayName: "Procurement — HealthIT Service Agreement",
@@ -920,7 +953,7 @@ export const contracts: ContractDoc[] = [
     jev: { riskSeverity: { choice: "high", confidence: 0.68 }, needsHumanReview: 0.58, isComplianceRelated: 0.99, shouldAlert: 0.78, decisionConfidence: 1.97 },
     compliance: { hardGaps: 1, bpGaps: 2, complianceRate: 0.67, topRiskField: "expiry_date" },
     department: "IT / Info Systems", expiryDate: "2025-12-31",
-    confidentiality: "confidential", retentionYears: 1, retentionBasis: "Superseded by IT MSA #9 — 1 year post-supersession", retentionOwner: "IT / Info Systems",
+    confidentiality: "confidential", retentionYears: 7, retentionBasis: "Superseded by IT MSA #9; retention per Schedule A C21 (life of agreement + 7 years)", retentionOwner: "Legal Services (with IT archive)",
   },
   {
     num: 4, name: "DSA_Provider_Data_Sharing_2024", displayName: "Data Sharing — Provider DSA",
@@ -970,7 +1003,7 @@ export const contracts: ContractDoc[] = [
     jev: { riskSeverity: { choice: "critical", confidence: 0.62 }, needsHumanReview: 0.66, isComplianceRelated: 0.96, shouldAlert: 0.78, decisionConfidence: 2.32 },
     compliance: { hardGaps: 5, bpGaps: 2, complianceRate: 0.12, topRiskField: "signatories" },
     department: "Research", expiryDate: "2025-12-31",
-    confidentiality: "restricted", retentionYears: 10, retentionBasis: "PHI data sharing — 10 years (PHIPA best practice)", retentionOwner: "Data Privacy Office", paper: { copies: 1, location: "Legal vault — DSA original" },
+    confidentiality: "restricted", retentionYears: 7, retentionBasis: "Schedule A R12 — research data-sharing agreement: year of project expiry + 7 years (Tri-Agency Financial Administration Guide)", retentionOwner: "Director of Research", paper: { copies: 1, location: "Legal vault — DSA original" },
   },
   {
     num: 5, name: "NDA_Old_Vendor_2022", displayName: "NDA — Expired Vendor Agreement",
@@ -1011,7 +1044,7 @@ export const contracts: ContractDoc[] = [
     jev: { riskSeverity: { choice: "critical", confidence: 0.52 }, needsHumanReview: 0.47, isComplianceRelated: 0.78, shouldAlert: 0.78, decisionConfidence: 2.74 },
     compliance: { hardGaps: 3, bpGaps: 1, complianceRate: 0.50, topRiskField: "expiry_date" },
     department: "Legal & Compliance", expiryDate: "2024-02-14",
-    confidentiality: "internal", retentionYears: 2, retentionBasis: "Lapsed vendor NDA — 2 years post-termination", retentionOwner: "Legal & Compliance",
+    confidentiality: "internal", retentionYears: 7, retentionBasis: "Schedule A C21 — lapsed vendor NDA: life of agreement + 7 years (Limitations Act ss.4 & 15)", retentionOwner: "Legal Services",
   },
   {
     num: 6, name: "Procurement_Security_Services_2024", displayName: "Procurement — Security Services",
@@ -1043,7 +1076,7 @@ export const contracts: ContractDoc[] = [
     jev: { riskSeverity: { choice: "critical", confidence: 0.33 }, needsHumanReview: 0.57, isComplianceRelated: 0.24, shouldAlert: 0.77, decisionConfidence: 2.57 },
     compliance: { hardGaps: 1, bpGaps: 1, complianceRate: 0.78, topRiskField: "expiry_date" },
     department: "Quality & Patient Safety", expiryDate: "2025-03-31",
-    confidentiality: "confidential", retentionYears: 7, retentionBasis: "Procurement records — 7 years post-termination", retentionOwner: "Quality & Patient Safety",
+    confidentiality: "confidential", retentionYears: 7, retentionBasis: "Schedule A C21 — procurement agreement: life of agreement + 7 years (BPS Procurement Directive s.7.2.23)", retentionOwner: "Legal Services",
   },
   {
     num: 7, name: "MOU_Partnership_Duplicate_Versions", displayName: "MOU — Duplicate/Conflicting Versions",
@@ -1089,7 +1122,7 @@ export const contracts: ContractDoc[] = [
     // ── Amendment linking: Contract 7 IS the base, and has 2 versions ──
     
     department: "Quality & Patient Safety", expiryDate: "2025-07-31",
-    confidentiality: "internal", retentionYears: 7, retentionBasis: "Partnership MOU — 7 years post-termination", retentionOwner: "Quality & Patient Safety", paper: { copies: 2, location: "Legal vault + Finance filing" },
+    confidentiality: "internal", retentionYears: 7, retentionBasis: "Schedule A C21 — partnership MOU: life of agreement + 7 years (BPS Procurement Directive s.7.2.23)", retentionOwner: "Legal Services", paper: { copies: 2, location: "Legal vault + Finance filing" },
     amendments: [
       {
         id: "v1",
@@ -1150,7 +1183,7 @@ export const contracts: ContractDoc[] = [
     jev: { riskSeverity: { choice: "high", confidence: 0.86 }, needsHumanReview: 0.90, isComplianceRelated: 0.86, shouldAlert: 0.91, decisionConfidence: 0.0 },
     compliance: { hardGaps: 4, bpGaps: 2, complianceRate: 0.33, topRiskField: "signatories" },
     department: "IT / Info Systems", expiryDate: "2022-03-01",
-    confidentiality: "confidential", retentionYears: 3, retentionBasis: "Legacy 2019 license — 3-year records review cycle", retentionOwner: "IT / Info Systems", paper: { copies: 3, location: "Records archive — 2019 originals + scans" },
+    confidentiality: "confidential", retentionYears: 7, retentionBasis: "Schedule A C21 — legacy 2019 license: life of agreement + 7 years (2019 review-cycle assumption retired)", retentionOwner: "Legal Services (with IT archive)", paper: { copies: 3, location: "Records archive — 2019 originals + scans" },
   },
   // ── NEW Contract 9: IT Master Services Agreement (from Exelon/NSW template structure) ──
   {
@@ -1189,7 +1222,7 @@ export const contracts: ContractDoc[] = [
     jev: { riskSeverity: { choice: "high", confidence: 0.61 }, needsHumanReview: 0.42, isComplianceRelated: 0.88, shouldAlert: 0.72, decisionConfidence: 2.45 },
     compliance: { hardGaps: 1, bpGaps: 1, complianceRate: 0.78, topRiskField: "indemnity_cap" },
     department: "IT / Info Systems", expiryDate: "2027-05-31",
-    confidentiality: "confidential", retentionYears: 7, retentionBasis: "IT MSA — 7 years post-termination", retentionOwner: "IT / Info Systems",
+    confidentiality: "confidential", retentionYears: 7, retentionBasis: "Schedule A C21 — IT MSA: life of agreement + 7 years (BPS Procurement Directive s.7.2.23)", retentionOwner: "Legal Services (with IT archive)",
   },
   // ── NEW Contract 10: Health Data Sharing + Amendment (from ETHP template structure) ──
   {
@@ -1230,7 +1263,7 @@ export const contracts: ContractDoc[] = [
     // ── Amendment linking: base + amendment ──
     
     department: "Research", expiryDate: "2026-08-01",
-    confidentiality: "restricted", retentionYears: 10, retentionBasis: "PHI data sharing — 10 years (PHIPA)", retentionOwner: "Data Privacy Office",
+    confidentiality: "restricted", retentionYears: 7, retentionBasis: "Schedule A R12 — health data sharing: year of project expiry + 7 years (Tri-Agency Financial Administration Guide)", retentionOwner: "Director of Research",
     amendments: [
       {
         id: "base",
@@ -1287,7 +1320,7 @@ export const contracts: ContractDoc[] = [
     jev: { riskSeverity: { choice: "high", confidence: 0.72 }, needsHumanReview: 0.85, isComplianceRelated: 0.91, shouldAlert: 0.78, decisionConfidence: 1.85 },
     compliance: { hardGaps: 3, bpGaps: 1, complianceRate: 0.5, topRiskField: "signatories" },
     department: "Research", expiryDate: "2027-01-01",
-    confidentiality: "restricted", retentionYears: 10, retentionBasis: "PHI data sharing amendment — 10 years (PHIPA)", retentionOwner: "Data Privacy Office", paper: { copies: 1, location: "Legal vault — amendment original" },
+    confidentiality: "restricted", retentionYears: 10, retentionBasis: "R12 base 7 years, extended to 10 by Amendment No.1 terms — Southlake may retain longer at its discretion (policy §1.1)", retentionOwner: "Director of Research", paper: { copies: 1, location: "Legal vault — amendment original" },
     baseContractId: 10,
   },
   {
@@ -1310,7 +1343,7 @@ export const contracts: ContractDoc[] = [
     ],
     compliance: { hardGaps: 0, bpGaps: 0, complianceRate: 1.0, topRiskField: "none" },
     department: "Legal & Compliance", expiryDate: "2030-01-15",
-    confidentiality: "public", retentionYears: 5, retentionBasis: "Test document — 5-year confidentiality period", retentionOwner: "Legal & Compliance",
+    confidentiality: "public", retentionYears: 7, retentionBasis: "Schedule A C21 — NDA: life of agreement + 7 years (test document)", retentionOwner: "Legal Services",
   },
   {
     num: 13, name: "DSA_Clean_Compliant_2025", displayName: "Data Sharing — Fully Compliant (Test)",
@@ -1333,7 +1366,7 @@ export const contracts: ContractDoc[] = [
     ],
     compliance: { hardGaps: 0, bpGaps: 0, complianceRate: 1.0, topRiskField: "none" },
     department: "Research", expiryDate: "2028-03-01",
-    confidentiality: "public", retentionYears: 10, retentionBasis: "PHI-compliant DSA (test) — 10 years", retentionOwner: "Research",
+    confidentiality: "public", retentionYears: 7, retentionBasis: "Schedule A R12 — PHI-compliant DSA: year of project expiry + 7 years (test document)", retentionOwner: "Director of Research",
   },
 ]
 
