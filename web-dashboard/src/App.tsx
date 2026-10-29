@@ -3992,11 +3992,11 @@ function App() {
                     onGoToSmartFiling={() => { setActiveTab('smart-filing'); setSelected(null) }}
                   />
                 ) : (
-                  <div className="text-[11px] text-slate-400 leading-relaxed">
+                  <div className="text-[11px] text-slate-500 leading-relaxed">
                     <p className="font-semibold text-slate-500 uppercase tracking-wide mb-2">This view</p>
                     {activeTab === 'risk-register'
-                      ? <>Flags are filtered in the panel beside the register (severity, HIROC category, status).</>
-                      : <>Uploads are filed into the 12-category structure — pick a category below or use the “View” button on a filed file.</>}
+                      ? <p><b className="text-slate-700">{openFlagsCount} open flags</b> are plotted on the L × I matrix. Click any cell to open its documents; filters are above the register.</p>
+                      : <p>Files you upload are read locally, classified into one of the 12 categories, and saved to the archive. The “files on disk” count in the tree is <b className="text-slate-700">live</b> — it updates after every upload.</p>}
                   </div>
                 )}
               </>
