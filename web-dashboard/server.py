@@ -616,6 +616,61 @@ def llm_compare(payload: dict):
         return JSONResponse({"ok": False, "error": str(e)[:200]})
 
 
+@app.post("/api/ai-proposal")
+def ai_proposal(payload: dict):
+    """Local-LLM remediation draft for a flagged clause (Ollama, on this machine).
+
+    Body: { flag_field, flag_if, doc_num, doc_name, doc_type, severity }
+    Returns { ok, model, data: { proposal, rationale } } — ok:false when the
+    local engine is unavailable or its output is unusable; the UI then falls
+    back to its standard clause library (clearly labelled).
+    """
+    try:
+        field = str(payload.get("flag_field", ""))[:120]
+        flag_if = str(payload.get("flag_if", ""))[:400]
+        doc = f"#{payload.get('doc_num', '')} {payload.get('doc_name', '')}".strip()
+        doc_type = str(payload.get("doc_type", ""))
+        severity = str(payload.get("severity", ""))
+        purpose = str(payload.get("purpose", "remediation"))
+        if purpose == "summary":
+            prompt = (
+                "You are the risk officer of a hospital's document-management program. "
+                "Given the portfolio facts below, write a short executive summary (2-3 sentences): "
+                "where risk is concentrated and what to do first. Then one top priority. "
+                "Respond with STRICT JSON only: {\"summary\": 2-3 sentences, \"priority\": one sentence}. "
+                f"\n\nPORTFOLIO FACTS (computed in real time from monitored contracts):\n{flag_if}"
+            )
+            sysp = "Hospital document-risk officer. Concise, factual, no invented numbers."
+        else:
+            prompt = (
+                "You are a hospital contracts reviewer drafting a remediation proposal. "
+                "For the flagged issue below, produce a short concrete proposal a legal team "
+                "could put in the contract, plus one sentence on why it matters. "
+                "Respond with STRICT JSON only: {\"proposal\": the clause text / action, \"rationale\": one sentence}. "
+                "Keep the whole answer under 120 words.\n\n"
+                f"Document: {doc} ({doc_type})\nSeverity: {severity}\nFlag: {field}\nIssue: {flag_if}"
+            )
+            sysp = "Contract-remediation assistant at Southlake Health. Practical, specific, conservative."
+        out, model_used = ollama_chat_fallback([
+            {"role": "system", "content": sysp},
+            {"role": "user", "content": prompt},
+        ], temperature=0.3, timeout=120, fmt="json")
+        data = json.loads(out["message"]["content"])
+        if purpose == "summary":
+            summary = str(data.get("summary", "")).strip()
+            if not summary:
+                raise ValueError("empty summary")
+            return {"ok": True, "model": model_used,
+                    "data": {"proposal": summary, "rationale": str(data.get("priority", "")).strip()[:300]}}
+        proposal = str(data.get("proposal", "")).strip()
+        if not proposal:
+            raise ValueError("empty proposal")
+        return {"ok": True, "model": model_used,
+                "data": {"proposal": proposal[:800], "rationale": str(data.get("rationale", "")).strip()[:300]}}
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)[:200]})
+
+
 @app.post("/api/classify-and-file")
 async def classify_and_file(files: List[UploadFile] = File(...)):
     """Upload files, run AI classification, and auto-file into the correct folder."""
