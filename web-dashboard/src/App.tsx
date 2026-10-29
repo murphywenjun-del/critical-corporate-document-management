@@ -2695,6 +2695,17 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
   const sevOrder = { critical: 0, high: 1, medium: 2, low: 3 }
   allItems.sort((a, b) => (sevOrder[a.severity] - sevOrder[b.severity]) || ((b.isNew ? 1 : 0) - (a.isNew ? 1 : 0)) || (a.docNum - b.docNum))
 
+  // Archived = retention-complete docs (discard-eligible); shown as a disposal queue when the sidebar filter is on
+  const archRows = allContracts.filter((c) => retentionState(c).status === 'elapsed')
+  const fmtRetDate = (s: string) => new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const docChip = (c: ContractDoc) => {
+    const rs = retentionState(c)
+    if (rs.status === 'elapsed') return <span className="ml-1.5 text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded align-middle">ARCHIVED</span>
+    if (rs.status === 'hold') return <span className="ml-1.5 text-[11px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded align-middle" title={`Deletion not allowed yet — keep until ${fmtRetDate(retentionUntil(c))} (Schedule A)`}>EXPIRED · IN RETENTION</span>
+    if (rs.status === 'imminent') return <span className="ml-1.5 text-[11px] font-bold text-blue-700 bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded align-middle">EXPIRING SOON</span>
+    return <span className="ml-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded align-middle">ACTIVE</span>
+  }
+
   // Filter
   const filtered = allItems.filter((i) => {
     if (search) {
@@ -2763,6 +2774,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
         <div className="mb-4 flex items-center justify-between gap-3 bg-teal-50 border border-teal-200 rounded-lg px-4 py-2.5">
           <span className="text-[13px] text-teal-800">
             Active filter: <b className="font-bold">{expiryFilter.toUpperCase()}</b> — showing items from {allContracts.length} document{allContracts.length === 1 ? '' : 's'}
+            {expiryFilter !== 'Archived' && <span className="text-teal-700/80"> · document-level filter — the Status column shows the work item, the chip shows the document</span>}
           </span>
           <button onClick={onClearExpiry} className="text-[12px] font-semibold text-teal-700 hover:underline shrink-0">Clear filter</button>
         </div>
@@ -2832,6 +2844,59 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           )}
           <div className="px-4 py-2 border-t border-emerald-100 text-[11px] text-slate-400">Click "All" above to return to the open items.</div>
         </div>
+      ) : expiryFilter === 'Archived' ? (
+        /* Archive & Disposal Queue — retention complete, discard-eligible */
+        <div className="bg-white border border-slate-300 rounded-lg overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
+            <div className="text-[13px] font-bold text-slate-700">Archive &amp; Disposal Queue <span className="font-mono text-[11px] text-slate-400">({archRows.length})</span></div>
+            <div className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+              Retention period complete → discard-eligible. Disposal (digital + paper) needs owner sign-off (PolicyStat #19415930 §4.4) — "open" / "Expired" statuses above refer to the <b>work item</b>, not the document.
+            </div>
+          </div>
+          {archRows.length === 0 ? (
+            <div className="px-4 py-8 text-center text-[13px] text-slate-500">
+              No documents ready for disposal in this view.<br />
+              <span className="text-[11px] text-slate-400">Expired documents still in retention show here once their retention period completes.</span>
+            </div>
+          ) : (
+            <table className="w-full text-left">
+              <tbody className="divide-y divide-slate-100">
+                {archRows.map((c) => {
+                  const archKey = `arch-${c.num}`
+                  const pending = resolvedFlags.has(archKey)
+                  const owner = RETENTION_BY_TYPE[c.type]?.owner || DEFAULT_RETENTION.owner
+                  return (
+                    <tr key={c.num} className="hover:bg-slate-50/70 cursor-pointer transition" onClick={() => onSelectContract(c)}>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">ARCHIVED</span>
+                          <span className="font-mono text-[11px] text-slate-400">#{c.num}</span>
+                          <span className="text-[13px] font-medium text-slate-800">{c.displayName}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-1">Retention complete {fmtRetDate(retentionUntil(c))} — discard-eligible · owner: <b>{owner}</b></div>
+                      </td>
+                      <td className="px-4 py-2.5 text-right w-[220px]">
+                        {pending ? (
+                          <span className="text-[12px] font-semibold text-emerald-700">✓ Disposal recorded — pending owner sign-off</span>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.stopPropagation()
+                              onConfirmAction?.(`Prepare disposal sign-off`, `${c.displayName} (#${c.num})\nRetention complete: ${fmtRetDate(retentionUntil(c))}\nOwner: ${owner}\n\nDisposal of the record (digital + paper) requires the owner's written sign-off (PolicyStat #19415930 §4.4). Confirm the disposal has been logged.`, () => { onResolveFlag?.(archKey) }, true, `Disposal log entry prepared for ${owner} sign-off (${c.displayName} #${c.num}).`)
+                            }}
+                            disabled={!manageable}
+                            title={!manageable ? 'Edit / manage actions are restricted to the Legal role (demo RBAC)' : undefined}
+                            className="text-[13px] font-semibold text-white bg-slate-600 hover:bg-slate-700 rounded-md px-3.5 py-2 transition disabled:opacity-40 disabled:cursor-not-allowed">
+                            Prepare disposal →
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
       ) : (
         /* Task Table */
         <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
@@ -2855,6 +2920,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                   )}
                   <span className="font-mono text-[11px] text-slate-400">#{item.docNum}</span>
                   <span className="ml-1.5">{item.docLabel}</span>
+                  {expiryFilter && expiryFilter !== 'All' && expiryFilter !== 'Archived' && docChip(item.contract)}
                 </td>
                 <td className="px-4 py-2.5">
                   <span className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded ${
