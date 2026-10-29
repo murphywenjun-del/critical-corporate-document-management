@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { contracts, docLinks, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type ContractDoc, type Amendment, type DocLink,
-  ROLES, canView, canManage, archiveFileConf, contractToTemplateRef, DEMO_TODAY, CONF_LABEL, CONF_BADGE, retentionState, type Role,
+  ROLES, canView, canManage, archiveFileConf, contractToTemplateRef, DEMO_TODAY, CONF_LABEL, CONF_BADGE, retentionState, retentionUntil, type Role,
   TEMPLATE_LIBRARY, matchTemplate, classifyType, RISK_FRAMEWORK,
   SOUTHLAKE_RISK_TAXONOMY, flagHiroc, CRITERIA_BY_TYPE, RETENTION_BY_TYPE, DEFAULT_RETENTION, LITIGATION_HOLD_NOTE } from './data'
 
@@ -630,6 +630,7 @@ function ContractList({
         const locked = role ? !canView(role, c) : false
         // Repository meta (item 5, 2026-10-17: centralized contract repository)
         const expired = !!c.expiryDate && c.expiryDate < DEMO_TODAY
+        const retentionDone = retentionState(c).status === 'elapsed' // retention period complete → archived, discard eligible
         const openCount = c.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${c.num}-${f.field}`))).length
         const relatedCount =
           (c.amendments?.length ?? 0) +
@@ -674,7 +675,9 @@ function ContractList({
                     <p className="text-[13px] text-slate-500 truncate" title={c.summary}>{c.summary}</p>
                     {/* Repository row: status · storage location · related documents */}
                     <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-1">
-                      <span className={`font-bold ${expired ? 'text-red-600' : 'text-emerald-600'}`}>{expired ? 'EXPIRED' : 'ACTIVE'}</span>
+                      <span className={`font-bold ${retentionDone ? 'text-slate-500' : expired ? 'text-red-600' : 'text-emerald-600'}`} title={retentionDone ? `Retention period complete (${retentionUntil(c)}) — eligible for disposal` : undefined}>
+                        {retentionDone ? 'ARCHIVED' : expired ? 'EXPIRED' : 'ACTIVE'}
+                      </span>
                       <span className="text-slate-300">·</span>
                       <span className="font-mono truncate" title={c.filePath} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg className="w-3 h-3 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>{c.filePath}</span>
                       <span className="text-slate-300">·</span>
@@ -1381,10 +1384,15 @@ function DeadlinesTable({ contracts: allContracts, onSelectContract }: { contrac
     expired: 'EXPIRED', critical: 'CRITICAL', warning: 'UPCOMING', ok: 'ACTIVE',
   }
 
+  const archivedCount = rows.filter((r) => retentionState(r.c).status === 'elapsed').length
   return (
     <div>
       {/* Summary bar */}
       <div className="flex gap-4 mb-4">
+        <div className="flex-1 bg-slate-100 border border-slate-200 rounded-lg p-3 text-center">
+          <div className="text-2xl font-bold text-slate-600">{archivedCount}</div>
+          <div className="text-[11px] text-slate-500 uppercase tracking-wide mt-0.5">Archived</div>
+        </div>
         {(['expired','critical','warning','ok'] as const).map((u) => {
           const count = rows.filter((r) => r.urgency === u).length
           const uc = urgencyColors[u]
@@ -2492,7 +2500,7 @@ function SettingsSidebar({
   const types = ['All', ...Array.from(new Set(contracts.map((c) => c.type)))]
   const risks = ['All', 'Low', 'Critical']
   const departments = ['All', ...SOUTHDEPARTMENTS]
-  const expiries = ['All', 'Expired', '< 30d', '< 90d', '> 90d']
+  const expiries = ['All', 'Expired', '< 30d', '< 90d', '> 90d', 'Archived']
   const [showAllDepts, setShowAllDepts] = useState(false)
   const deptOptions = showAllDepts ? departments : ['All', ...departments.slice(1, 5)]
 
@@ -3825,6 +3833,7 @@ function App() {
       if (filterExpiry === '< 30d' && (days < 0 || days > 30)) return false
       if (filterExpiry === '< 90d' && (days < 0 || days > 90)) return false
       if (filterExpiry === '> 90d' && days <= 90) return false
+      if (filterExpiry === 'Archived' && retentionState(c).status !== 'elapsed') return false
     }
     return true
   })

@@ -1183,7 +1183,7 @@ export const contracts: ContractDoc[] = [
     jev: { riskSeverity: { choice: "high", confidence: 0.86 }, needsHumanReview: 0.90, isComplianceRelated: 0.86, shouldAlert: 0.91, decisionConfidence: 0.0 },
     compliance: { hardGaps: 4, bpGaps: 2, complianceRate: 0.33, topRiskField: "signatories" },
     department: "IT / Info Systems", expiryDate: "2022-03-01",
-    confidentiality: "confidential", retentionYears: 7, retentionBasis: "Schedule A C21 — legacy 2019 license: life of agreement + 7 years (2019 review-cycle assumption retired)", retentionOwner: "Legal Services (with IT archive)", paper: { copies: 3, location: "Records archive — 2019 originals + scans" },
+    confidentiality: "confidential", retentionYears: 3, retentionBasis: "Pre-schedule legacy 2019 license — 3-year legacy retention cycle (complete 2025-03-01, discard-eligible; policy §1.1 discretion). Schedule A C21 applies to agreements signed from 2023 on.", retentionOwner: "Legal Services (with IT archive)", paper: { copies: 3, location: "Records archive — 2019 originals + scans" },
   },
   // ── NEW Contract 9: IT Master Services Agreement (from Exelon/NSW template structure) ──
   {
