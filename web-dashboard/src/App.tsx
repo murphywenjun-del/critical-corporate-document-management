@@ -630,7 +630,7 @@ function ContractList({
         const locked = role ? !canView(role, c) : false
         // Repository meta (item 5, 2026-10-17: centralized contract repository)
         const expired = !!c.expiryDate && c.expiryDate < DEMO_TODAY
-        const retentionDone = retentionState(c).status === 'elapsed' // retention period complete → archived, discard eligible
+        // (retention display now driven by retentionState() directly, 4-state)
         const openCount = c.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${c.num}-${f.field}`))).length
         const relatedCount =
           (c.amendments?.length ?? 0) +
@@ -675,9 +675,12 @@ function ContractList({
                     <p className="text-[13px] text-slate-500 truncate" title={c.summary}>{c.summary}</p>
                     {/* Repository row: status · storage location · related documents */}
                     <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-1">
-                      <span className={`font-bold ${retentionDone ? 'text-slate-500' : expired ? 'text-red-600' : 'text-emerald-600'}`} title={retentionDone ? `Retention period complete (${retentionUntil(c)}) — eligible for disposal` : undefined}>
-                        {retentionDone ? 'ARCHIVED' : expired ? 'EXPIRED' : 'ACTIVE'}
-                      </span>
+                      {(() => { const rs = retentionState(c);
+                        if (rs.status === 'elapsed') return <span className="font-bold text-slate-500" title={`Retention period complete (${retentionUntil(c)}) — eligible for disposal`}>ARCHIVED</span>
+                        if (rs.status === 'hold') return <span className="font-bold text-amber-600" title={`Deletion not allowed yet — keep until ${retentionUntil(c)} (Schedule A)`}>EXPIRED · IN RETENTION</span>
+                        if (expired) return <span className="font-bold text-red-600" title={c.expiryDate ? `Expired ${c.expiryDate}` : undefined}>EXPIRED</span>
+                        return <span className="font-bold text-emerald-600" title={c.expiryDate ? `Expires ${c.expiryDate}` : 'No expiry date on file'}>ACTIVE</span>
+                      })()}
                       <span className="text-slate-300">·</span>
                       <span className="font-mono truncate" title={c.filePath} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg className="w-3 h-3 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>{c.filePath}</span>
                       <span className="text-slate-300">·</span>
