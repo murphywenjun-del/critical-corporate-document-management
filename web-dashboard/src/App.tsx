@@ -61,9 +61,9 @@ function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Con
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-sm mx-4 p-5">
-        <div className="text-sm font-bold text-slate-900 mb-1">{title}</div>
-        <div className="text-xs text-slate-600 mb-3 whitespace-pre-line">{message}</div>
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-xl mx-4 p-6">
+        <div className="text-base font-bold text-slate-900 mb-2">{title}</div>
+        <div className="text-[13px] leading-relaxed text-slate-600 mb-4 whitespace-pre-line">{message}</div>
         {showNote && (
           <div className="mb-3">
             <div className="flex items-center gap-1.5 mb-1">
@@ -88,17 +88,17 @@ function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Con
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder={aiBusy ? 'Drafting locally… (read-only until the AI finishes, ~15 s)' : 'e.g. Updated contract with legal, added clause 8.2…'}
+              placeholder={aiBusy ? 'Drafting locally… (read-only until the AI finishes, ~15 s)' : 'e.g. Updated contract with legal, added clause 8.2, re-executed with both parties, filed amendment…'}
               readOnly={aiBusy}
-              rows={2}
-              className={`w-full text-xs border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-teal-300 ${aiBusy ? 'bg-slate-50 text-slate-500' : ''}`}
+              rows={6}
+              className={`w-full text-[13px] leading-relaxed border border-slate-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-teal-300 resize-y ${aiBusy ? 'bg-slate-50 text-slate-500' : ''}`}
             />
           </div>
         )}
         <div className="text-[11px] text-slate-400 mb-3">Resolved by: You · {new Date().toLocaleDateString()}</div>
         <div className="flex gap-2">
-          <button onClick={onCancel} className="flex-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg py-2 transition">Cancel</button>
-          <button onClick={() => onConfirm(showNote ? note : undefined)} className={`flex-1 text-xs font-bold text-white rounded-lg py-2 transition ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-teal-600 hover:bg-teal-700'}`}>{confirmLabel}</button>
+          <button onClick={onCancel} className="flex-1 text-[13px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg py-2.5 transition">Cancel</button>
+          <button onClick={() => onConfirm(showNote ? note : undefined)} className={`flex-1 text-[13px] font-bold text-white rounded-lg py-2.5 transition ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-teal-600 hover:bg-teal-700'}`}>{confirmLabel}</button>
         </div>
       </div>
     </div>
