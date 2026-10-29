@@ -2546,7 +2546,7 @@ function SettingsSidebar({
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
 function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields, manageable }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string, aiDraft?: () => Promise<string>) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[]; manageable?: boolean }) {
-  const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref'>('all')
+  const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref' | 'resolved'>('all')
   const [showResolved, setShowResolved] = useState(false)
   const [search, setSearch] = useState('')
 
@@ -2710,13 +2710,11 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           <div className="text-2xl font-bold text-blue-600">{counts.expiring}</div>
           <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Expiring</div>
         </button>
-        <div className="p-3 rounded-lg border border-emerald-200 bg-emerald-50">
+        <button onClick={() => setFilter('resolved')} className={`text-left p-3 rounded-lg border transition ${filter === 'resolved' ? 'border-emerald-400 bg-emerald-100 ring-2 ring-emerald-200' : 'border-emerald-200 bg-emerald-50 hover:border-emerald-400'}`}>
           <div className="text-2xl font-bold text-emerald-600">{totalResolved}</div>
           <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wide mt-0.5">Resolved</div>
-          {totalResolved > 0 && (
-            <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); window.location.reload() }} className="mt-1 text-[11px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
-          )}
-        </div>
+          <div className="mt-1 text-[11px] font-semibold text-emerald-600">{filter === 'resolved' ? '▲ Showing log' : '▼ View log'}</div>
+        </button>
       </div>
 
       {/* Search + Filter — the 4 big cards above already act as quick filters, so this row is just search + count */}
@@ -2760,8 +2758,45 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
         </div>
       )}
 
-      {/* Task Table */}
-      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+      {/* Resolved log — full record, replaces the open-items table while the Resolved tile is active */}
+      {filter === 'resolved' ? (
+        <div className="bg-white border border-emerald-200 rounded-lg overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-emerald-100 flex items-center justify-between gap-3">
+            <span className="text-[13px] font-semibold text-emerald-800">Resolved log ({totalResolved})</span>
+            {totalResolved > 0 && (
+              <button
+                onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); window.location.reload() }}
+                className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-800 hover:underline"
+              >
+                Reset all
+              </button>
+            )}
+          </div>
+          {totalResolved === 0 ? (
+            <div className="px-4 py-8 text-center">
+              <p className="text-[13px] text-slate-500">No fixes recorded yet.</p>
+              <p className="text-[12px] text-slate-400 mt-1">Confirm a "Fix →" on any flag in the open items and it will be logged here with a timestamp.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-emerald-100">
+              {(resolvedLog || []).map((entry) => (
+                <div key={entry.id} className="px-4 py-2.5 text-[12px]">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-slate-700 truncate">{entry.label}</span>
+                    <span className="text-slate-400 shrink-0">{entry.time}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Resolved by: <span className="font-medium text-slate-500">{entry.who || 'You'}</span> · {entry.type === 'workflow' ? 'Cross-Ref' : 'Flag'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="px-4 py-2 border-t border-emerald-100 text-[11px] text-slate-400">Click "All" above to return to the open items.</div>
+        </div>
+      ) : (
+        /* Task Table */
+        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
@@ -2845,7 +2880,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
             Showing 15 of {filtered.length} · Use filters to narrow down
           </div>
         )}
-      </div>
+      </div>)}
 
     </div>
   )
