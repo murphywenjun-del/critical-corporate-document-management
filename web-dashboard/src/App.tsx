@@ -1277,6 +1277,69 @@ function TemplateMatchView({ allContracts, role }: { allContracts: ContractDoc[]
 
   return (
     <div>
+      {/* AI Clause Review — moved to the TOP of the page (directly under the Template Match tab key group) */}
+      <div style={{ background: incoming ? '#fff' : '#f8fafc', border: '1px solid ' + (incoming ? '#e2e8f0' : '#cbd5e1'), borderRadius: 14, padding: 18, marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 800 }}>AI Clause Review</span>
+          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: '#f0fdfa', color: '#0f766e', fontWeight: 700 }}>local Ollama · runs on this machine</span>
+          <button
+            onClick={runAiReview}
+            disabled={ai.status === 'loading' || !incoming || !result}
+            style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '6px 14px', borderRadius: 8, border: '1px solid #0d9488', background: ai.status === 'loading' ? '#ccfbf1' : (!incoming || !result) ? '#e2e8f0' : '#0d9488', color: ai.status === 'loading' || !incoming || !result ? '#94a3b8' : '#fff', cursor: ai.status === 'loading' || !incoming || !result ? 'not-allowed' : 'pointer', opacity: ai.status === 'loading' ? 0.7 : 1 }}
+          >
+            {ai.status === 'loading' ? 'Generating…' : ai.status === 'done' ? 'Re-run AI review' : 'Run AI review'}
+          </button>
+        </div>
+        {!incoming && (
+          <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.6 }}>
+            Select the incoming agreement below to run the comparison — then “Run AI review” sends the clause diff to the
+            local Ollama model for a legal-review summary.
+          </div>
+        )}
+        {incoming && ai.status === 'idle' && (
+          <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.6 }}>
+            Sends the clause diff below to the local Ollama model for a legal-review summary: what a reviewer
+            should focus on, which findings matter most, and any clause risks the deterministic engine may have
+            under-weighted. Runs entirely on this machine (127.0.0.1:11434).
+          </div>
+        )}
+        {incoming && ai.status === 'loading' && (
+          <div style={{ fontSize: 11, color: '#64748b' }}>Local model generating review… (~10–40 s)</div>
+        )}
+        {incoming && ai.status === 'error' && (
+          <div style={{ fontSize: 11, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 10, lineHeight: 1.5 }}>
+            AI review unavailable: {ai.error}. The deterministic clause diff below remains the source of truth —
+            start Ollama (ollama serve) and try again.
+          </div>
+        )}
+        {incoming && ai.status === 'done' && ai.data && (
+          <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.6 }}>
+            <div style={{ marginBottom: 10 }}>{ai.data.summary}</div>
+            {ai.data.key_findings && ai.data.key_findings.length > 0 && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', marginBottom: 4 }}>KEY FINDINGS</div>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {ai.data.key_findings.map((f, i) => (
+                    <li key={i} style={{ marginBottom: 3 }}>{f}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {ai.data.review_focus && ai.data.review_focus.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', marginBottom: 4 }}>REVIEW FOCUS</div>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {ai.data.review_focus.map((f, i) => (
+                    <li key={i} style={{ marginBottom: 3 }}>{f}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div style={{ fontSize: 9, color: '#cbd5e1', marginTop: 10 }}>Generated locally by {ai.model} — assistive only; the clause diff below is the system of record.</div>
+          </div>
+        )}
+      </div>
+
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
         <div style={{ flex: 1, minWidth: 280, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>INCOMING AGREEMENT (select a Southlake contract to compare)</div>
@@ -1359,7 +1422,7 @@ function TemplateMatchView({ allContracts, role }: { allContracts: ContractDoc[]
               </div>
               <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 10, lineHeight: 1.5 }}>
                 Deterministic clause alignment over extracted fields (runs offline, instant). For clause-text-level
-                judgment, use “AI Clause Review” below — local Ollama, no cloud.
+                judgment, use “AI Clause Review” above — local Ollama, no cloud.
               </div>
             </div>
           </div>
@@ -1427,62 +1490,7 @@ function TemplateMatchView({ allContracts, role }: { allContracts: ContractDoc[]
             </div>
           </div>
 
-          {/* AI clause review — real local LLM (Ollama), no cloud */}
-          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 18, marginTop: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, fontWeight: 800 }}>AI Clause Review</span>
-              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: '#f0fdfa', color: '#0f766e', fontWeight: 700 }}>local Ollama · runs on this machine</span>
-              <button
-                onClick={runAiReview}
-                disabled={ai.status === 'loading'}
-                style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '6px 14px', borderRadius: 8, border: '1px solid #0d9488', background: ai.status === 'loading' ? '#ccfbf1' : '#0d9488', color: '#fff', cursor: ai.status === 'loading' ? 'default' : 'pointer', opacity: ai.status === 'loading' ? 0.7 : 1 }}
-              >
-                {ai.status === 'loading' ? 'Generating…' : ai.status === 'done' ? 'Re-run AI review' : 'Run AI review'}
-              </button>
-            </div>
-            {ai.status === 'idle' && (
-              <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.6 }}>
-                Sends the clause diff above to the local Ollama model for a legal-review summary: what a reviewer
-                should focus on, which findings matter most, and any clause risks the deterministic engine may have
-                under-weighted. Runs entirely on this machine (127.0.0.1:11434).
-              </div>
-            )}
-            {ai.status === 'loading' && (
-              <div style={{ fontSize: 11, color: '#64748b' }}>Local model generating review… (~10–40 s)</div>
-            )}
-            {ai.status === 'error' && (
-              <div style={{ fontSize: 11, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 10, lineHeight: 1.5 }}>
-                AI review unavailable: {ai.error}. The deterministic clause diff above remains the source of truth —
-                start Ollama (ollama serve) and try again.
-              </div>
-            )}
-            {ai.status === 'done' && ai.data && (
-              <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.6 }}>
-                <div style={{ marginBottom: 10 }}>{ai.data.summary}</div>
-                {ai.data.key_findings && ai.data.key_findings.length > 0 && (
-                  <div style={{ marginBottom: 10 }}>
-                    <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', marginBottom: 4 }}>KEY FINDINGS</div>
-                    <ul style={{ margin: 0, paddingLeft: 18 }}>
-                      {ai.data.key_findings.map((f, i) => (
-                        <li key={i} style={{ marginBottom: 3 }}>{f}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                {ai.data.review_focus && ai.data.review_focus.length > 0 && (
-                  <div>
-                    <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', marginBottom: 4 }}>REVIEW FOCUS</div>
-                    <ul style={{ margin: 0, paddingLeft: 18 }}>
-                      {ai.data.review_focus.map((f, i) => (
-                        <li key={i} style={{ marginBottom: 3 }}>{f}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                <div style={{ fontSize: 9, color: '#cbd5e1', marginTop: 10 }}>Generated locally by {ai.model} — assistive only; the clause diff above is the system of record.</div>
-              </div>
-            )}
-          </div>
+          {/* AI Clause Review moved to the top of the page — see card above the selectors */}
         </>
       )}
     </div>
