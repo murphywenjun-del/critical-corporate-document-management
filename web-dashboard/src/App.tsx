@@ -2657,7 +2657,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           docNum: c.num,
           contract: c,
           severity: days < 0 ? 'critical' : days < 30 ? 'high' : 'medium',
-          status: days < 0 ? 'Expired' : `${days}d left`,
+          status: days < 0 ? 'Past due' : `${days}d left`,
           action: days < 0 ? 'Renew' : 'Schedule',
           due: c.expiryDate,
         })
@@ -2774,7 +2774,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
         <div className="mb-4 flex items-center justify-between gap-3 bg-teal-50 border border-teal-200 rounded-lg px-4 py-2.5">
           <span className="text-[13px] text-teal-800">
             Active filter: <b className="font-bold">{expiryFilter.toUpperCase()}</b> — showing items from {allContracts.length} document{allContracts.length === 1 ? '' : 's'}
-            {expiryFilter !== 'Archived' && <span className="text-teal-700/80"> · document-level filter — the Status column shows the work item, the chip shows the document</span>}
+            {expiryFilter !== 'Archived' && <span className="text-teal-700/80"> · document-level filter — rows are that document's <b>work items</b> ("open" = not yet resolved; "Past due" = renewal deadline passed), the chip shows the <b>document</b> status</span>}
           </span>
           <button onClick={onClearExpiry} className="text-[12px] font-semibold text-teal-700 hover:underline shrink-0">Clear filter</button>
         </div>
@@ -2906,7 +2906,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
               <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Issue</th>
               <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Document</th>
               <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Severity</th>
-              <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Status</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Item status</th>
               <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide text-right">Action</th>
             </tr>
           </thead>
