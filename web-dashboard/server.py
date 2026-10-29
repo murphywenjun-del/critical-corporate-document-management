@@ -533,10 +533,10 @@ OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gemma3:1b")
 OLLAMA_FALLBACK_MODEL = "gemma3:1b"
 
 
-def ollama_chat(messages, temperature=0.2, timeout=90, fmt=None, model=None):
+def ollama_chat(messages, temperature=0.2, timeout=90, fmt=None, model=None, options=None):
     """Call a local Ollama model. Raises if the server is unreachable or times out."""
     payload = {"model": model or OLLAMA_MODEL, "messages": messages, "stream": False,
-               "options": {"temperature": temperature}}
+               "options": {"temperature": temperature, **(options or {})}}
     if fmt:
         payload["format"] = fmt
     req = urllib.request.Request(OLLAMA_URL + "/api/chat",
@@ -547,17 +547,17 @@ def ollama_chat(messages, temperature=0.2, timeout=90, fmt=None, model=None):
         return json.loads(r.read().decode())
 
 
-def ollama_chat_fallback(messages, temperature=0.2, timeout=90, fmt=None):
+def ollama_chat_fallback(messages, temperature=0.2, timeout=90, fmt=None, options=None):
     """ollama_chat with automatic fallback to gemma3:1b when the primary model fails.
 
     Returns (response_dict, model_used).
     """
     try:
-        return ollama_chat(messages, temperature=temperature, timeout=timeout, fmt=fmt), OLLAMA_MODEL
+        return ollama_chat(messages, temperature=temperature, timeout=timeout, fmt=fmt, options=options), OLLAMA_MODEL
     except Exception:
         if OLLAMA_MODEL != OLLAMA_FALLBACK_MODEL:
             out = ollama_chat(messages, temperature=temperature, timeout=timeout,
-                              fmt=fmt, model=OLLAMA_FALLBACK_MODEL)
+                              fmt=fmt, model=OLLAMA_FALLBACK_MODEL, options=options)
             return out, OLLAMA_FALLBACK_MODEL + " (fallback)"
         raise
 
@@ -749,46 +749,62 @@ def retrieve_snippets(question: str, limit: int = 3):
 def ai_chat(payload: dict):
     """Local-LLM chat copilot for the dashboard (Ollama on this machine, no cloud).
 
-    Body: { message, context, history: [{role, content}...] }
+    Body: { message, context, history: [{role, content}...], role, excluded_paths: [category prefixes] }
     RAG context = app state snapshot sent by the UI + on-disk archive snippets
-    matched against the question. Returns { ok, model, ms, answer, sources }.
-    ok:false when the local engine is unavailable — the UI says so and never
-    falls back to a cloud provider.
+    matched against the question (snippets under the role's excluded path
+    prefixes are withheld — RBAC-aware retrieval). The model answers in strict
+    JSON: { answer, note } — answer is the user-facing reply, note carries an
+    access/restriction caveat when one applies. Returns { ok, model, ms, answer,
+    note, sources }. ok:false when the local engine is unavailable — the UI says
+    so and never falls back to a cloud provider.
     """
     t0 = time.time()
     try:
         message = str(payload.get("message", "")).strip()[:500]
-        context = str(payload.get("context", "")).strip()[:2400]
+        context = str(payload.get("context", "")).strip()[:2600]
         history = payload.get("history", [])[-3:]
+        role = str(payload.get("role", "n/a"))[:40]
+        excluded = [str(p).strip().lower() for p in payload.get("excluded_paths", []) if str(p).strip()][:20]
         if not message:
             return JSONResponse({"ok": False, "error": "empty message"}, status_code=400)
 
-        snippets = retrieve_snippets(message, limit=3)
+        snippets = [s for s in retrieve_snippets(message, limit=4)
+                    if not any(ex and s["path"].lower().startswith(ex) for ex in excluded)]
         rag = ""
         if snippets:
-            rag = "\n\nRELEVANT EXCERPTS FROM THE ON-DISK ARCHIVE (cite the file path):\n" + "\n".join(
+            rag = "\n\nRELEVANT EXCERPTS FROM THE ON-DISK ARCHIVE (cite the file path in your answer when you use one):\n" + "\n".join(
                 f"- {s['path']}: {s['snippet']}" for s in snippets
             )
 
-        msgs = [{"role": "system", "content": (
-            "You are the CCDM compliance copilot at Southlake Health, a hospital. "
-            "You answer questions about the document portfolio, flags, retention rules and policies "
-            "using ONLY the context below. Be concise (under 150 words), concrete, and cite document "
-            "numbers (#n) or file paths when they help. If the context does not contain the answer, "
-            "say so plainly — do not invent facts or numbers."        )}]
+        sysp = (
+            "You are CCDM AI, the compliance copilot of Southlake Health's document-management tool "
+            f"(the user is working as the '{role}' role). You are a senior records & contracts analyst: "
+            "answer like a helpful professional colleague — direct, specific, plain language, no filler. "
+            "Use ONLY the information provided below (app snapshot + archive excerpts). Rules: "
+            "(1) Cite document numbers (#n) and concrete dates/values from the snapshot when relevant; "
+            "(2) if a fact is not in the context, say it plainly is not available — never invent numbers or documents; "
+            "(3) documents NOT listed in the snapshot are restricted for this role: if the question touches "
+            "them, say the content is not viewable under this role and who can view it, without describing it; "
+            "(4) keep answers under 160 words; short bullet lists are welcome for enumerations. "
+            "Respond with STRICT JSON only: {\"answer\": the reply, \"note\": a one-line access/policy caveat or empty string}."
+        )
+        user_msg = f"APP STATE SNAPSHOT (live, role-scoped to '{role}':)\n{context}{rag}\n\nQUESTION: {message}"
+        msgs = [{"role": "system", "content": sysp}]
         for h in history:
-            role = "assistant" if str(h.get("role", "")) == "assistant" else "user"
-            msgs.append({"role": role, "content": str(h.get("content", ""))[:400]})
-        msgs.append({"role": "user", "content": (
-            f"APP STATE SNAPSHOT (live):\n{context}\n{rag}\n\nQUESTION: {message}"
-        )})
-        out, model_used = ollama_chat_fallback(msgs, temperature=0.2, timeout=150)
-        answer = (out.get("message", {}).get("content") or "").strip()
+            r = "assistant" if str(h.get("role", "")) == "assistant" else "user"
+            msgs.append({"role": r, "content": str(h.get("content", ""))[:500]})
+        msgs.append({"role": "user", "content": user_msg})
+        out, model_used = ollama_chat_fallback(
+            msgs, temperature=0.15, timeout=180, fmt="json",
+            options={"num_ctx": 8192, "num_predict": 520})
+        data = json.loads(out["message"]["content"])
+        answer = str(data.get("answer", "")).strip()
         if not answer:
             raise ValueError("empty LLM answer")
         return {
             "ok": True, "model": model_used, "ms": int((time.time() - t0) * 1000),
-            "answer": answer[:900],
+            "answer": answer[:1000],
+            "note": str(data.get("note", "")).strip()[:200],
             "sources": [s["path"] for s in snippets],
         }
     except Exception as e:

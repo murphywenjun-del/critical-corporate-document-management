@@ -107,15 +107,43 @@ function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Con
 
 
 // ── AI Copilot (local Ollama RAG-style chat) ───────────────────────────────────
-function AiBot({ context, roleLabel }: { context: string; roleLabel: string }) {
-  type Msg = { role: 'user' | 'assistant' | 'sys'; text: string; sources?: string[]; model?: string; ms?: number }
-  const [open, setOpen] = useState(false)
+function AiBot({ open, onOpenChange, context, roleLabel, role, excludedPaths }: { open: boolean; onOpenChange: (v: boolean) => void; context: string; roleLabel: string; role: string; excludedPaths: string[] }) {
+  type Msg = { role: 'user' | 'assistant' | 'sys'; text: string; sources?: string[]; model?: string; ms?: number; note?: string }
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
 
+  // Draggable panel: pinned to the LEFT or RIGHT edge (never centered), free vertical position.
+  const [side, setSide] = useState<'left' | 'right'>('right')
+  const [top, setTop] = useState(64)
+  const dragRef = useRef<{ startY: number; startTop: number; grabOffset: number } | null>(null)
+
   useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight }, [msgs, busy, open])
+
+  const clampTop = (t: number) => {
+    const h = 560
+    const min = 8
+    const max = Math.max(min, window.innerHeight - h - 8)
+    return Math.min(max, Math.max(min, t))
+  }
+  const onDragStart = (e: React.MouseEvent) => {
+    // only start from the header grip, not from buttons inside the header
+    if ((e.target as HTMLElement).closest('button')) return
+    dragRef.current = { startY: e.clientY, startTop: top, grabOffset: 0 }
+    const onMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return
+      setTop(clampTop(dragRef.current.startTop + (ev.clientY - dragRef.current.startY)))
+    }
+    const onUp = () => {
+      dragRef.current = null
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+  const PANEL_H = 560
 
   const send = async (text?: string) => {
     const q = (text ?? input).trim()
@@ -127,11 +155,11 @@ function AiBot({ context, roleLabel }: { context: string; roleLabel: string }) {
     try {
       const res = await fetch('/api/ai-chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: q, context, history }),
+        body: JSON.stringify({ message: q, context, history, role, excluded_paths: excludedPaths }),
       })
       const data = await res.json().catch(() => ({ ok: false, error: 'unparseable response' }))
       if (data.ok) {
-        setMsgs((prev) => [...prev, { role: 'assistant', text: data.answer, sources: data.sources || [], model: data.model, ms: data.ms }])
+        setMsgs((prev) => [...prev, { role: 'assistant', text: data.answer, sources: data.sources || [], model: data.model, ms: data.ms, note: data.note || '' }])
       } else {
         setMsgs((prev) => [...prev, { role: 'sys', text: `Local AI unavailable (${data.error || 'no response'}). The engine is Ollama on this machine — start it (and the dashboard server) to enable chat. Nothing is ever sent to the cloud.` }])
       }
@@ -151,28 +179,35 @@ function AiBot({ context, roleLabel }: { context: string; roleLabel: string }) {
 
   return (
     <>
-      {/* Floating launcher */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="fixed bottom-5 right-5 z-[90] flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white shadow-xl rounded-full pl-4 pr-5 py-3 transition"
-        title="CCDM Assistant — local AI copilot"
-      >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8m-8 4h5m-9 6l-2-2v-9a2 2 0 012-2h14a2 2 0 012 2v7a2 2 0 01-2 2h-9l-5 5z" />
-        </svg>
-        <span className="text-[13px] font-bold">CCDM AI</span>
-      </button>
-
       {open && (
-        <div className="fixed bottom-20 right-5 z-[95] w-[400px] max-w-[92vw] h-[540px] max-h-[72vh] bg-white rounded-xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
-          {/* header */}
-          <div className="px-4 py-3 bg-slate-900 text-white shrink-0">
+        <div
+          className={`fixed z-[95] w-[420px] max-w-[94vw] bg-white rounded-xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden ${side === 'left' ? 'left-4' : 'right-4'}`}
+          style={{ top, height: Math.min(PANEL_H, window.innerHeight - 16) }}
+        >
+          {/* header — drag handle (vertical) + side toggle */}
+          <div
+            onMouseDown={onDragStart}
+            className="px-4 py-3 bg-slate-900 text-white shrink-0 cursor-grab active:cursor-grabbing select-none"
+            title="Drag up / down · panel stays pinned to the edge"
+          >
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-[14px] font-bold">CCDM Assistant</div>
-                <div className="text-[11px] text-slate-300 mt-0.5">Local Ollama · answers from live app data + on-disk archive · role: {roleLabel}</div>
+                <div className="text-[14px] font-bold flex items-center gap-2">
+                  <span className="text-slate-500 text-[11px] leading-none">⋮⋮</span> CCDM Assistant
+                </div>
+                <div className="text-[11px] text-slate-300 mt-0.5">Local Ollama · role-scoped to {roleLabel} · drag the header to move it up/down</div>
               </div>
-              <button onClick={() => setOpen(false)} className="w-7 h-7 rounded-full hover:bg-slate-700 text-slate-300">✕</button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setSide(side === 'left' ? 'right' : 'left') }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className="text-[11px] font-bold bg-slate-700 hover:bg-slate-600 rounded px-2 py-1"
+                  title="Move to the other edge (the panel is never centered)"
+                >
+                  {side === 'left' ? '→ Right' : '← Left'}
+                </button>
+                <button onClick={() => onOpenChange(false)} onMouseDown={(e) => e.stopPropagation()} className="w-7 h-7 rounded-full hover:bg-slate-700 text-slate-300">✕</button>
+              </div>
             </div>
           </div>
 
@@ -196,6 +231,7 @@ function AiBot({ context, roleLabel }: { context: string; roleLabel: string }) {
               ) : (
                 <div key={i} className="mr-4 text-[13px] bg-white border border-slate-200 rounded-xl rounded-tl-sm px-3.5 py-2.5 leading-relaxed text-slate-800 whitespace-pre-line">
                   {m.text}
+                  {m.note && <div className="mt-2 text-[11px] italic text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1">{m.note}</div>}
                   {(m.sources?.length || m.model) && (
                     <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-400">
                       {m.model && <span>local · {m.model}{m.ms ? ` · ${Math.round(m.ms / 1000)} s` : ''}</span>}
@@ -208,7 +244,7 @@ function AiBot({ context, roleLabel }: { context: string; roleLabel: string }) {
             {busy && (
               <div className="flex items-center gap-2 text-[12px] text-slate-500">
                 <span className="w-3 h-3 border-2 border-teal-200 border-t-teal-600 rounded-full animate-spin shrink-0" />
-                Local AI is thinking (~15–25 s on this machine)…
+                Local AI is thinking (8k context, ~20–40 s on this machine)…
               </div>
             )}
           </div>
@@ -3996,6 +4032,7 @@ function App() {
   const [filterRisk, setFilterRisk] = useState('All')
   const [filterDept, setFilterDept] = useState('All')
   const [filterExpiry, setFilterExpiry] = useState('All')
+  const [aiOpen, setAiOpen] = useState(false) // top-right AI copilot
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [processLink, setProcessLink] = useState<DocLink | null>(null)
@@ -4090,11 +4127,16 @@ function App() {
     : 0
   const retentionAlertCount = visible.filter((c) => retentionState(c).status !== 'retained').length
 
+  // RBAC-aware RAG: withhold archive paths that belong to documents this role cannot view
+  const hiddenDocs = filtered.filter((c) => !canView(role, c))
+  const excludedPaths = Array.from(new Set(hiddenDocs.map((c) => String(c.filePath || c.type).split('/').slice(0, 2).join('/')))).map((p) => p.toLowerCase())
+
   // ── Live context snapshot for the AI copilot (sent to /api/ai-chat, answered locally) ──
   const botContext = (() => {
     const lines = [
       `Today (demo reference date): ${DEMO_TODAY}. Active role: ${role?.label || 'n/a'} — ${visible.length} of ${filtered.length} documents visible (${hiddenCount} hidden by role access).`,
       `KPIs: ${openFlagsCount} open flags, ${criticalOpenCount} critical, ${remediatedCount} remediated, ${retentionAlertCount} retention alerts, criteria-met average ${avgCompliance}%.`,
+      hiddenCount > 0 ? `${hiddenCount} document(s) are HIDDEN from this role (restricted / PHI). If asked about them, state that the content is not viewable under '${role?.label}' (only the Legal role sees everything) — do not describe the content.` : 'All documents are viewable under this role.',
       'Retention policy (PolicyStat #19415930 Schedule A): C21 contracts/MOU/NDA/procurement = life of agreement + 7 years (Legal Services); R12 research data-sharing = project expiry year + 7 years (Director of Research); R1/R7 clinical trials = completion + 15 years; litigation/FOI/PHI access holds (R1) block disposal until the matter closes; expired-but-in-retention documents may NOT be deleted yet.',
     ]
     for (const c of visible) {
@@ -4248,6 +4290,16 @@ function App() {
               <span className="text-[11px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded px-2 py-0.5">{role.user}</span>
               <button onClick={handleLogout} className="text-[11px] text-slate-400 hover:text-slate-600 transition">Sign out</button>
             </div>
+            <button
+              onClick={() => setAiOpen((v) => !v)}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition shadow-sm ${aiOpen ? 'bg-slate-800 hover:bg-slate-900 text-white' : 'bg-teal-600 hover:bg-teal-700 text-white'}`}
+              title="CCDM AI — local copilot (Ollama on this machine), role-scoped answers"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8m-8 4h5m-9 6l-2-2v-9a2 2 0 012-2h14a2 2 0 012 2v7a2 2 0 01-2 2h-9l-5 5z" />
+              </svg>
+              <span className="text-[12px] font-bold">CCDM AI</span>
+            </button>
             {/* Mobile sidebar toggle */}
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -4445,8 +4497,8 @@ function App() {
 
       <ToastContainer toasts={toasts} />
 
-      {/* AI copilot (local Ollama) */}
-      <AiBot context={botContext} roleLabel={role?.label || 'n/a'} />
+      {/* AI copilot (local Ollama, role-scoped) */}
+      <AiBot open={aiOpen} onOpenChange={setAiOpen} context={botContext} roleLabel={role?.label || 'n/a'} role={role?.id || 'n/a'} excludedPaths={excludedPaths} />
 
       {/* Confirm Modal */}
       {confirmState && (
