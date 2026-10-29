@@ -2443,30 +2443,59 @@ function SettingsSidebar({
   const types = ['All', ...Array.from(new Set(contracts.map((c) => c.type)))]
   const risks = ['All', 'Low', 'Critical']
   const departments = ['All', ...SOUTHDEPARTMENTS]
+  const expiries = ['All', 'Expired', '< 30d', '< 90d', '> 90d']
+  const [showAllDepts, setShowAllDepts] = useState(false)
+  const deptOptions = showAllDepts ? departments : ['All', ...departments.slice(1, 5)]
+
+  // One large option per row — real tap targets, no pill soup
+  const ListFilter = ({ label, options, selected, onChange }: { label: string; options: string[]; selected: string; onChange: (v: string) => void }) => (
+    <div>
+      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">{label}</p>
+      <div className="space-y-1">
+        {options.map((opt) => {
+          const active = selected === opt
+          return (
+            <button
+              key={opt}
+              onClick={() => onChange(opt)}
+              className={`w-full text-left text-[13px] px-3 py-2 rounded-md border transition-colors ${
+                active
+                  ? 'bg-teal-600 border-teal-600 text-white font-semibold'
+                  : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              {opt}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Filters */}
-      <div>
-        <h3 className="text-[13px] font-semibold text-slate-900 mb-4">Filters</h3>
-        <div className="space-y-5">
-          <TagSelector label="Contract Type" options={types} selected={selectedType} onChange={onSelectType} />
-          <TagSelector label="Risk Level" options={risks} selected={selectedRisk} onChange={onSelectRisk} />
-          <TagSelector label="Department" options={departments} selected={selectedDept} onChange={onSelectDept} />
-          <TagSelector label="Expiry" options={['All','Expired','< 30d','< 90d','> 90d']} selected={selectedExpiry} onChange={onSelectExpiry} />
-        </div>
-      </div>
+      {/* Primary action — the most-used operation, made the biggest element in the sidebar */}
+      <button
+        onClick={onGoToSmartFiling}
+        className="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg px-4 py-3 shadow-sm transition"
+      >
+        Upload document — AI filing
+      </button>
+      <p className="text-[11px] text-slate-400 -mt-4 mb-1">AI reads the file, classifies it, and files it automatically — you’ll see exactly where it was placed.</p>
 
-      {/* Upload — single clear path: the AI Smart Filing flow */}
-      <div>
-        <h3 className="text-[13px] font-semibold text-slate-900 mb-3">Upload</h3>
-        <button
-          onClick={onGoToSmartFiling}
-          className="w-full text-xs font-medium text-teal-700 bg-teal-50 border border-teal-200 rounded px-3 py-2.5 hover:bg-teal-100 transition-colors"
-        >
-          Upload document — AI filing
-        </button>
-        <p className="text-[11px] text-slate-400 mt-1.5">AI reads the file, classifies it, and files it automatically — you’ll see exactly where it was placed.</p>
+      {/* Filters — large one-per-row options */}
+      <div className="space-y-5">
+        <ListFilter label="Contract Type" options={types} selected={selectedType} onChange={onSelectType} />
+        <ListFilter label="Risk Level" options={risks} selected={selectedRisk} onChange={onSelectRisk} />
+        <div>
+          <ListFilter label={`Department (${departments.length - 1})`} options={deptOptions} selected={selectedDept} onChange={onSelectDept} />
+          {departments.length - 1 > 4 && (
+            <button onClick={() => setShowAllDepts(!showAllDepts)} className="mt-1.5 text-[12px] font-medium text-teal-700 hover:underline px-3">
+              {showAllDepts ? 'Show fewer' : `Show all ${departments.length - 1} departments`}
+            </button>
+          )}
+        </div>
+        <ListFilter label="Expiry" options={expiries} selected={selectedExpiry} onChange={onSelectExpiry} />
       </div>
     </div>
   )
@@ -2653,21 +2682,17 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
         </div>
       </div>
 
-      {/* Search + Filter */}
-      <div className="flex items-center gap-2 mb-4 flex-wrap">
+      {/* Search + Filter — the 4 big cards above already act as quick filters, so this row is just search + count */}
+      <div className="flex items-center gap-3 mb-4">
         <input
           type="text"
           placeholder="Search flags, docs…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 w-48 focus:outline-none focus:ring-2 focus:ring-teal-300"
+          className="text-[13px] border border-slate-200 rounded-lg px-3.5 py-2.5 w-64 focus:outline-none focus:ring-2 focus:ring-teal-300"
         />
-        <button onClick={() => setFilter('all')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>All ({allItems.length})</button>
-        <button onClick={() => setFilter('critical')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'critical' ? 'bg-red-600 text-white border-red-600' : 'bg-white text-red-600 border-red-200 hover:border-red-400'}`}>Critical</button>
-        <button onClick={() => setFilter('high')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'high' ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-amber-600 border-amber-200 hover:border-amber-400'}`}>High</button>
-        <button onClick={() => setFilter('crossref')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'crossref' ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-teal-600 border-teal-200 hover:border-teal-400'}`}>Cross-Ref</button>
-        <button onClick={() => setFilter('expiring')} className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition ${filter === 'expiring' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-600 border-blue-200 hover:border-blue-400'}`}>Expiring</button>
-        <span className="ml-auto text-[11px] text-slate-500">Showing {filtered.length} of {allItems.length}</span>
+        <button onClick={() => setFilter('all')} className="text-[12px] font-medium px-2.5 py-1.5 rounded-full border border-slate-200 text-slate-600 hover:border-slate-400 transition">All ({allItems.length})</button>
+        <span className="ml-auto text-[12px] text-slate-500">Showing {filtered.length} of {allItems.length}</span>
       </div>
 
       {/* Task Table */}
@@ -2726,7 +2751,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                     }}
                     disabled={!manageable}
                     title={!manageable ? 'Edit / manage actions are restricted to the Legal role (demo RBAC)' : undefined}
-                    className={`text-[12px] font-semibold text-white rounded px-2.5 py-1.5 transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                    className={`text-[13px] font-semibold text-white rounded-md px-3.5 py-2 transition disabled:opacity-40 disabled:cursor-not-allowed ${
                       item.action === 'Fix' || item.action === 'Review' ? 'bg-teal-600 hover:bg-teal-700' :
                       item.action === 'Renew' || item.action === 'Schedule' ? 'bg-blue-600 hover:bg-blue-700' :
                       'bg-slate-600 hover:bg-slate-700'
@@ -3047,7 +3072,7 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
         <button
           onClick={() => document.getElementById('sf-upload-input')?.click()}
           disabled={uploading}
-          className="bg-teal-600 text-white px-4 py-2 rounded text-xs font-medium hover:bg-teal-700 disabled:opacity-50"
+          className="bg-teal-600 text-white px-5 py-3 rounded-lg text-sm font-semibold hover:bg-teal-700 disabled:opacity-50 shadow-sm"
         >
           {uploading ? 'Uploading…' : 'Choose files to upload'}
         </button>
@@ -3956,13 +3981,25 @@ function App() {
             {sidebarCollapsed ? (
               <div className="hidden lg:block text-center text-[11px] text-slate-400 mt-2">Settings</div>
             ) : (
-              <SettingsSidebar
-                selectedType={filterType} onSelectType={setFilterType}
-                selectedRisk={filterRisk} onSelectRisk={setFilterRisk}
-                selectedDept={filterDept} onSelectDept={setFilterDept}
-                selectedExpiry={filterExpiry} onSelectExpiry={setFilterExpiry}
-                onGoToSmartFiling={() => { setActiveTab('smart-filing'); setSelected(null) }}
-              />
+              <>
+                {/* Contract-level filters apply to the list views; Risk Register has its own flag filters and Filing manages the tree — one panel per screen */}
+                {['work-queue', 'contracts', 'template-match', 'deadlines', 'insights'].includes(activeTab) ? (
+                  <SettingsSidebar
+                    selectedType={filterType} onSelectType={setFilterType}
+                    selectedRisk={filterRisk} onSelectRisk={setFilterRisk}
+                    selectedDept={filterDept} onSelectDept={setFilterDept}
+                    selectedExpiry={filterExpiry} onSelectExpiry={setFilterExpiry}
+                    onGoToSmartFiling={() => { setActiveTab('smart-filing'); setSelected(null) }}
+                  />
+                ) : (
+                  <div className="text-[11px] text-slate-400 leading-relaxed">
+                    <p className="font-semibold text-slate-500 uppercase tracking-wide mb-2">This view</p>
+                    {activeTab === 'risk-register'
+                      ? <>Flags are filtered in the panel beside the register (severity, HIROC category, status).</>
+                      : <>Uploads are filed into the 12-category structure — pick a category below or use the “View” button on a filed file.</>}
+                  </div>
+                )}
+              </>
             )}
           </aside>
 
