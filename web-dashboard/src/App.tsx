@@ -1356,6 +1356,7 @@ function DeadlinesTimeline({ contracts: allContracts, onSelectContract }: { cont
 }
 
 function DeadlinesTable({ contracts: allContracts, onSelectContract }: { contracts: ContractDoc[]; onSelectContract?: (c: ContractDoc) => void }) {
+  const [dlFilter, setDlFilter] = useState<'all' | 'expired' | 'critical' | 'warning' | 'ok' | 'archived'>('all')
   const today = new Date(DEMO_TODAY) // demo reference date
   const rows = allContracts
     .filter((c) => c.expiryDate)
@@ -1373,6 +1374,7 @@ function DeadlinesTable({ contracts: allContracts, onSelectContract }: { contrac
       return { c, daysLeft, daysToNotice, noticeDays, urgency }
     })
     .sort((a, b) => a.daysLeft - b.daysLeft)
+  const shown = dlFilter === 'all' ? rows : rows.filter((r) => dlFilter === 'archived' ? retentionState(r.c).status === 'elapsed' : r.urgency === dlFilter)
 
   const urgencyColors: Record<string, { bg: string; text: string; bar: string }> = {
     expired:  { bg: 'bg-red-50',  text: 'text-red-700',  bar: 'bg-red-500' },
@@ -1389,21 +1391,27 @@ function DeadlinesTable({ contracts: allContracts, onSelectContract }: { contrac
     <div>
       {/* Summary bar */}
       <div className="flex gap-4 mb-4">
-        <div className="flex-1 bg-slate-100 border border-slate-200 rounded-lg p-3 text-center">
+        <button onClick={() => setDlFilter(dlFilter === 'archived' ? 'all' : 'archived')} className={`flex-1 ${dlFilter === 'archived' ? 'bg-slate-200 border-slate-400' : 'bg-slate-100 border-slate-200 hover:border-slate-400'} rounded-lg p-3 text-center transition`}>
           <div className="text-2xl font-bold text-slate-600">{archivedCount}</div>
-          <div className="text-[11px] text-slate-500 uppercase tracking-wide mt-0.5">Archived</div>
-        </div>
+          <div className="text-[11px] text-slate-500 uppercase tracking-wide mt-0.5">Archived {dlFilter === 'archived' ? '· showing' : ''}</div>
+        </button>
         {(['expired','critical','warning','ok'] as const).map((u) => {
           const count = rows.filter((r) => r.urgency === u).length
           const uc = urgencyColors[u]
+          const active = dlFilter === u
           return (
-            <div key={u} className={`flex-1 ${uc.bg} border border-slate-200 rounded-lg p-3 text-center`}>
+            <button key={u} onClick={() => setDlFilter(active ? 'all' : u)} className={`flex-1 ${uc.bg} ${active ? 'border-2 ' + u + '-300' : 'border-slate-200 hover:border-slate-400'} rounded-lg p-3 text-center transition`}>
               <div className={`text-2xl font-bold ${uc.text}`}>{count}</div>
-              <div className="text-[11px] text-slate-500 uppercase tracking-wide mt-0.5">{urgencyLabels[u]}</div>
-            </div>
+              <div className="text-[11px] text-slate-500 uppercase tracking-wide mt-0.5">{urgencyLabels[u]}{active ? ' · showing' : ''}</div>
+            </button>
           )
         })}
       </div>
+      {dlFilter !== 'all' && (
+        <p className="text-[11px] text-teal-700 bg-teal-50 border border-teal-200 rounded px-3 py-1.5 mb-3">
+          Filter: <b>{dlFilter === 'archived' ? 'ARCHIVED (retention complete)' : urgencyLabels[dlFilter].toLowerCase()}</b> — {shown.length} of {rows.length} documents · <button onClick={() => setDlFilter('all')} className="font-semibold underline">clear</button>
+        </p>
+      )}
 
       {/* Source legend */}
       <div className="flex items-center gap-4 mb-2 text-[11px] text-slate-400">
@@ -1427,7 +1435,7 @@ function DeadlinesTable({ contracts: allContracts, onSelectContract }: { contrac
             </tr>
           </thead>
           <tbody>
-            {rows.map((r, i) => {
+            {shown.map((r, i) => {
               const uc = urgencyColors[r.urgency]
               return (
                 <tr key={i} className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${r.urgency === 'expired' ? 'bg-red-50/30' : ''}`}>
@@ -2565,7 +2573,7 @@ function SettingsSidebar({
 
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
-function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields, manageable }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string, aiDraft?: () => Promise<string>) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[]; manageable?: boolean }) {
+function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields, manageable, expiryFilter, onClearExpiry }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string, aiDraft?: () => Promise<string>) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[]; manageable?: boolean; expiryFilter?: string; onClearExpiry?: () => void }) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref' | 'resolved'>('all')
   const [showResolved, setShowResolved] = useState(false)
   const [search, setSearch] = useState('')
@@ -2749,6 +2757,16 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
         <button onClick={() => setFilter('all')} className="text-[12px] font-medium px-2.5 py-1.5 rounded-full border border-slate-200 text-slate-600 hover:border-slate-400 transition">All ({allItems.length})</button>
         <span className="ml-auto text-[12px] text-slate-500">Showing {filtered.length} of {allItems.length}</span>
       </div>
+
+      {/* Active expiry/retention filter notice — makes sidebar filters visible on this table */}
+      {expiryFilter && expiryFilter !== 'All' && (
+        <div className="mb-4 flex items-center justify-between gap-3 bg-teal-50 border border-teal-200 rounded-lg px-4 py-2.5">
+          <span className="text-[13px] text-teal-800">
+            Active filter: <b className="font-bold">{expiryFilter.toUpperCase()}</b> — showing items from {allContracts.length} document{allContracts.length === 1 ? '' : 's'}
+          </span>
+          <button onClick={onClearExpiry} className="text-[12px] font-semibold text-teal-700 hover:underline shrink-0">Clear filter</button>
+        </div>
+      )}
 
       {/* Resolved Log — kept at the TOP of the list: the record of what you just fixed (newest first, one line, expandable) */}
       {resolvedLog && resolvedLog.length > 0 && (
@@ -4188,7 +4206,7 @@ function App() {
                     onProcess={(link) => { setProcessLink(link); setSelected(null) }}
                     resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} onResolveFlag={(id) => markFlagResolved(id)}
                     manageable={!!role && canManage(role)} resolvedLog={resolvedLog}
-                    focusFields={focusFields}
+                    focusFields={focusFields} expiryFilter={filterExpiry} onClearExpiry={() => setFilterExpiry('All')}
                     onConfirmAction={(title, msg, action, showNote, defaultNote, aiDraft) => setConfirmState({ title, message: msg, onConfirm: action, showNote, defaultNote, aiDraft })} />
                 )}
                 {activeTab === 'risk-register' && (
