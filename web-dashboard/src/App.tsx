@@ -2578,6 +2578,7 @@ function SettingsSidebar({
 
 function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields, manageable, expiryFilter, onClearExpiry }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string, aiDraft?: () => Promise<string>) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[]; manageable?: boolean; expiryFilter?: string; onClearExpiry?: () => void }) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref' | 'resolved'>('all')
+  const [wqPage, setWqPage] = useState(1) // task-table pagination (15 per page)
   const [showResolved, setShowResolved] = useState(false)
   const [search, setSearch] = useState('')
 
@@ -2679,6 +2680,9 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
     }
     return true
   })
+
+  // Keep pagination sane when any input that changes the row set changes
+  useEffect(() => { setWqPage(1) }, [search, filter, expiryFilter, focusFields])
 
   // Add created tasks from Insights
   const taskItems: WorkItem[] = createdTasks.map((t) => ({
@@ -2914,7 +2918,8 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filtered.slice(0, 15).map((item) => (
+            {(() => { const per = 15, start = (wqPage - 1) * per; const pageRows = filtered.slice(start, start + per);
+              return pageRows.map((item) => (
               <tr key={item.id} className={`hover:bg-slate-50/70 cursor-pointer transition ${item.severity === 'critical' ? 'bg-red-50/30' : ''}`} onClick={() => onSelectContract(item.contract)}>
                 <td className="px-4 py-2.5 text-[13px] font-medium text-slate-800 max-w-[340px] truncate" title={item.what}>{item.what}</td>
                 <td className="px-4 py-2.5 text-[13px] text-slate-700">
@@ -2976,17 +2981,29 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                   </button>
                 </td>
               </tr>
-            ))}
+              ))
+            })()}
           </tbody>
         </table>
         {filtered.length === 0 && (
           <div className="text-center py-8 text-xs text-slate-400">No items in this view</div>
         )}
-        {filtered.length > 15 && (
-          <div className="px-4 py-2 text-center text-[11px] text-slate-400 border-t border-slate-100">
-            Showing 15 of {filtered.length} · Use filters to narrow down
+        {filtered.length > 0 && (() => { const per = 15, pages = Math.max(1, Math.ceil(filtered.length / per)), start = (wqPage - 1) * per;
+          return (
+          <div className="px-4 py-2 flex items-center justify-between border-t border-slate-100">
+            <span className="text-[11px] text-slate-500">
+              Showing {start + 1}–{Math.min(start + per, filtered.length)} of {filtered.length} work items
+            </span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setWqPage(Math.max(1, wqPage - 1))} disabled={wqPage <= 1}
+                className="text-[12px] font-semibold text-slate-600 border border-slate-200 rounded px-2.5 py-1 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed">← Prev</button>
+              <span className="text-[12px] font-bold text-slate-700">{wqPage} / {pages}</span>
+              <button onClick={() => setWqPage(Math.min(pages, wqPage + 1))} disabled={wqPage >= pages}
+                className="text-[12px] font-semibold text-slate-600 border border-slate-200 rounded px-2.5 py-1 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed">Next →</button>
+            </div>
           </div>
-        )}
+          )
+        })()}
       </div>)}
 
     </div>
