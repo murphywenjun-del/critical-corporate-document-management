@@ -4037,6 +4037,15 @@ function App() {
     return p && valid.includes(p) ? (p as TabId) : 'work-queue'
   })
   const [selected, setSelected] = useState<ContractDoc | null>(null)
+  // When the detail panel opens, align it with the Y of the row the user clicked
+  const detailAsideRef = useRef<HTMLElement | null>(null)
+  const lastClickY = useRef(0)
+  useEffect(() => {
+    if (selected && detailAsideRef.current) {
+      // content starts below the 56px top bar + ~44px sticky panel header
+      detailAsideRef.current.scrollTop = Math.max(0, lastClickY.current - 100)
+    }
+  }, [selected])
   // ── RBAC: active role (persisted; ?role= deep-link override for demo links) ──
   const [roleId, setRoleId] = useState<string>(() => {
     const saved = localStorage.getItem('sl_role')
@@ -4418,7 +4427,7 @@ function App() {
       </div>
 
       {/* ── Sidebar + Content ─────────────────────────────────────────────── */}
-      <div className="px-4 sm:px-6 py-6">
+      <div className="px-4 sm:px-6 py-6" onPointerDownCapture={(e) => { lastClickY.current = e.clientY }}>
         <div className="max-w-screen-2xl mx-auto flex gap-6">
           {/* Sidebar */}
           <aside
@@ -4547,9 +4556,9 @@ function App() {
                 )}
               </>
             </div>
-            {/* Right-side detail panel */}
+            {/* Right-side detail panel — opens scrolled to the Y of the row you clicked, not always at the top */}
             {selected && (
-              <aside className="w-[440px] shrink-0 border-l-2 border-slate-300 bg-slate-50 overflow-y-auto max-h-[calc(100vh-56px)] shadow-[-8px_0_24px_rgba(0,0,0,0.06)]">
+              <aside ref={detailAsideRef} className="w-[440px] shrink-0 border-l-2 border-slate-300 bg-slate-50 overflow-y-auto max-h-[calc(100vh-56px)] shadow-[-8px_0_24px_rgba(0,0,0,0.06)]">
                 <div className="sticky top-0 bg-slate-50 border-b border-slate-200 px-5 py-3 flex items-center justify-between z-10">
                   <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Contract Detail</span>
                   <button onClick={() => setSelected(null)} className="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition text-sm">✕</button>
