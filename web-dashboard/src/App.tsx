@@ -107,7 +107,7 @@ function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Con
 
 
 // ── AI Copilot (local Ollama RAG-style chat) ───────────────────────────────────
-function AiBot({ open, onOpenChange, context, roleLabel, role, excludedPaths }: { open: boolean; onOpenChange: (v: boolean) => void; context: string; roleLabel: string; role: string; excludedPaths: string[] }) {
+function AiBot({ open, onOpenChange, context, roleLabel, role, excludedPaths, anchor }: { open: boolean; onOpenChange: (v: boolean) => void; context: string; roleLabel: string; role: string; excludedPaths: string[]; anchor?: { x: number; y: number } | null }) {
   type Msg = { role: 'user' | 'assistant' | 'sys'; text: string; sources?: string[]; model?: string; ms?: number; note?: string }
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
@@ -129,6 +129,14 @@ function AiBot({ open, onOpenChange, context, roleLabel, role, excludedPaths }: 
     const max = Math.max(min, window.innerHeight - PANEL_H - 8)
     return Math.min(max, Math.max(min, t))
   }
+  // When the draggable icon was moved, the panel opens anchored next to it
+  // (same edge as the icon, just below it) — until the user drags the panel itself.
+  useEffect(() => {
+    if (open && anchor) {
+      setSide(anchor.x + 52 < window.innerWidth / 2 ? 'left' : 'right')
+      setTop(clampTop(anchor.y + 44))
+    }
+  }, [open, anchor?.x, anchor?.y]) // eslint-disable-line react-hooks/exhaustive-deps
   const onDragStart = (e: React.MouseEvent) => {
     // only start from the header grip, not from buttons inside the header
     if ((e.target as HTMLElement).closest('button')) return
@@ -4041,6 +4049,38 @@ function App() {
   const [filterDept, setFilterDept] = useState('All')
   const [filterExpiry, setFilterExpiry] = useState('All')
   const [aiOpen, setAiOpen] = useState(false) // top-right AI copilot
+  // Draggable launcher icon: null = default spot in the header; otherwise a fixed chip at {x,y}
+  const [aiIconPos, setAiIconPos] = useState<{ x: number; y: number } | null>(null)
+  const aiIconRef = useRef<HTMLButtonElement>(null)
+  const aiIconDrag = useRef<{ sx: number; sy: number; x: number; y: number; w: number; h: number; moved: boolean } | null>(null)
+
+  const onAiIconMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return
+    const rect = aiIconRef.current?.getBoundingClientRect()
+    const base = aiIconPos ?? (rect ? { x: rect.left, y: rect.top } : { x: window.innerWidth - 130, y: 14 })
+    aiIconDrag.current = { sx: e.clientX, sy: e.clientY, x: base.x, y: base.y, w: rect?.width ?? 104, h: rect?.height ?? 34, moved: false }
+    const onMove = (ev: MouseEvent) => {
+      const d = aiIconDrag.current
+      if (!d) return
+      const dx = ev.clientX - d.sx
+      const dy = ev.clientY - d.sy
+      if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true
+      if (d.moved) {
+        const vx = Math.min(Math.max(8, d.x + dx), window.innerWidth - d.w - 8)
+        const vy = Math.min(Math.max(8, d.y + dy), window.innerHeight - d.h - 8)
+        setAiIconPos({ x: vx, y: vy })
+      }
+    }
+    const onUp = () => {
+      const d = aiIconDrag.current
+      aiIconDrag.current = null
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      if (d && !d.moved) setAiOpen((v) => !v) // a clean click still toggles the panel
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [processLink, setProcessLink] = useState<DocLink | null>(null)
@@ -4299,15 +4339,29 @@ function App() {
               <button onClick={handleLogout} className="text-[11px] text-slate-400 hover:text-slate-600 transition">Sign out</button>
             </div>
             <button
-              onClick={() => setAiOpen((v) => !v)}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition shadow-sm ${aiOpen ? 'bg-slate-800 hover:bg-slate-900 text-white' : 'bg-teal-600 hover:bg-teal-700 text-white'}`}
-              title="CCDM AI — local copilot (Ollama on this machine), role-scoped answers"
+              ref={aiIconRef}
+              onMouseDown={onAiIconMouseDown}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition shadow-sm select-none cursor-grab active:cursor-grabbing ${aiIconPos ? 'opacity-0 pointer-events-none' : ''} ${aiOpen ? 'bg-slate-800 hover:bg-slate-900 text-white' : 'bg-teal-600 hover:bg-teal-700 text-white'}`}
+              title="CCDM AI — local copilot (Ollama on this machine). Click to open, or drag me anywhere on screen."
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8m-8 4h5m-9 6l-2-2v-9a2 2 0 012-2h14a2 2 0 012 2v7a2 2 0 01-2 2h-9l-5 5z" />
               </svg>
               <span className="text-[12px] font-bold">CCDM AI</span>
             </button>
+            {aiIconPos && (
+              <button
+                onMouseDown={onAiIconMouseDown}
+                className={`fixed z-[96] flex items-center gap-1.5 rounded-lg px-3 py-1.5 shadow-lg select-none cursor-grab active:cursor-grabbing ${aiOpen ? 'bg-slate-800 text-white ring-2 ring-teal-400' : 'bg-teal-600 hover:bg-teal-700 text-white'}`}
+                style={{ left: aiIconPos.x, top: aiIconPos.y }}
+                title="CCDM AI — drag me anywhere; the panel opens beside me"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8m-8 4h5m-9 6l-2-2v-9a2 2 0 012-2h14a2 2 0 012 2v7a2 2 0 01-2 2h-9l-5 5z" />
+                </svg>
+                <span className="text-[12px] font-bold">CCDM AI</span>
+              </button>
+            )}
             {/* Mobile sidebar toggle */}
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -4506,7 +4560,7 @@ function App() {
       <ToastContainer toasts={toasts} />
 
       {/* AI copilot (local Ollama, role-scoped) */}
-      <AiBot open={aiOpen} onOpenChange={setAiOpen} context={botContext} roleLabel={role?.label || 'n/a'} role={role?.id || 'n/a'} excludedPaths={excludedPaths} />
+      <AiBot open={aiOpen} onOpenChange={setAiOpen} context={botContext} roleLabel={role?.label || 'n/a'} role={role?.id || 'n/a'} excludedPaths={excludedPaths} anchor={aiIconPos} />
 
       {/* Confirm Modal */}
       {confirmState && (
