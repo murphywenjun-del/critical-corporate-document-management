@@ -671,6 +671,130 @@ def ai_proposal(payload: dict):
         return JSONResponse({"ok": False, "error": str(e)[:200]})
 
 
+def retrieve_snippets(question: str, limit: int = 3):
+    """RAG retrieval for /api/ai-chat: keyword-match the question against the
+    on-disk archive + research docs and return up to `limit` short snippets.
+    Purely local — same corpus and readers as /api/search.
+    """
+    STOP = {"the", "and", "for", "with", "what", "which", "where", "when",
+            "how", "why", "are", "is", "can", "should", "would", "does",
+            "doc", "docs", "document", "documents", "contract", "contracts",
+            "please", "tell", "show", "list", "many", "much", "any", "about"}
+    words = re.findall(r"[A-Za-z0-9\$%./-]{4,}", question.lower())
+    kws = []
+    for w in words:
+        if w in STOP:
+            continue
+        if w not in kws:
+            kws.append(w)
+        if len(kws) >= 4:
+            break
+    if not kws:
+        kws = words[:1] or [question.strip()[:20].lower()]
+
+    dirs = [d for d in [ARCHIVE_DIR, BASE_DIR / "web-dashboard" / "public" / "research" / "contracts"] if d.exists()]
+    allowed = {".md", ".txt", ".csv", ".json", ".docx", ".doc", ".pdf"}
+
+    def read_text(f: Path) -> str:
+        ext = f.suffix.lower()
+        try:
+            if ext in {".txt", ".md", ".csv", ".json"}:
+                return f.read_text(encoding="utf-8", errors="ignore")
+            if ext in {".docx", ".doc"}:
+                from docx import Document
+                doc = Document(str(f))
+                return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+            if ext == ".pdf":
+                from pypdf import PdfReader
+                t = "\n".join((p.extract_text() or "") for p in PdfReader(str(f)).pages)
+                return re.sub(r"[\x00-\x08\x0b-\x1f]", " ", t)
+        except Exception:
+            return ""
+        return ""
+
+    hits: List[Dict] = []
+    seen: set = set()
+    # one pass per keyword; rank files by how many distinct keywords they hit
+    scored: Dict[str, int] = {}
+    texts: Dict[str, tuple] = {}
+    for base in dirs:
+        for f in sorted(base.rglob("*")):
+            if not f.is_file() or f.suffix.lower() not in allowed:
+                continue
+            text = read_text(f)
+            if not text:
+                continue
+            tl = text.lower()
+            n_hit = sum(1 for k in kws if k in tl)
+            if n_hit == 0:
+                continue
+            key = f.as_posix()
+            scored[key] = scored.get(key, 0) + n_hit
+            texts[key] = (text, base, f)
+    for key in sorted(scored, key=scored.get, reverse=True)[:limit]:
+        text, base, f = texts[key]
+        first = next(k for k in kws if k in text.lower())
+        idx = text.lower().find(first)
+        start = max(0, idx - 60)
+        snippet = ("…" if start > 0 else "") + text[start:idx + len(first) + 240].replace("\n", " ").strip() + "…"
+        try:
+            rel = f.relative_to(base).as_posix()
+        except ValueError:
+            rel = f.name
+        hits.append({"path": rel, "score": scored[key], "snippet": snippet[:400]})
+    return hits
+
+
+@app.post("/api/ai-chat")
+def ai_chat(payload: dict):
+    """Local-LLM chat copilot for the dashboard (Ollama on this machine, no cloud).
+
+    Body: { message, context, history: [{role, content}...] }
+    RAG context = app state snapshot sent by the UI + on-disk archive snippets
+    matched against the question. Returns { ok, model, ms, answer, sources }.
+    ok:false when the local engine is unavailable — the UI says so and never
+    falls back to a cloud provider.
+    """
+    t0 = time.time()
+    try:
+        message = str(payload.get("message", "")).strip()[:500]
+        context = str(payload.get("context", "")).strip()[:2400]
+        history = payload.get("history", [])[-3:]
+        if not message:
+            return JSONResponse({"ok": False, "error": "empty message"}, status_code=400)
+
+        snippets = retrieve_snippets(message, limit=3)
+        rag = ""
+        if snippets:
+            rag = "\n\nRELEVANT EXCERPTS FROM THE ON-DISK ARCHIVE (cite the file path):\n" + "\n".join(
+                f"- {s['path']}: {s['snippet']}" for s in snippets
+            )
+
+        msgs = [{"role": "system", "content": (
+            "You are the CCDM compliance copilot at Southlake Health, a hospital. "
+            "You answer questions about the document portfolio, flags, retention rules and policies "
+            "using ONLY the context below. Be concise (under 150 words), concrete, and cite document "
+            "numbers (#n) or file paths when they help. If the context does not contain the answer, "
+            "say so plainly — do not invent facts or numbers."        )}]
+        for h in history:
+            role = "assistant" if str(h.get("role", "")) == "assistant" else "user"
+            msgs.append({"role": role, "content": str(h.get("content", ""))[:400]})
+        msgs.append({"role": "user", "content": (
+            f"APP STATE SNAPSHOT (live):\n{context}\n{rag}\n\nQUESTION: {message}"
+        )})
+        out, model_used = ollama_chat_fallback(msgs, temperature=0.2, timeout=150)
+        answer = (out.get("message", {}).get("content") or "").strip()
+        if not answer:
+            raise ValueError("empty LLM answer")
+        return {
+            "ok": True, "model": model_used, "ms": int((time.time() - t0) * 1000),
+            "answer": answer[:900],
+            "sources": [s["path"] for s in snippets],
+        }
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)[:200]})
+
+
 @app.post("/api/classify-and-file")
 async def classify_and_file(files: List[UploadFile] = File(...)):
     """Upload files, run AI classification, and auto-file into the correct folder."""

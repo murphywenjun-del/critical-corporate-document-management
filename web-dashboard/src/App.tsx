@@ -106,6 +106,134 @@ function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Con
 }
 
 
+// ── AI Copilot (local Ollama RAG-style chat) ───────────────────────────────────
+function AiBot({ context, roleLabel }: { context: string; roleLabel: string }) {
+  type Msg = { role: 'user' | 'assistant' | 'sys'; text: string; sources?: string[]; model?: string; ms?: number }
+  const [open, setOpen] = useState(false)
+  const [msgs, setMsgs] = useState<Msg[]>([])
+  const [input, setInput] = useState('')
+  const [busy, setBusy] = useState(false)
+  const bodyRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight }, [msgs, busy, open])
+
+  const send = async (text?: string) => {
+    const q = (text ?? input).trim()
+    if (!q || busy) return
+    setInput('')
+    const history = msgs.filter((m) => m.role !== 'sys').slice(-3).map((m) => ({ role: m.role, content: m.text }))
+    setMsgs((prev) => [...prev, { role: 'user', text: q }])
+    setBusy(true)
+    try {
+      const res = await fetch('/api/ai-chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: q, context, history }),
+      })
+      const data = await res.json().catch(() => ({ ok: false, error: 'unparseable response' }))
+      if (data.ok) {
+        setMsgs((prev) => [...prev, { role: 'assistant', text: data.answer, sources: data.sources || [], model: data.model, ms: data.ms }])
+      } else {
+        setMsgs((prev) => [...prev, { role: 'sys', text: `Local AI unavailable (${data.error || 'no response'}). The engine is Ollama on this machine — start it (and the dashboard server) to enable chat. Nothing is ever sent to the cloud.` }])
+      }
+    } catch (e: any) {
+      setMsgs((prev) => [...prev, { role: 'sys', text: 'Could not reach the local AI service. The dashboard server (uvicorn :8000 + Ollama) must be running on this machine — e.g. the static GH-Pages copy has no AI backend by design.' }])
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const chips = [
+    'How many contracts expire in the next 90 days?',
+    'Which documents are in retention and when can they be discarded?',
+    'What are the top open critical flags and why do they matter?',
+    'Explain my KPI numbers (criteria met, retention alerts).',
+  ]
+
+  return (
+    <>
+      {/* Floating launcher */}
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="fixed bottom-5 right-5 z-[90] flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white shadow-xl rounded-full pl-4 pr-5 py-3 transition"
+        title="CCDM Assistant — local AI copilot"
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8m-8 4h5m-9 6l-2-2v-9a2 2 0 012-2h14a2 2 0 012 2v7a2 2 0 01-2 2h-9l-5 5z" />
+        </svg>
+        <span className="text-[13px] font-bold">CCDM AI</span>
+      </button>
+
+      {open && (
+        <div className="fixed bottom-20 right-5 z-[95] w-[400px] max-w-[92vw] h-[540px] max-h-[72vh] bg-white rounded-xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+          {/* header */}
+          <div className="px-4 py-3 bg-slate-900 text-white shrink-0">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[14px] font-bold">CCDM Assistant</div>
+                <div className="text-[11px] text-slate-300 mt-0.5">Local Ollama · answers from live app data + on-disk archive · role: {roleLabel}</div>
+              </div>
+              <button onClick={() => setOpen(false)} className="w-7 h-7 rounded-full hover:bg-slate-700 text-slate-300">✕</button>
+            </div>
+          </div>
+
+          {/* messages */}
+          <div ref={bodyRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-slate-50/60">
+            {msgs.length === 0 && !busy && (
+              <div>
+                <p className="text-[12px] text-slate-500 mb-2.5">Ask anything about the portfolio, flags, deadlines, retention rules or the archive. Suggested starts:</p>
+                <div className="space-y-1.5">
+                  {chips.map((c) => (
+                    <button key={c} onClick={() => send(c)} className="w-full text-left text-[12px] bg-white border border-slate-200 hover:border-teal-400 rounded-lg px-3 py-2 transition">{c}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {msgs.map((m, i) => (
+              m.role === 'sys' ? (
+                <div key={i} className="text-[12px] leading-relaxed bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2.5">{m.text}</div>
+              ) : m.role === 'user' ? (
+                <div key={i} className="ml-10 text-[13px] bg-teal-600 text-white rounded-xl rounded-tr-sm px-3.5 py-2.5 leading-relaxed">{m.text}</div>
+              ) : (
+                <div key={i} className="mr-4 text-[13px] bg-white border border-slate-200 rounded-xl rounded-tl-sm px-3.5 py-2.5 leading-relaxed text-slate-800 whitespace-pre-line">
+                  {m.text}
+                  {(m.sources?.length || m.model) && (
+                    <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-400">
+                      {m.model && <span>local · {m.model}{m.ms ? ` · ${Math.round(m.ms / 1000)} s` : ''}</span>}
+                      {m.sources?.map((s) => <div key={s} className="font-mono truncate" title={s}>↗ {s}</div>)}
+                    </div>
+                  )}
+                </div>
+              )
+            ))}
+            {busy && (
+              <div className="flex items-center gap-2 text-[12px] text-slate-500">
+                <span className="w-3 h-3 border-2 border-teal-200 border-t-teal-600 rounded-full animate-spin shrink-0" />
+                Local AI is thinking (~15–25 s on this machine)…
+              </div>
+            )}
+          </div>
+
+          {/* input */}
+          <div className="px-3 py-2.5 border-t border-slate-200 shrink-0">
+            <div className="flex gap-2">
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') send() }}
+                placeholder="Ask about contracts, flags, retention, archive…"
+                className="flex-1 text-[13px] border border-slate-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-300"
+              />
+              <button onClick={() => send()} disabled={busy || !input.trim()}
+                className="text-[13px] font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg px-4 transition">Ask</button>
+            </div>
+            <div className="text-[11px] text-slate-400 mt-1.5">All inference runs locally (Ollama on this machine) — no cloud, consistent with the program's data policy.</div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
 // ── Design tokens ──────────────────────────────────────────────────────────────
 
 const SEV_TEXT: Record<Flag['severity'], string> = {
@@ -3962,6 +4090,25 @@ function App() {
     : 0
   const retentionAlertCount = visible.filter((c) => retentionState(c).status !== 'retained').length
 
+  // ── Live context snapshot for the AI copilot (sent to /api/ai-chat, answered locally) ──
+  const botContext = (() => {
+    const lines = [
+      `Today (demo reference date): ${DEMO_TODAY}. Active role: ${role?.label || 'n/a'} — ${visible.length} of ${filtered.length} documents visible (${hiddenCount} hidden by role access).`,
+      `KPIs: ${openFlagsCount} open flags, ${criticalOpenCount} critical, ${remediatedCount} remediated, ${retentionAlertCount} retention alerts, criteria-met average ${avgCompliance}%.`,
+      'Retention policy (PolicyStat #19415930 Schedule A): C21 contracts/MOU/NDA/procurement = life of agreement + 7 years (Legal Services); R12 research data-sharing = project expiry year + 7 years (Director of Research); R1/R7 clinical trials = completion + 15 years; litigation/FOI/PHI access holds (R1) block disposal until the matter closes; expired-but-in-retention documents may NOT be deleted yet.',
+    ]
+    for (const c of visible) {
+      const rs = retentionState(c)
+      const label = rs.status === 'elapsed' ? 'ARCHIVED — retention complete, discard-eligible'
+        : rs.status === 'hold' ? `EXPIRED but IN RETENTION — deletion not allowed yet, keep until ${rs.until}`
+        : c.expiryDate ? `ACTIVE — expires ${c.expiryDate}` : 'ACTIVE — no expiry date on file'
+      const open = c.flags.filter((f) => f.status === 'open' && !resolvedFlags.has(`f-${c.num}-${f.field}`))
+      const top = [...open].sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0))[0]
+      lines.push(`#${c.num} ${c.displayName} [${c.type}] ${label} · ${open.length} open flag${open.length === 1 ? '' : 's'}${top ? ` (top: ${top.field} — ${String(top.flag_if).slice(0, 80)})` : ''}`)
+    }
+    return lines.join('\n')
+  })()
+
   // Retention: approve discard (with confirmation) → persist
   const approveDestruction = (c: ContractDoc) => {
     const until = retentionState(c).until
@@ -4297,6 +4444,9 @@ function App() {
       </div>
 
       <ToastContainer toasts={toasts} />
+
+      {/* AI copilot (local Ollama) */}
+      <AiBot context={botContext} roleLabel={role?.label || 'n/a'} />
 
       {/* Confirm Modal */}
       {confirmState && (
