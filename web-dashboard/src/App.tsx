@@ -2732,6 +2732,34 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
         <span className="ml-auto text-[12px] text-slate-500">Showing {filtered.length} of {allItems.length}</span>
       </div>
 
+      {/* Resolved Log — kept at the TOP of the list: the record of what you just fixed (newest first, one line, expandable) */}
+      {resolvedLog && resolvedLog.length > 0 && (
+        <div className="mb-4 bg-emerald-50 border border-emerald-200 rounded-lg overflow-hidden">
+          <button onClick={() => setShowResolved((v) => !v)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-emerald-100/60 transition text-left">
+            <span className="text-[13px] font-bold text-emerald-700 shrink-0">✓ Resolved ({resolvedLog.length})</span>
+            <span className="text-[12px] text-slate-600 truncate flex-1" title={resolvedLog[0].label}>
+              latest: {resolvedLog[0].label} · {resolvedLog[0].time}
+            </span>
+            <span className="text-[11px] text-emerald-600 font-semibold shrink-0">{showResolved ? '▲ Hide' : `▼ Show all ${Math.min(resolvedLog.length, 10)}`}</span>
+          </button>
+          {showResolved && (
+            <div className="divide-y divide-emerald-100 bg-white/50">
+              {resolvedLog.slice(0, 10).map((entry) => (
+                <div key={entry.id} className="px-4 py-2 text-[11px]">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-slate-700 truncate">{entry.label}</span>
+                    <span className="text-slate-400 shrink-0">{entry.time}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Resolved by: <span className="font-medium text-slate-500">{entry.who || 'You'}</span> · {entry.type === 'workflow' ? 'Cross-Ref' : 'Flag'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Task Table */}
       <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
         <table className="w-full text-left">
@@ -2819,30 +2847,6 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
         )}
       </div>
 
-      {/* Resolved Log */}
-      {resolvedLog && resolvedLog.length > 0 && (
-        <div className="mt-4 border border-emerald-200 rounded-lg overflow-hidden">
-          <button onClick={() => setShowResolved((v) => !v)} className="w-full flex items-center justify-between px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 transition">
-            <span className="text-xs font-bold text-emerald-700">✓ Resolved ({resolvedLog.length})</span>
-            <span className="text-[11px] text-emerald-500">{showResolved ? '▲ Hide' : '▼ Show'}</span>
-          </button>
-          {showResolved && (
-            <div className="divide-y divide-emerald-100 max-h-48 overflow-y-auto">
-              {resolvedLog.slice(0, 10).map((entry) => (
-                <div key={entry.id} className="px-4 py-2 text-[11px]">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-slate-700">{entry.label}</span>
-                    <span className="text-slate-400">{entry.time}</span>
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    Resolved by: <span className="font-medium text-slate-500">{entry.who || 'You'}</span> · {entry.type === 'workflow' ? 'Cross-Ref' : 'Flag'}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   )
 }
