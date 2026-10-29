@@ -114,26 +114,35 @@ function AiBot({ open, onOpenChange, context, roleLabel, role, excludedPaths }: 
   const [busy, setBusy] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
 
-  // Draggable panel: pinned to the LEFT or RIGHT edge (never centered), free vertical position.
+  // Draggable panel: free vertical position; horizontal position is always pinned to the
+  // LEFT or RIGHT edge — dragging across the screen midline snaps it to the opposite edge.
+  // It can structurally never rest in the middle.
   const [side, setSide] = useState<'left' | 'right'>('right')
   const [top, setTop] = useState(64)
-  const dragRef = useRef<{ startY: number; startTop: number; grabOffset: number } | null>(null)
+  const dragRef = useRef<{ startX: number; startY: number; startLeft: number; startTop: number } | null>(null)
 
   useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight }, [msgs, busy, open])
 
+  const PANEL_H = 560
   const clampTop = (t: number) => {
-    const h = 560
     const min = 8
-    const max = Math.max(min, window.innerHeight - h - 8)
+    const max = Math.max(min, window.innerHeight - PANEL_H - 8)
     return Math.min(max, Math.max(min, t))
   }
   const onDragStart = (e: React.MouseEvent) => {
     // only start from the header grip, not from buttons inside the header
     if ((e.target as HTMLElement).closest('button')) return
-    dragRef.current = { startY: e.clientY, startTop: top, grabOffset: 0 }
+    const vw = window.innerWidth
+    const startLeft = side === 'left' ? 16 : vw - 436 // current snap position
+    dragRef.current = { startX: e.clientX, startY: e.clientY, startLeft, startTop: top }
     const onMove = (ev: MouseEvent) => {
       if (!dragRef.current) return
-      setTop(clampTop(dragRef.current.startTop + (ev.clientY - dragRef.current.startY)))
+      const dx = ev.clientX - dragRef.current.startX
+      const dy = ev.clientY - dragRef.current.startY
+      // virtual panel position: follow the cursor; snap to whichever edge it is on
+      const virtualLeft = dragRef.current.startLeft + dx
+      setSide(virtualLeft + 210 < window.innerWidth / 2 ? 'left' : 'right')
+      setTop(clampTop(dragRef.current.startTop + dy))
     }
     const onUp = () => {
       dragRef.current = null
@@ -143,7 +152,6 @@ function AiBot({ open, onOpenChange, context, roleLabel, role, excludedPaths }: 
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
   }
-  const PANEL_H = 560
 
   const send = async (text?: string) => {
     const q = (text ?? input).trim()
@@ -188,14 +196,14 @@ function AiBot({ open, onOpenChange, context, roleLabel, role, excludedPaths }: 
           <div
             onMouseDown={onDragStart}
             className="px-4 py-3 bg-slate-900 text-white shrink-0 cursor-grab active:cursor-grabbing select-none"
-            title="Drag up / down · panel stays pinned to the edge"
+            title="Drag the header: up/down freely, or across the screen to switch edges — the panel snaps to the nearest edge, never the middle"
           >
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-[14px] font-bold flex items-center gap-2">
                   <span className="text-slate-500 text-[11px] leading-none">⋮⋮</span> CCDM Assistant
                 </div>
-                <div className="text-[11px] text-slate-300 mt-0.5">Local Ollama · role-scoped to {roleLabel} · drag the header to move it up/down</div>
+                <div className="text-[11px] text-slate-300 mt-0.5">Local Ollama · role-scoped to {roleLabel} · drag the header up/down or across — it snaps to the edge and never centers</div>
               </div>
               <div className="flex items-center gap-1.5">
                 <button
