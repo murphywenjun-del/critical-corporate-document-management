@@ -54,8 +54,8 @@ function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Con
         {showNote && (
           <div className="mb-3">
             <div className="flex items-center gap-1.5 mb-1">
-              <span className="text-[11px] font-bold text-teal-600 uppercase">AI Proposed Resolution</span>
-              <span className="text-[11px] text-slate-400">(editable)</span>
+              <span className="text-[11px] font-bold text-teal-600 uppercase">Suggested Resolution</span>
+              <span className="text-[11px] text-slate-400">standard clause library · editable</span>
             </div>
             <textarea
               value={note}
