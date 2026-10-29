@@ -61,7 +61,7 @@ function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Con
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-xl mx-4 p-6">
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 p-7">
         <div className="text-base font-bold text-slate-900 mb-2">{title}</div>
         <div className="text-[13px] leading-relaxed text-slate-600 mb-4 whitespace-pre-line">{message}</div>
         {showNote && (
@@ -90,7 +90,7 @@ function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Con
               onChange={(e) => setNote(e.target.value)}
               placeholder={aiBusy ? 'Drafting locally… (read-only until the AI finishes, ~15 s)' : 'e.g. Updated contract with legal, added clause 8.2, re-executed with both parties, filed amendment…'}
               readOnly={aiBusy}
-              rows={6}
+              rows={8}
               className={`w-full text-[13px] leading-relaxed border border-slate-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-teal-300 resize-y ${aiBusy ? 'bg-slate-50 text-slate-500' : ''}`}
             />
           </div>
