@@ -205,15 +205,50 @@ export function retentionState(c: Pick<ContractDoc, 'expiryDate' | 'retentionYea
 // Current values are the AI default: 5×5 Likelihood×Impact, score bands
 // ≥20 red / 12–19 orange / 6–11 yellow / <6 green.
 export const RISK_FRAMEWORK = {
-  source: 'Southlake / HIROC risk taxonomy adopted (client-provided register page, Jul 2019 — 12 categories; page contains taxonomy only, no scoring). C×P scoring definitions pending — client internal Risk Scoring Framework / HIROC "Common Taxonomy" not yet provided; AI 5×5 L×I in use meanwhile.',
-  likelihoodLabels: ['Rare', 'Unlikely', 'Might happen', 'Likely', 'Will happen'],
-  impactLabels: ['Tiny', 'Small', 'Noticeable', 'Major', 'Severe'],
+  source: 'Southlake PIA template §7 RISK METHODOLOGY (client-provided, 2026-10-30): 5-point Likelihood × 5-point Impact matrix (impact = highest of People / Assets / Finance / Care / Reputation, assessed stand-alone), Priority = (L×I) + Risk Velocity (§7.4). Inherent vs Residual distinction per §7.3. Category names: HIROC register (Jul 2019, 12 categories).',
+  likelihoodLabels: ['Very Unlikely', 'Unlikely', 'Possible', 'Likely', 'Very Likely'],
+  impactLabels: ['Very Low', 'Low', 'Medium', 'High', 'Very High'],
   bands: { red: 20, orange: 12, yellow: 6 },
   viewNotes: [
-    'Single-contract: L×I score per flag, band determines red/orange/green.',
+    'Single-contract: L×I score per flag; Priority = (L×I) + Velocity ranks urgency.',
+    'Velocity (1–5) = how fast the risk is felt — anchors are a documented assumption (client PIA defines the formula, not the 1–5 scale); to be confirmed.',
     'Portfolio: field-frequency patterns (same flag in ≥3 contracts = systemic trend).',
   ],
 }
+
+// ── PIA Risk Velocity & Priority (Southlake PIA §7.4, client-provided 2026-10-30) ──
+// PIA §7.5: Risk rating = Likelihood × Impact (5×5 matrix, max 25 — matches our
+// flag risk_score). §7.4: Priority = (L×I) + Velocity, where velocity (1–5) is how
+// quickly the risk materializes (time from event to felt effects). The client PIA
+// defines the formula but NOT the 1–5 velocity anchors, so per-field values below
+// are a documented assumption: 5 = effect felt immediately (e.g. PHI breach
+// notification deadlines), 1 = slow/gradual. Confirm with client.
+export const VELOCITY_BY_FIELD: Record<string, number> = {
+  breach_notification: 5, breach_timeline: 5, phia_compliance: 5,
+  security_standards: 4, governing_law: 4, expiry_date: 4,
+  signatories: 3, indemnity_cap: 3, indemnity_clause: 3, conflicting_finance: 3,
+  return_destruction: 3, purpose_limitation: 3, data_minimization: 3,
+  audit_rights: 2, termination_conv: 2, termination_clause: 2, binding_language: 2,
+  auto_renewal: 2, effective_date: 2,
+  ocr_quality: 1, missing_fields: 1, duplicate_version: 1,
+}
+export const flagVelocity = (f: { field: string }): number => VELOCITY_BY_FIELD[f.field] ?? 3
+export const piaPriority = (f: { risk_score?: number; field: string }): number => (f.risk_score || 0) + flagVelocity(f)
+export const PRIORITY_BANDS = { critical: 22, high: 14, medium: 7 }
+export const piaBand = (p: number): 'Critical' | 'High' | 'Medium' | 'Low' =>
+  p >= PRIORITY_BANDS.critical ? 'Critical' : p >= PRIORITY_BANDS.high ? 'High' : p >= PRIORITY_BANDS.medium ? 'Medium' : 'Low'
+
+// PIA §7.5 risk matrix — cell labels exactly as printed in the client PIA
+// (rows = Likelihood 1..5, cols = Impact 1..5; value in parentheses = L×I)
+export const PIA_MATRIX: string[][] = [
+  ['Low (1)', 'Low (2)', 'Low Medium (3)', 'Medium (4)', 'Medium (5)'],
+  ['Low (2)', 'Low Medium (4)', 'Low Medium (6)', 'Medium (6)', 'Medium High (10)'],
+  ['Low (3)', 'Low Medium (6)', 'Medium (9)', 'Medium High (12)', 'Medium High (15)'],
+  ['Low (4)', 'Low Medium (8)', 'Medium (12)', 'Medium High (16)', 'High (20)'],
+  ['Low Medium (5)', 'Medium (10)', 'Medium High (15)', 'High (20)', 'High (25)'],
+]
+export const PIA_LIKELIHOOD_LABELS = ['Very Unlikely', 'Unlikely', 'Possible', 'Likely', 'Very Likely']
+export const PIA_IMPACT_LABELS = ['Very Low', 'Low', 'Medium', 'High', 'Very High']
 
 // ── Southlake / HIROC risk taxonomy (client-provided, Jul 2019 register) ──
 // "Integrated Risk Management Program Taxonomy — Risk Categories and Risk

@@ -3,7 +3,8 @@ import type { ReactNode } from 'react'
 import { contracts, docLinks, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type ContractDoc, type Amendment, type DocLink,
   ROLES, canView, canManage, archiveFileConf, contractToTemplateRef, DEMO_TODAY, CONF_LABEL, CONF_BADGE, retentionState, retentionUntil, type Role,
   TEMPLATE_LIBRARY, matchTemplate, classifyType, RISK_FRAMEWORK,
-  SOUTHLAKE_RISK_TAXONOMY, flagHiroc, CRITERIA_BY_TYPE, RETENTION_BY_TYPE, DEFAULT_RETENTION, LITIGATION_HOLD_NOTE } from './data'
+  SOUTHLAKE_RISK_TAXONOMY, flagHiroc, CRITERIA_BY_TYPE, RETENTION_BY_TYPE, DEFAULT_RETENTION, LITIGATION_HOLD_NOTE,
+  PIA_MATRIX, PIA_LIKELIHOOD_LABELS, PIA_IMPACT_LABELS, flagVelocity, piaPriority, piaBand, PRIORITY_BANDS } from './data'
 
 
 // ── Toast Notification System ──────────────────────────────────────────────
@@ -490,7 +491,7 @@ function RiskRegisterTable({
     }
     return true
   })
-  const sorted = [...filtered].sort((a, b) => b.risk_score - a.risk_score)
+  const sorted = [...filtered].sort((a, b) => piaPriority(b) - piaPriority(a))
   const categories = ['All', ...Object.keys(SOUTHLAKE_RISK_TAXONOMY)]
   const subcats = selCat === 'All'
     ? ['All', ...Array.from(new Set(allFlags.map((f) => flagHiroc(f.field).riskName)))]
@@ -516,6 +517,46 @@ function RiskRegisterTable({
         ) : null
       })()}
 
+      {/* PIA scoring model (client-provided Southlake PIA §7) */}
+      <div className="mt-4 bg-white border border-slate-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          <span className="text-xs font-bold text-slate-700">Risk Scoring Model — Southlake PIA §7</span>
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200">client-provided · 2026-10-30</span>
+        </div>
+        <div className="flex gap-5 flex-wrap">
+          <div className="flex-1 min-w-[300px]">
+            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wide mb-1.5">§7.5 Risk Matrix (Likelihood × Impact, cell = L×I)</div>
+            <div className="grid gap-0.5" style={{ gridTemplateColumns: 'auto repeat(5, 1fr)' }}>
+              <span />
+              {PIA_IMPACT_LABELS.map((l, i) => (
+                <div key={i} className="text-[9px] font-bold text-slate-400 text-center px-1">{l}<div className="text-[8px] font-normal">({i + 1})</div></div>
+              ))}
+              {PIA_MATRIX.map((row, li) => (
+                <div key={li} className="contents">
+                  <div className="text-[9px] font-bold text-slate-400 text-right pr-1 leading-tight">{PIA_LIKELIHOOD_LABELS[li]}<div className="text-[8px] font-normal">({li + 1})</div></div>
+                  {row.map((cell, ii) => {
+                    const v = (li + 1) * (ii + 1)
+                    const cls = v >= 20 ? 'bg-red-100 text-red-800 border-red-300' : v >= 12 ? 'bg-orange-50 text-orange-800 border-orange-300' : v >= 6 ? 'bg-yellow-50 text-yellow-800 border-yellow-300' : 'bg-slate-50 text-slate-600 border-slate-200'
+                    return <div key={ii} className={`text-[9px] text-center border rounded px-1 py-1 ${cls}`}>{cell}</div>
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 min-w-[280px]">
+            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wide mb-1.5">§7.4 Priority Formula</div>
+            <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-slate-700">Priority = (Likelihood × Impact) + Velocity</div>
+            <ul className="mt-2 space-y-1.5 text-[11px] text-slate-500 leading-relaxed list-disc pl-4">
+              <li><b className="text-slate-700">Impact</b> = highest of People / Assets / Finance / Care / Reputation, assessed stand-alone (§7.1).</li>
+              <li><b className="text-slate-700">Likelihood</b> = 12-month occurrence, Very Unlikely (≤5%) → Very Likely (&gt;75%) (§7.2).</li>
+              <li><b className="text-slate-700">Velocity</b> = how fast the risk is felt. Per-field 1–5 assignment is a <b>documented assumption</b> — the PIA defines the formula but not the scale; confirm with client.</li>
+              <li>Priority bands: <span className="text-red-700 font-bold">≥{PRIORITY_BANDS.critical} Critical</span> · <span className="text-orange-700 font-bold">{PRIORITY_BANDS.high}–{PRIORITY_BANDS.critical - 1} High</span> · <span className="text-yellow-700 font-bold">{PRIORITY_BANDS.medium}–{PRIORITY_BANDS.high - 1} Medium</span> · &lt;{PRIORITY_BANDS.medium} Low.</li>
+              <li>§7.3: register shows <b>inherent</b> risk (before controls); remediated flags are the residual view.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
       {/* Collapsible L×I Distribution */}
       <details className="mt-4 bg-white border border-slate-200 rounded-lg">
         <summary className="px-4 py-2.5 text-xs font-bold text-slate-600 cursor-pointer select-none">
@@ -525,8 +566,8 @@ function RiskRegisterTable({
           {(() => {
             const counts: Record<string, number> = {}
             const LABELS: string[][] = [
-              ['Rare','Unlikely','Might happen','Likely','Will happen'],
-              ['Tiny','Minor','Noticeable','Significant','Severe'],
+              PIA_LIKELIHOOD_LABELS,
+              PIA_IMPACT_LABELS,
             ]
             for (const f of allFlags) {
               const label = `${LABELS[0][f.likelihood-1] || '?'} × ${LABELS[1][f.impact-1] || '?'}`
@@ -536,8 +577,8 @@ function RiskRegisterTable({
               <>
               <div className="flex flex-wrap gap-1.5">
                 {Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([label, cnt]) => {
-                  const lIdx = ['Rare','Unlikely','Might happen','Likely','Will happen'].indexOf(label.split(' × ')[0])
-                  const iIdx = ['Tiny','Minor','Noticeable','Significant','Severe'].indexOf(label.split(' × ')[1] || '')
+                  const lIdx = PIA_LIKELIHOOD_LABELS.indexOf(label.split(' × ')[0])
+                  const iIdx = PIA_IMPACT_LABELS.indexOf(label.split(' × ')[1] || '')
                   const matchScore = (lIdx + 1) * (iIdx + 1)
                   const isActive = selScore === matchScore
                   const sev = matchScore >= 20 ? 'bg-red-500 hover:bg-red-600' :
@@ -593,9 +634,9 @@ function RiskRegisterTable({
         </div>
         <button
           onClick={() => {
-            const header = 'Severity,L,Impact,Score,Category,Subcategory,Department,Status,Source,Compliance,Issue,Contract\n'
+            const header = 'Severity,L,Impact,Score,Velocity,Priority,Category,Subcategory,Department,Status,Source,Compliance,Issue,Contract\n'
             const rows = sorted.map((f) => [
-              f.severity, f.likelihood, f.impact, f.risk_score,
+              f.severity, f.likelihood, f.impact, f.risk_score, flagVelocity(f), piaPriority(f),
               flagHiroc(f.field).cat, flagHiroc(f.field).riskName, f.department,
               f.status, f.source, f.compliance_type,
               `"${f.flag_if.replace(/"/g, '""')}"`,
@@ -646,7 +687,7 @@ function RiskRegisterTable({
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-20">Severity</th>
-              <th className="text-center px-2 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-14">Risk</th>
+              <th className="text-center px-2 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-20">Risk · Priority</th>
               <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-20">Status</th>
               <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Issue</th>
               <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-28">Contract</th>
@@ -663,8 +704,8 @@ function RiskRegisterTable({
                   </span>
                 </td>
                 <td className="px-2 py-2.5 text-center">
-                  <div className="text-[11px] font-mono font-bold text-slate-500">{f.likelihood}×{f.impact}</div>
-                  <div className={`text-xs font-bold ${f.risk_score>=20?'text-red-600':f.risk_score>=12?'text-orange-600':f.risk_score>=6?'text-yellow-600':'text-emerald-600'}`}>{f.risk_score}</div>
+                  <div className="text-[11px] font-mono font-bold text-slate-500" title={`L${f.likelihood} × I${f.impact} = ${f.risk_score}, + Velocity ${flagVelocity(f)} (PIA §7.4)`}>{f.likelihood}×{f.impact} +V{flagVelocity(f)}</div>
+                  <div className={`text-xs font-bold ${piaPriority(f) >= PRIORITY_BANDS.critical ? 'text-red-600' : piaPriority(f) >= PRIORITY_BANDS.high ? 'text-orange-600' : piaPriority(f) >= PRIORITY_BANDS.medium ? 'text-yellow-600' : 'text-emerald-600'}`} title="Priority = (L×I) + Velocity">P{piaPriority(f)} · {piaBand(piaPriority(f))}</div>
                 </td>
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-1.5">
@@ -2547,8 +2588,8 @@ function ContractDetail({
                       <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${COMP_TYPE_BG[f.compliance_type] || ''}`}>
                         {f.compliance_type === 'hard' ? 'HARD' : 'BP'}
                       </span>
-                      <span className="text-xs text-slate-400">
-                        L{f.likelihood}×I{f.impact} = <span className="font-bold text-slate-600">{f.risk_score}</span>
+                      <span className="text-xs text-slate-400" title="PIA §7.4: Priority = (L×I) + Velocity">
+                        L{f.likelihood}×I{f.impact}={f.risk_score} +V{flagVelocity(f)} → <span className="font-bold text-slate-700">P{piaPriority(f)} · {piaBand(piaPriority(f))}</span>
                       </span>
                       <span className="text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{flagHiroc(f.field).cat} · {flagHiroc(f.field).riskName}</span>
                       {isResolved(f) && (
@@ -2781,6 +2822,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
     status: string
     action: string
     due?: string
+    pri?: number
     isNew?: boolean // from a Smart Filing upload — surface at the top of its severity tier
   }
 
@@ -2801,6 +2843,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           status: f.status,
           action: 'Fix',
           isNew: c.isUpload === true,
+          pri: piaPriority(f),
         })
       } else if (f.severity === 'High' && f.status === 'open') {
         items.push({
@@ -2813,6 +2856,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           status: f.status,
           action: 'Review',
           isNew: c.isUpload === true,
+          pri: piaPriority(f),
         })
       }
     }
@@ -2888,7 +2932,8 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
 
   // Sort: new uploads first within each severity tier, then critical > high > medium > low, then by docNum
   const sevOrder = { critical: 0, high: 1, medium: 2, low: 3 }
-  allItems.sort((a, b) => (sevOrder[a.severity] - sevOrder[b.severity]) || ((b.isNew ? 1 : 0) - (a.isNew ? 1 : 0)) || (a.docNum - b.docNum))
+  // PIA §7.4: within a severity tier, rank by Priority = (L×I) + Velocity (fastest-impact first)
+  allItems.sort((a, b) => (sevOrder[a.severity] - sevOrder[b.severity]) || ((b.pri || 0) - (a.pri || 0)) || ((b.isNew ? 1 : 0) - (a.isNew ? 1 : 0)) || (a.docNum - b.docNum))
 
   // Archived = retention-complete docs (discard-eligible); shown as a disposal queue when the sidebar filter is on
   const archRows = allContracts.filter((c) => retentionState(c).status === 'elapsed')
@@ -3411,7 +3456,7 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
       continue
     }
     // Use highest-score flag's client category + nearest risk name (Southlake/HIROC taxonomy)
-    const topFlag = cFlags.slice().sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0))[0]
+    const topFlag = cFlags.slice().sort((a, b) => piaPriority(b) - piaPriority(a))[0]
     const h = flagHiroc(topFlag.field)
     const cat = h.cat
     const sub = h.riskName.replace(/\//g, '-')
@@ -3421,7 +3466,7 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
   // Uploaded docs: client category (from top flag) + document type (as sub-folder)
   for (const u of uploaded) {
     const flags = u.flags || []
-    const topFlag = flags.slice().sort((a, b) => (a.severity === 'Critical' ? 3 : a.severity === 'High' ? 2 : 1) - (b.severity === 'Critical' ? 3 : b.severity === 'High' ? 2 : 1))[0]
+    const topFlag = flags.slice().sort((a, b) => ((a.severity === 'Critical' ? 3 : a.severity === 'High' ? 2 : 1) - (b.severity === 'Critical' ? 3 : b.severity === 'High' ? 2 : 1)) || (piaPriority(b) - piaPriority(a)))[0]
     const cat = topFlag ? flagHiroc(topFlag.field).cat : (u.flags_count === 0 ? 'Clean' : 'Uncategorized')
     const sub = u.document_type || 'Other'
     addToTree(cat, sub, { label: u.filename, riskLevel: u.risk_level, flagsCount: u.flags_count || flags.length, isUploaded: true })
@@ -4210,7 +4255,7 @@ function App() {
         : rs.status === 'hold' ? `EXPIRED but IN RETENTION — deletion not allowed yet, keep until ${rs.until}`
         : c.expiryDate ? `ACTIVE — expires ${c.expiryDate}` : 'ACTIVE — no expiry date on file'
       const open = c.flags.filter((f) => f.status === 'open' && !resolvedFlags.has(`f-${c.num}-${f.field}`))
-      const top = [...open].sort((a, b) => (b.risk_score || 0) - (a.risk_score || 0))[0]
+      const top = [...open].sort((a, b) => piaPriority(b) - piaPriority(a))[0]
       lines.push(`#${c.num} ${c.displayName} [${c.type}] ${label} · ${open.length} open flag${open.length === 1 ? '' : 's'}${top ? ` (top: ${top.field} — ${String(top.flag_if).slice(0, 80)})` : ''}`)
     }
     return lines.join('\n')
