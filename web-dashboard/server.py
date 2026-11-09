@@ -464,6 +464,60 @@ def search_docs(q: str, limit: int = 30):
     results = results[:limit]
     return {"query": q, "count": len(results), "results": results}
 
+@app.get("/api/archive-check")
+def archive_check() -> dict:
+    """Archive health check (v45.32, paperless-style sanity checker): counts per
+    category, quarantine backlog, unreadable / zero-byte files, empty folders."""
+    import os
+    allowed = {".md", ".txt", ".csv", ".json", ".docx", ".doc", ".pdf"}
+    categories: dict = {}
+    problems: list = []
+    quarantined = []
+    total_files = 0
+    total_size = 0
+    if not ARCHIVE_DIR.exists():
+        return {"ok": True, "healthy": False, "reason": "archive directory missing", "total_files": 0, "categories": {}, "problems": ["data/archive does not exist yet — nothing has been filed"], "quarantined": []}
+    for root, dirs, files in os.walk(ARCHIVE_DIR):
+        rel_root = Path(root).relative_to(ARCHIVE_DIR).as_posix()
+        cat = rel_root.split("/")[0] if rel_root not in (".", "") else "(root)"
+        for name in files:
+            ext = os.path.splitext(name)[1].lower()
+            if ext not in allowed:
+                continue
+            p = Path(root) / name
+            try:
+                size = p.stat().st_size
+            except OSError:
+                problems.append(f"unreadable file: {rel_root}/{name}")
+                continue
+            total_files += 1
+            total_size += size
+            per_cat = categories.setdefault(cat, 0)
+            categories[cat] = per_cat + 1
+            if size == 0:
+                where = rel_root if rel_root not in (".", "") else "(root)"
+                problems.append(f"zero-byte file: {where}/{name}")
+            if cat == "Clean" and "Unfiled" in rel_root:
+                quarantined.append(f"{rel_root}/{name}")
+    for root, dirs, files in os.walk(ARCHIVE_DIR):
+        if dirs and files:
+            continue
+        rel_root = Path(root).relative_to(ARCHIVE_DIR).as_posix()
+        if not dirs and not files and rel_root not in (".", ""):
+            problems.append(f"empty folder: {rel_root}/")
+    healthy = not problems and not quarantined
+    reasons = []
+    if quarantined:
+        reasons.append(f"{len(quarantined)} file(s) waiting in Clean/Unfiled")
+    reasons += [p for p in problems[:5]]
+    return {
+        "ok": True, "healthy": healthy,
+        "total_files": total_files, "total_size_mb": round(total_size / 1048576, 2),
+        "categories": categories, "problems": problems, "quarantined": quarantined,
+        "reasons": reasons,
+    }
+
+
 @app.post("/api/file-doc")
 def file_doc(filename: str, category: str, subcategory: str = "General"):
     """Move an uploaded file into the correct archive folder on disk."""

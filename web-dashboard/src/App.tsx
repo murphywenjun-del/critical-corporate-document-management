@@ -839,6 +839,9 @@ function ContractList({
   role,
   resolvedFlags,
   retiredNums,
+  bulkSelected,
+  onBulkToggle,
+  onBulkAll,
 }: {
   contracts: ContractDoc[]
   selectedNum: number | null
@@ -846,9 +849,26 @@ function ContractList({
   role?: Role
   resolvedFlags?: Set<string>
   retiredNums?: Set<number>
+  // v45.32 — paperless-style bulk selection: pass the selection set to enable checkboxes + bulk actions
+  bulkSelected?: Set<number>
+  onBulkToggle?: (num: number) => void
+  onBulkAll?: () => void
 }) {
+  const bulkMode = !!bulkSelected
+  const allChecked = bulkMode && allContracts.length > 0 && allContracts.every((c) => bulkSelected!.has(c.num))
   return (
     <div className="bg-white border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100">
+      {bulkMode && (
+        <label className="flex items-center gap-2 px-4 py-2 bg-slate-50 border-b border-slate-200 text-[12px] font-semibold text-slate-600 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={allChecked}
+            onChange={() => { onBulkAll?.() }}
+            className="w-4 h-4 accent-teal-600 cursor-pointer"
+          />
+          Select all visible documents ({allContracts.length}) — bulk actions appear above the list
+        </label>
+      )}
       {allContracts.map((c) => {
         const locked = role ? !canView(role, c) : false
         // Repository meta (item 5, 2026-10-17: centralized contract repository)
@@ -859,15 +879,9 @@ function ContractList({
           (c.amendments?.length ?? 0) +
           (c.baseContractId != null ? 1 : 0) +
           docLinks.filter((l) => l.sourceNum === c.num).length
-        return (
-          <button
-            key={c.num}
-            onClick={() => onSelect(c)}
-            className={`w-full text-left px-4 py-3 transition-colors hover:bg-slate-50 ${
-              selectedNum === c.num ? 'bg-teal-50/50' : ''
-            } ${locked ? 'opacity-70' : ''}`}
-          >
-            <div className="flex items-center gap-3">
+        const rowCls = `w-full text-left transition-colors hover:bg-slate-50 ${selectedNum === c.num ? 'bg-teal-50/50' : ''} ${locked ? 'opacity-70' : ''} ${bulkMode ? 'pl-10 pr-4 py-3' : 'px-4 py-3'}`
+        const rowInner = (
+        <div className="flex items-center gap-3">
               {/* Left: number + type + confidentiality (stacked — long type labels like PROCUREMENT need the width) */}
               <div className="w-28 shrink-0">
                 <div className="flex items-center gap-1.5">
@@ -959,7 +973,21 @@ function ContractList({
                 )}
               </div>
             </div>
-          </button>
+        )
+        return (
+          <div key={c.num} className={`relative ${rowCls}`} onClick={() => onSelect(c)} role="button" tabIndex={0}>
+            {bulkMode && (
+              <input
+                type="checkbox"
+                checked={bulkSelected!.has(c.num)}
+                onChange={() => { onBulkToggle?.(c.num) }}
+                onClick={(e) => e.stopPropagation()}
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 accent-teal-600 cursor-pointer"
+                title="Select for bulk actions"
+              />
+            )}
+            {rowInner}
+          </div>
         )
       })}
     </div>
@@ -1248,6 +1276,95 @@ function DocSearch({ contracts: allContracts, onSelect, role }: { contracts: Con
             </div>
           ) : (
             <div className="text-[11px] text-slate-400">Archive search offline — start the API server (server.py, port 8000) to search on-disk files.</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Relevance score for global search: how many indexable fields of the document
+// contain the needle (name, type, department, summary, flags, amendments).
+function scoreDoc(c: ContractDoc, needle: string): number {
+  let s = 0
+  const hay = [c.name, c.displayName, c.type, c.department, c.summary, c.filePath]
+  for (const h of hay) if (h && h.toLowerCase().includes(needle)) s += 1
+  for (const f of c.flags || []) {
+    if ((f.flag_if || '').toLowerCase().includes(needle) || (f.field || '').toLowerCase().includes(needle)) s += 1
+  }
+  if ((c.amendments || []).some((a) => (a.label || '').toLowerCase().includes(needle))) s += 1
+  return s
+}
+
+// Global search (top bar, paperless-style): autocomplete across demo documents
+// (relevance-sorted) + on-disk archive snippets. Live; offline-safe.
+function GlobalSearch({ contracts, role, onPick }: { contracts: ContractDoc[]; role: Role | null; onPick: (c: ContractDoc) => void }) {
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
+  const [hits, setHits] = useState<{ file: string; path: string; snippet: string; source: string }[] | null>(null)
+  const [diskOffline, setDiskOffline] = useState(false)
+  const needle = q.trim().toLowerCase()
+  useEffect(() => {
+    if (needle.length < 2) { setHits(null); setDiskOffline(false); return }
+    let cancelled = false
+    fetch(`/api/search?q=${encodeURIComponent(needle)}&limit=5`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled) { setHits(d ? d.results : []); setDiskOffline(false) } })
+      .catch(() => { if (!cancelled) { setHits([]); setDiskOffline(true) } })
+    return () => { cancelled = true }
+  }, [needle])
+  const scored = needle.length >= 2
+    ? contracts.map((c) => ({ c, n: scoreDoc(c, needle) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n).slice(0, 6)
+    : []
+  const gatedHits = role && hits ? hits.filter((h) => canView(role, { confidentiality: archiveFileConf(h.file) })) : hits || []
+  return (
+    <div className="relative" onKeyDown={(e) => { if (e.key === 'Escape') { setOpen(false); setQ('') } }}>
+      <div className="flex items-center border border-slate-200 bg-slate-50 rounded-lg pl-2.5 pr-1.5 py-1 focus-within:ring-2 focus-within:ring-teal-300 transition">
+        <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input
+          value={q}
+          onChange={(e) => { setQ(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Search documents & archive…"
+          className="text-[12px] bg-transparent border-0 focus:outline-none w-40 pl-1.5 placeholder:text-slate-400"
+        />
+      </div>
+      {open && needle.length >= 2 && (
+        <div className="absolute right-0 top-full mt-1.5 w-[380px] bg-white border border-slate-200 rounded-lg shadow-xl z-50 overflow-hidden">
+          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-3 pt-2.5 pb-1">
+            Documents <span className="text-teal-600">({scored.length})</span>
+            <span className="font-normal normal-case text-slate-400"> · sorted by relevance</span>
+          </div>
+          {scored.length === 0 && <div className="px-3 py-1.5 text-[11px] text-slate-400">No matching documents.</div>}
+          {scored.map(({ c, n }) => (
+            <button key={c.num} onMouseDown={() => { onPick(c); setQ(''); }} className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors border-t border-slate-100">
+              <div className="text-xs font-medium text-slate-800 flex items-center gap-1.5">
+                <span className="font-mono text-slate-400">#{c.num}</span> {c.displayName}
+                <span className="text-[10px] text-teal-600 font-semibold ml-auto shrink-0">{n} field{n > 1 ? 's' : ''} match</span>
+              </div>
+              {c.summary && <div className="text-[11px] text-slate-500 truncate mt-0.5"><Highlight text={c.summary} q={needle} /></div>}
+            </button>
+          ))}
+          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-3 pt-2.5 pb-1 border-t border-slate-100">
+            On-disk archive {diskOffline ? '(offline)' : `(${gatedHits.length} file${gatedHits.length === 1 ? '' : 's'})`}
+            <span className="font-normal normal-case text-slate-400"> · verified from disk</span>
+          </div>
+          {diskOffline ? (
+            <div className="px-3 pb-2 text-[11px] text-slate-400">Archive search offline — start the API server (port 8000).</div>
+          ) : gatedHits.length === 0 ? (
+            <div className="px-3 pb-2 text-[11px] text-slate-400">No matching files in the on-disk archive.</div>
+          ) : (
+            <div className="max-h-40 overflow-y-auto">
+              {gatedHits.map((h, i) => (
+                <div key={i} className="px-3 py-1.5 border-t border-slate-100">
+                  <div className="text-[11px] font-medium text-slate-600 truncate">{h.path}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 line-clamp-2"><Highlight text={h.snippet} q={needle} /></div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -2530,6 +2647,10 @@ function ContractDetail({
   resolvedFlags,
   retired,
   onToggleRetired,
+  notesFor,
+  eventsFor,
+  onAddNote,
+  manageable,
 }: {
   selected: ContractDoc
   onBack?: () => void
@@ -2538,6 +2659,10 @@ function ContractDetail({
   resolvedFlags?: Set<string>
   retired?: boolean
   onToggleRetired?: () => void
+  notesFor?: { ts: string; text: string; who: string }[]
+  eventsFor?: { ts: string; text: string; kind: string; docNum?: number }[]
+  onAddNote?: (text: string) => void
+  manageable?: boolean
 }) {
   const s = selected
   void onStatusOverride
@@ -2713,6 +2838,60 @@ function ContractDetail({
         </section>
       )}
 
+      {/* v45.32 — Notes & Activity (paperless-style): margin annotations + the record of what happened to this document */}
+      {(notesFor || eventsFor || onAddNote) && (
+        <section className="mb-6 bg-white border border-slate-200 rounded-lg p-4">
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Notes &amp; Activity</h3>
+          {onAddNote && (
+            <div className="flex items-start gap-2 mb-3">
+              <textarea
+                rows={2}
+                placeholder={manageable ? `Add a note for #${s.num} (visible in this panel and the activity feed)…` : 'Notes require the Legal role (demo RBAC)'}
+                disabled={!manageable}
+                onChange={(e) => { void e.target.value }}
+                id={`note-input-${s.num}`}
+                className="flex-1 text-[12px] border border-slate-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:opacity-40 resize-y"
+              />
+              <button
+                onClick={() => {
+                  const el = document.getElementById(`note-input-${s.num}`) as HTMLTextAreaElement | null
+                  const text = el?.value.trim()
+                  if (!text) return
+                  onAddNote(text)
+                  if (el) el.value = ''
+                }}
+                disabled={!manageable}
+                className="text-[12px] font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg px-3 py-2 transition disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+              >Add note</button>
+            </div>
+          )}
+          {(notesFor || []).length > 0 && (
+            <div className="space-y-2 mb-3">
+              {(notesFor || []).map((n, i) => (
+                <div key={i} className="text-[12px] bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                  <div className="text-slate-700">{n.text}</div>
+                  <div className="text-[10px] text-slate-400 mt-1">{n.who} · {n.ts}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">Activity</div>
+          {(eventsFor || []).length > 0 ? (
+            <div className="space-y-1.5">
+              {(eventsFor || []).slice(0, 6).map((e, i) => (
+                <div key={i} className="flex items-start gap-2 text-[11px]">
+                  <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${e.kind === 'resolve' ? 'bg-emerald-500' : e.kind === 'file' ? 'bg-teal-500' : e.kind === 'defer' ? 'bg-slate-400' : e.kind === 'note' ? 'bg-amber-400' : 'bg-red-400'}`} />
+                  <span className="text-slate-600 flex-1">{e.text}</span>
+                  <span className="text-slate-400 shrink-0">{e.ts}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-[11px] text-slate-400">No recorded activity for this document yet — resolutions, filings, deferrals and notes will appear here.</div>
+          )}
+        </section>
+      )}
+
 
     </div>
   )
@@ -2758,12 +2937,16 @@ function SettingsSidebar({
   selectedDept, onSelectDept,
   selectedExpiry, onSelectExpiry,
   onGoToSmartFiling,
+  savedViews, onApplyView, onDeleteView,
 }: {
   selectedType: string; onSelectType: (v: string) => void
   selectedRisk: string; onSelectRisk: (v: string) => void
   selectedDept: string; onSelectDept: (v: string) => void
   selectedExpiry: string; onSelectExpiry: (v: string) => void
   onGoToSmartFiling: () => void
+  savedViews?: { id: string; name: string; kind: 'docs' | 'wq'; filters: Record<string, string> }[]
+  onApplyView?: (v: { id: string; name: string; kind: 'docs' | 'wq'; filters: Record<string, string> }) => void
+  onDeleteView?: (id: string) => void
 }) {
   const types = ['All', ...Array.from(new Set(contracts.map((c) => c.type)))]
   const risks = ['All', 'Low', 'Critical']
@@ -2822,6 +3005,31 @@ function SettingsSidebar({
         </div>
         <ListFilter label="Expiry" options={expiries} selected={selectedExpiry} onChange={onSelectExpiry} />
       </div>
+
+      {/* v45.32 — Saved views: filter combinations the user bookmarked, applied in one click */}
+      {savedViews && savedViews.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">My Views ({savedViews.length})</p>
+          <div className="space-y-1">
+            {savedViews.map((v) => (
+              <div key={v.id} className="group flex items-center gap-1.5">
+                <button
+                  onClick={() => onApplyView?.(v)}
+                  className="flex-1 text-left text-[13px] px-3 py-2 rounded-md border border-slate-200 bg-white text-slate-700 hover:border-teal-400 hover:bg-teal-50 transition-colors"
+                  title={v.kind === 'docs' ? `Apply: type=${v.filters.type} risk=${v.filters.risk} dept=${v.filters.dept} expiry=${v.filters.expiry}` : `Apply WQ view: tile=${v.filters.tile} expiry=${v.filters.expiry}`}
+                >
+                  <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded mr-1.5 ${v.kind === 'docs' ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {v.kind === 'docs' ? 'DOCS' : 'WQ'}
+                  </span>
+                  {v.name}
+                </button>
+                <button onClick={() => onDeleteView?.(v.id)} className="text-[12px] text-slate-300 hover:text-red-500 px-1.5 transition" title="Delete view">✕</button>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">One click re-applies the saved filter combination.</p>
+        </div>
+      )}
     </div>
   )
 }
@@ -2833,12 +3041,18 @@ function SettingsSidebar({
 
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
-function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields, manageable, expiryFilter, onClearExpiry, retiredNums, deferMap, onDefer, onClearDefer }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string, aiDraft?: () => Promise<string>) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[]; manageable?: boolean; expiryFilter?: string; onClearExpiry?: () => void; retiredNums?: Set<number>; deferMap?: Record<string, { until: string; note?: string }>; onDefer?: (id: string, days: number) => void; onClearDefer?: (id: string) => void }) {
+function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields, manageable, expiryFilter, onClearExpiry, retiredNums, deferMap, onDefer, onClearDefer, onBulkResolve, onBulkDefer, viewRequest, onSaveWqView, onReportWqTile }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string, aiDraft?: () => Promise<string>) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[]; manageable?: boolean; expiryFilter?: string; onClearExpiry?: () => void; retiredNums?: Set<number>; deferMap?: Record<string, { until: string; note?: string }>; onDefer?: (id: string, days: number) => void; onClearDefer?: (id: string) => void; onBulkResolve?: (ids: string[]) => void; onBulkDefer?: (ids: string[], days: number) => void; viewRequest?: { filter: string; ts: number } | null; onSaveWqView?: (name: string, tile: string) => void; onReportWqTile?: (tile: string) => void }) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref' | 'resolved' | 'deferred'>('all')
   const [wqPage, setWqPage] = useState(1) // task-table pagination (15 per page)
   const [showResolved, setShowResolved] = useState(false)
   const [search, setSearch] = useState('')
   const [deferFor, setDeferFor] = useState<string | null>(null) // v45.31 — which row is showing the defer-duration picker
+  // v45.32 — bulk selection + saved views (paperless-style)
+  const [wqSel, setWqSel] = useState<Set<string>>(new Set())
+  const [wqSavingView, setWqSavingView] = useState(false)
+  const [wqViewName, setWqViewName] = useState('')
+  useEffect(() => { if (viewRequest) setFilter(viewRequest.filter as typeof filter) }, [viewRequest?.ts])
+  useEffect(() => { onReportWqTile?.(filter) }, [filter])
 
   // Compute work items
   type WorkItem = {
@@ -3054,8 +3268,47 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           className="text-[13px] border border-slate-200 rounded-lg px-3.5 py-2.5 w-64 focus:outline-none focus:ring-2 focus:ring-teal-300"
         />
         <button onClick={() => setFilter('all')} className="text-[12px] font-medium px-2.5 py-1.5 rounded-full border border-slate-200 text-slate-600 hover:border-slate-400 transition">All ({allItems.length})</button>
+        {/* v45.32 — save the current filter combo as a reusable view (applies from the sidebar) */}
+        {(filter !== 'all' || (expiryFilter && expiryFilter !== 'All')) && (
+          wqSavingView ? (
+            <span className="inline-flex items-center gap-1.5">
+              <input
+                autoFocus
+                value={wqViewName}
+                onChange={(e) => setWqViewName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { onSaveWqView?.(wqViewName.trim() || `WQ · ${filter}`, filter); setWqSavingView(false); setWqViewName('') } }}
+                placeholder={`“WQ · ${filter}”`}
+                className="text-[12px] border border-slate-300 rounded px-2 py-1.5 w-36 focus:outline-none focus:ring-2 focus:ring-teal-300"
+              />
+              <button onClick={() => { onSaveWqView?.(wqViewName.trim() || `WQ · ${filter}`, filter); setWqSavingView(false); setWqViewName('') }} className="text-[12px] font-semibold text-white bg-teal-600 rounded px-2.5 py-1.5">Save</button>
+            </span>
+          ) : (
+            <button onClick={() => setWqSavingView(true)} className="text-[12px] font-medium px-2.5 py-1.5 rounded-full border border-dashed border-slate-300 text-slate-500 hover:border-teal-400 hover:text-teal-600 transition" title="Save this filter combination (tile + document-level expiry) as a named view in the sidebar">
+              💾 Save view
+            </button>
+          )
+        )}
         <span className="ml-auto text-[12px] text-slate-500">Showing {filtered.length} of {allItems.length}</span>
       </div>
+
+      {/* v45.32 — bulk actions bar: appears when flag items are selected in the table below */}
+      {wqSel.size > 0 && (
+        <div className="mb-3 bg-slate-900 text-white rounded-lg px-4 py-2.5 flex items-center gap-3 flex-wrap">
+          <span className="text-[12px] font-bold">{wqSel.size} item{wqSel.size > 1 ? 's' : ''} selected</span>
+          <button onClick={() => { onBulkResolve?.([...wqSel]); setWqSel(new Set()) }} disabled={!manageable}
+            className="text-[12px] font-semibold bg-emerald-500 hover:bg-emerald-600 rounded-md px-3 py-1.5 transition disabled:opacity-40">
+            Resolve selected
+          </button>
+          {[30, 60, 90].map((d) => (
+            <button key={d} onClick={() => { onBulkDefer?.([...wqSel], d); setWqSel(new Set()) }} disabled={!manageable}
+              title={`Defer for ${d} days — stops alerting, auto-reverts to open when the window passes`}
+              className="text-[12px] font-semibold bg-slate-700 hover:bg-slate-600 rounded-md px-3 py-1.5 transition disabled:opacity-40">
+              Defer {d}d
+            </button>
+          ))}
+          <button onClick={() => setWqSel(new Set())} className="ml-auto text-[12px] text-slate-300 hover:text-white transition">✕ Clear selection</button>
+        </div>
+      )}
 
       {/* Active expiry/retention filter notice — makes sidebar filters visible on this table */}
       {expiryFilter && expiryFilter !== 'All' && (
@@ -3217,6 +3470,20 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
+              {filter === 'all' && (
+                <th className="w-8 px-2 py-2.5" title="Select flag items for bulk resolve / defer">
+                  <input
+                    type="checkbox"
+                    checked={filtered.some((i) => i.id.startsWith('f-')) && filtered.filter((i) => i.id.startsWith('f-')).every((i) => wqSel.has(i.id))}
+                    onChange={() => {
+                      const flagIds = filtered.filter((i) => i.id.startsWith('f-')).map((i) => i.id)
+                      const all = flagIds.length > 0 && flagIds.every((id) => wqSel.has(id))
+                      setWqSel((prev) => { const s = new Set(prev); if (all) flagIds.forEach((id) => s.delete(id)); else flagIds.forEach((id) => s.add(id)); return s })
+                    }}
+                    className="w-3.5 h-3.5 accent-teal-600 cursor-pointer"
+                  />
+                </th>
+              )}
               <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Issue</th>
               <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Document</th>
               <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Severity</th>
@@ -3228,6 +3495,21 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
             {(() => { const per = 15, start = (wqPage - 1) * per; const pageRows = filtered.slice(start, start + per);
               return pageRows.map((item) => (
               <tr key={item.id} className={`hover:bg-slate-50/70 cursor-pointer transition ${item.severity === 'critical' ? 'bg-red-50/30' : ''}`} onClick={() => onSelectContract(item.contract)}>
+                {filter === 'all' && (
+                  <td className="w-8 px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
+                    {item.id.startsWith('f-') ? (
+                      <input
+                        type="checkbox"
+                        checked={wqSel.has(item.id)}
+                        onChange={() => setWqSel((prev) => { const s = new Set(prev); if (s.has(item.id)) s.delete(item.id); else s.add(item.id); return s })}
+                        className="w-3.5 h-3.5 accent-teal-600 cursor-pointer"
+                        title="Select for bulk actions"
+                      />
+                    ) : (
+                      <span className="block w-3.5 h-3.5 text-slate-300 text-[10px] leading-3" title={item.id.startsWith('x-') ? 'Cross-ref items are processed, not resolved' : item.id.startsWith('t-') ? 'Tasks complete from Insights' : 'Expiry items are scheduled, not resolved'}>–</span>
+                    )}
+                  </td>
+                )}
                 <td className="px-4 py-2.5 text-[13px] font-medium text-slate-800 max-w-[340px] truncate" title={item.what}>{item.what}</td>
                 <td className="px-4 py-2.5 text-[13px] text-slate-700">
                   {item.isNew && (
@@ -3432,7 +3714,15 @@ function uploadToContractDoc(u: UploadedDoc, idx: number): ContractDoc {
   }
 }
 
-function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { contracts: ContractDoc[]; uploads: UploadedDoc[]; onUploaded: (docs: UploadedDoc[]) => void }) {
+function SmartFilingView({ contracts: allContracts, uploads, onUploaded, incomingFiles, onConsumeIncoming, onFilingConfirmed }: {
+  contracts: ContractDoc[]
+  uploads: UploadedDoc[]
+  onUploaded: (docs: UploadedDoc[]) => void
+  // v45.32 — global drag-and-drop: files dropped anywhere in the app arrive here
+  incomingFiles?: { name: string; size: number; file?: File }[]
+  onConsumeIncoming?: () => void
+  onFilingConfirmed?: (label: string) => void
+}) {
 
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -3449,6 +3739,18 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
   const setUploaded = (updater: (prev: UploadedDoc[]) => UploadedDoc[]) => {
     onUploaded(updater(uploads))
   }
+
+  // v45.32 — consume files dragged from anywhere in the app (or the OS)
+  useEffect(() => {
+    if (incomingFiles && incomingFiles.length > 0) {
+      const withFiles = incomingFiles.filter((f) => f.file)
+      if (withFiles.length > 0) {
+        void handleUpload(withFiles.map((f) => f.file!))
+      }
+      onConsumeIncoming?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incomingFiles])
 
   // Fetch real on-disk folder tree
   useEffect(() => {
@@ -3572,6 +3874,8 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
       }
     }
     setUploaded((prev) => [doc, ...prev])
+    // v45.32 — report to the global activity feed ("filed into X")
+    onFilingConfirmed?.(doc.filename)
     // Auto-open the confirmed folder so the user immediately sees where the file landed
     const target = doc.filed_to
     if (target) {
@@ -4398,6 +4702,8 @@ function App() {
       localStorage.setItem('resolvedLog', JSON.stringify(next))
       return next
     })
+    const dn = parts[1] ? Number(parts[1]) : undefined
+    logEvent('resolve', `${fieldLabel} resolved → ${docNum || 'n/a'}`, dn)
     show('Flag resolved ✓', 'success')
   }
   const completeLink = (linkId: string) => {
@@ -4420,6 +4726,7 @@ function App() {
       localStorage.setItem('ccdm_uploads', JSON.stringify(next))
       return next
     })
+    docs.forEach((d) => logEvent('file', `Smart Filing: ${d.filename} classified as ${d.document_type || 'Unknown'} (verify filing to confirm)`, undefined))
   }
   const liveContracts = useMemo<ContractDoc[]>(
     () => [...contracts, ...uploads.map((u, i) => uploadToContractDoc(u, i))],
@@ -4442,7 +4749,9 @@ function App() {
       localStorage.setItem('southlake_retired', JSON.stringify([...s]))
       return s
     })
-    show(retiredNums.has(num) ? `#${num} unretired — back in alert scope` : `#${num} retired — out of scope, hidden from alerts`, 'info')
+    const isRetired = retiredNums.has(num)
+    show(isRetired ? `#${num} unretired — back in alert scope` : `#${num} retired — out of scope, hidden from alerts`, 'info')
+    logEvent(isRetired ? 'unretire' : 'retire', isRetired ? `#${num} unretired — back in alert scope` : `#${num} retired — out of alert scope (kept in archive)`, num)
   }
 
   // ── v45.31 · Deferred "In Progress" control (10/30 meeting) ──
@@ -4463,6 +4772,8 @@ function App() {
       return m
     })
     show('Item deferred — stops alerting until the window closes, then auto-reverts to open', 'info')
+    const dn = Number(id.split('-')[1])
+    logEvent('defer', `${id.split('-').slice(2).join('-').replace(/_/g, ' ')} deferred ${days}d → #${dn || '?'}`, id.startsWith('f-') ? dn : undefined)
   }
   const clearDefer = (id: string) => {
     setDeferMap((prev) => {
@@ -4472,7 +4783,184 @@ function App() {
       return m
     })
     show('Deferral cleared — item is open again', 'info')
+    const dn = Number(id.split('-')[1])
+    logEvent('defer-clear', `${id.split('-').slice(2).join('-').replace(/_/g, ' ')} deferral cleared → #${dn || '?'} open again`, id.startsWith('f-') ? dn : undefined)
   }
+  // ── v45.32 · paperless-inspired batch: Notes & Activity · Bulk actions ·
+  //    Saved views · Drag-anywhere filing · Archive health check ─────────────
+  // Activity feed: every action the system/user took on the portfolio (persisted, newest first, capped)
+  const [events, setEvents] = useState<{ ts: string; text: string; kind: string; docNum?: number }[]>(() => {
+    try { return JSON.parse(localStorage.getItem('ccdm_activity') || '[]') } catch { return [] }
+  })
+  const logEvent = (kind: string, text: string, docNum?: number) => {
+    setEvents((prev) => {
+      const now = new Date()
+      const entry = { ts: now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), text, kind, docNum }
+      const next = [entry, ...prev].slice(0, 80)
+      localStorage.setItem('ccdm_activity', JSON.stringify(next))
+      return next
+    })
+  }
+  // Per-document notes (legal margin annotations)
+  const [notes, setNotes] = useState<Record<number, { ts: string; text: string; who: string }[]>>(() => {
+    try { return JSON.parse(localStorage.getItem('ccdm_notes') || '{}') } catch { return {} }
+  })
+  const addNote = (num: number, text: string, silent = false) => {
+    setNotes((prev) => {
+      const now = new Date()
+      const entry = { ts: now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), text, who: role.user || 'You' }
+      const next = { ...prev, [num]: [entry, ...(prev[num] || [])] }
+      localStorage.setItem('ccdm_notes', JSON.stringify(next))
+      return next
+    })
+    logEvent('note', `Note added to #${num} — “${text.slice(0, 48)}${text.length > 48 ? '…' : ''}”`, num)
+    if (!silent) show(`Note added to #${num}`, 'success')
+  }
+
+  // Bulk selection + bulk operations on the Documents tab (paperless-style multi-select)
+  const [bulkSel, setBulkSel] = useState<Set<number>>(new Set())
+  const bulkToggle = (n: number) => setBulkSel((prev) => { const s = new Set(prev); if (s.has(n)) s.delete(n); else s.add(n); return s })
+  const markFlagResolvedSilent = (id: string) => {
+    setResolvedFlags((prev) => { const next = new Set(prev); next.add(id); localStorage.setItem('resolvedFlags', JSON.stringify([...next])); return next })
+    const parts = id.split('-')
+    const fieldLabel = parts.length > 2 ? parts.slice(2).join('-').replace(/_/g, ' ') : id
+    const docNum = parts[1] ? '#' + parts[1] : ''
+    const now = new Date()
+    setResolvedLog((prev) => {
+      const entry = { id, label: `${fieldLabel} → ${docNum}`, who: 'You (bulk)', time: now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), type: 'flag' }
+      const next = [entry, ...prev]
+      localStorage.setItem('resolvedLog', JSON.stringify(next))
+      return next
+    })
+  }
+  const bulkResolve = () => {
+    const ids: string[] = []
+    for (const c of bulkDocs) for (const f of c.flags) if (f.status === 'open' && !resolvedFlags.has(`f-${c.num}-${f.field}`)) ids.push(`f-${c.num}-${f.field}`)
+    if (ids.length === 0) { show('No open flags on the selected documents — nothing to resolve', 'info'); setBulkSel(new Set()); return }
+    ids.forEach((id) => { markFlagResolvedSilent(id); logEvent('resolve', `${id.split('-').slice(2).join('-').replace(/_/g, ' ')} resolved → #${id.split('-')[1]} (bulk)`, Number(id.split('-')[1])) })
+    show(`Resolved ${ids.length} flag${ids.length > 1 ? 's' : ''} across ${bulkDocs.length} document${bulkDocs.length > 1 ? 's' : ''} ✓`, 'success')
+    setBulkSel(new Set())
+  }
+  const bulkRefile = async (toCat: string) => {
+    if (!toCat) return
+    let moved = 0
+    let skipped = 0
+    for (const c of bulkDocs) {
+      const filename = c.isUpload ? c.name : (c.filePath ? String(c.filePath).split('/').pop() : '')
+      if (!filename) { skipped++; continue }
+      const segs = String(c.filePath || '').split('/').filter(Boolean)
+      const fromCat = c.isUpload && c.filePath?.startsWith('data/') ? segs[segs.length - 3] : segs[0] || 'Unknown'
+      try {
+        const r = await fetch('/api/re-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, from_category: fromCat, to_category: toCat }),
+        })
+        const d = await r.json()
+        if (d.path || d.status === 'filed') {
+          moved++
+          if (c.isUpload && d.path) setUploads((prev) => prev.map((u) => (u.filename === filename ? { ...u, filed_to: d.path } : u)))
+          logEvent('file', `#${c.num} re-filed to ${toCat} (bulk)`, c.num)
+        } else skipped++
+      } catch { skipped++ }
+    }
+    if (moved > 0) show(`Re-filed ${moved} document${moved > 1 ? 's' : ''} to ${toCat} ✓${skipped ? ` · ${skipped} skipped (no on-disk file or offline)` : ''}`, 'success')
+    else if (skipped > 0) show('No on-disk files to move — archive service offline or the selected documents have no filed file', 'warn')
+    setBulkSel(new Set())
+  }
+  const bulkNote = (text: string) => {
+    if (!text.trim() || bulkDocs.length === 0) return
+    bulkDocs.forEach((c) => addNote(c.num, text.trim(), true))
+    show(`Note added to ${bulkDocs.length} document${bulkDocs.length > 1 ? 's' : ''} ✓`, 'success')
+    setBulkSel(new Set())
+    setBulkNoteText('')
+  }
+  const [bulkNoteText, setBulkNoteText] = useState('')
+  // v45.32 — bulk defer of Work Queue flag items (per-item 30/60/90d windows, each auto-reverts)
+  const bulkDefer = (ids: string[], days: number) => {
+    ids.forEach((id) => deferItem(id, days))
+    show(`${ids.length} item${ids.length > 1 ? 's' : ''} deferred for ${days} days — alerting paused, auto-reverts to open after the window`, 'success')
+  }
+
+  // Saved views (paperless-style "save the current filter combo"): docs tab = the 4 sidebar filters,
+  // WQ = active summary-tile filter + document-level expiry filter. Stored in localStorage, applied from the sidebar.
+  type SavedView = { id: string; name: string; kind: 'docs' | 'wq'; filters: Record<string, string> }
+  const [savedViews, setSavedViews] = useState<SavedView[]>(() => {
+    try { return JSON.parse(localStorage.getItem('ccdm_savedviews') || '[]') } catch { return [] }
+  })
+  const upsertView = (v: SavedView) => {
+    setSavedViews((prev) => { const next = [...prev, v]; localStorage.setItem('ccdm_savedviews', JSON.stringify(next)); return next })
+    show(`View “${v.name}” saved — find it in the sidebar`, 'success')
+  }
+  const applySavedView = (v: SavedView) => {
+    if (v.kind === 'docs') {
+      setFilterType(v.filters.type || 'All'); setFilterRisk(v.filters.risk || 'All'); setFilterDept(v.filters.dept || 'All'); setFilterExpiry(v.filters.expiry || 'All')
+      setActiveTab('contracts')
+    } else {
+      setFilterExpiry(v.filters.expiry || 'All')
+      setWqViewReq({ filter: v.filters.tile || 'all', ts: Date.now() })
+      setActiveTab('work-queue')
+    }
+    show(`View “${v.name}” applied`, 'info')
+  }
+  const deleteSavedView = (id: string) => setSavedViews((prev) => { const next = prev.filter((x) => x.id !== id); localStorage.setItem('ccdm_savedviews', JSON.stringify(next)); return next })
+  const [savingView, setSavingView] = useState<'docs' | 'wq' | null>(null)
+  const [viewName, setViewName] = useState('')
+  // WQ's internal tile-filter value, kept reachable for "save view" without lifting the state
+  const wqViewTileRef = { current: 'all' as string }
+  const setWqViewTile = (v: string) => { wqViewTileRef.current = v }
+  const [wqViewReq, setWqViewReq] = useState<{ filter: string; ts: number } | null>(null)
+  const commitViewName = (kind: 'docs' | 'wq') => {
+    const name = viewName.trim() || (kind === 'docs' ? `Docs · ${filterType}/${filterExpiry}` : `WQ · ${wqViewTileRef.current}`)
+    if (kind === 'docs') upsertView({ id: 'v' + Date.now(), name, kind, filters: { type: filterType, risk: filterRisk, dept: filterDept, expiry: filterExpiry } })
+    else upsertView({ id: 'v' + Date.now(), name, kind, filters: { tile: wqViewTileRef.current, expiry: filterExpiry } })
+    setSavingView(null); setViewName('')
+  }
+  // v45.32 — WQ supplies its own name + tile; upsert under both keys
+  const commitWqView = (name: string, tile: string) => upsertView({ id: 'v' + Date.now(), name, kind: 'wq', filters: { tile, expiry: filterExpiry } })
+
+  // Drag files anywhere on screen → stage them into Smart Filing (one clear upload path)
+  const [dragging, setDragging] = useState(false)
+  const [incomingFiles, setIncomingFiles] = useState<File[] | null>(null)
+  useEffect(() => {
+    let depth = 0
+    const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types || []).includes('Files')
+    const enter = (e: DragEvent) => { if (!hasFiles(e)) return; e.preventDefault(); depth++; setDragging(true) }
+    const leave = (e: DragEvent) => { if (!hasFiles(e)) return; depth = Math.max(0, depth - 1); if (depth === 0) setDragging(false) }
+    const over = (e: DragEvent) => { if (hasFiles(e)) e.preventDefault() }
+    const drop = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      depth = 0; setDragging(false)
+      const files = Array.from(e.dataTransfer?.files || [])
+      if (files.length > 0) {
+        setIncomingFiles(files)
+        setActiveTab('smart-filing')
+        show(`${files.length} file${files.length > 1 ? 's' : ''} staged in Smart Filing — verify the category to file it`, 'info')
+      }
+    }
+    window.addEventListener('dragenter', enter)
+    window.addEventListener('dragleave', leave)
+    window.addEventListener('dragover', over)
+    window.addEventListener('drop', drop)
+    return () => {
+      window.removeEventListener('dragenter', enter)
+      window.removeEventListener('dragleave', leave)
+      window.removeEventListener('dragover', over)
+      window.removeEventListener('drop', drop)
+    }
+  }, [])
+
+  // Archive health check (paperless-style sanity checker, verified from disk via /api/archive-check)
+  const [archCheck, setArchCheck] = useState<{ loading: boolean; data: null | { total_files: number; total_size_mb: number; healthy: boolean; categories: Record<string, number>; problems: string[]; quarantined: string[]; reasons: string[] } }>({ loading: false, data: null })
+  const runArchiveCheck = () => {
+    setArchCheck({ loading: true, data: null })
+    fetch('/api/archive-check')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => setArchCheck({ loading: false, data: d }))
+      .catch(() => { setArchCheck({ loading: false, data: null }); show('Archive check offline — start the API server (port 8000)', 'warn') })
+  }
+
   const filtered = liveContracts.filter((c) => {
     if (filterType !== 'All' && c.type !== filterType) return false
     if (filterRisk !== 'All' && c.riskLevel !== filterRisk) return false
@@ -4497,6 +4985,9 @@ function App() {
   // v45.31 — alert-scope: visible docs minus retired (out of scope); alerts/KPIs use this,
   // the Documents list keeps showing retired docs (greyed, filterable) so nothing disappears from the archive
   const activeVisible = visible.filter((c) => !retiredNums.has(c.num))
+  const manageable = !!role && canManage(role)
+  // v45.32 — the currently selected documents for bulk operations (evaluated after `visible` exists)
+  const bulkDocs = visible.filter((c) => bulkSel.has(c.num))
   // Demo resolution overlay: a flag resolved in Work Queue no longer counts as open
   const visibleFlags2 = activeVisible.flatMap((c) => c.flags.map((f) => ({ f, num: c.num })))
   const openFlagsCount = visibleFlags2.filter(({ f, num }) => f.status === 'open' && !resolvedFlags.has(`f-${num}-${f.field}`)).length
@@ -4559,6 +5050,7 @@ function App() {
           return next
         })
         show(`#${c.num} discard approved — routed to ${c.retentionOwner} (Records Management)`, 'success')
+        logEvent('dispose', `#${c.num} discard approved — routed to ${c.retentionOwner} (Records Management)`, c.num)
       },
       showNote: true,
       defaultNote: 'Approved for discard per records schedule.',
@@ -4579,6 +5071,7 @@ function App() {
           return next
         })
         show(`#${c.num} paper copies disposed (${n}) — digital audit record retained`, 'success')
+        logEvent('dispose', `#${c.num} ${n} paper copy/copies disposed — digital audit record retained`, c.num)
       },
       showNote: true,
       defaultNote: 'Paper disposal verified against the location log.',
@@ -4664,7 +5157,9 @@ function App() {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-[11px] text-slate-400 hidden lg:block">{visible.length} contracts · {openFlagsCount} open flags · {avgCompliance}% criteria met</span>
+            {/* Global search (paperless-style): works from any tab, relevance-sorted, live on-disk snippets */}
+            <GlobalSearch contracts={visible} role={role} onPick={(c) => { setSelected(c); setActiveTab('contracts') }} />
+            <span className="text-[11px] text-slate-400 hidden xl:block">{visible.length} contracts · {openFlagsCount} open flags · {avgCompliance}% criteria met</span>
             {/* ── RBAC role switcher ── */}
             <div className="flex items-center gap-1.5" title="Role-based access control — switch the active role to see which documents your role can access">
               <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -4806,6 +5301,7 @@ function App() {
                     selectedDept={filterDept} onSelectDept={setFilterDept}
                     selectedExpiry={filterExpiry} onSelectExpiry={setFilterExpiry}
                     onGoToSmartFiling={() => { setActiveTab('smart-filing'); setSelected(null) }}
+                    savedViews={savedViews} onApplyView={applySavedView} onDeleteView={deleteSavedView}
                   />
                 ) : (
                   <div className="text-[11px] text-slate-500 leading-relaxed">
@@ -4835,6 +5331,8 @@ function App() {
                     manageable={!!role && canManage(role)} resolvedLog={resolvedLog}
                     focusFields={focusFields} expiryFilter={filterExpiry} onClearExpiry={() => setFilterExpiry('All')}
                     retiredNums={retiredNums} deferMap={deferMap} onDefer={deferItem} onClearDefer={clearDefer}
+                    onBulkResolve={bulkResolve} onBulkDefer={bulkDefer}
+                    viewRequest={wqViewReq} onSaveWqView={commitWqView} onReportWqTile={setWqViewTile}
                     onConfirmAction={(title, msg, action, showNote, defaultNote, aiDraft) => setConfirmState({ title, message: msg, onConfirm: action, showNote, defaultNote, aiDraft })} />
                 )}
                 {activeTab === 'risk-register' && (
@@ -4856,6 +5354,96 @@ function App() {
                 )}
                 {activeTab === 'contracts' && (
                   <div className="space-y-4">
+                    {/* v45.32 — bulk actions bar: select documents in the list below, act on all of them */}
+                    {bulkSel.size > 0 && (
+                      <div className="bg-slate-900 text-white rounded-lg px-4 py-2.5 flex items-center gap-3 flex-wrap">
+                        <span className="text-[12px] font-bold">{bulkSel.size} document{bulkSel.size > 1 ? 's' : ''} selected</span>
+                        <button onClick={bulkResolve} disabled={!manageable}
+                          className="text-[12px] font-semibold bg-emerald-500 hover:bg-emerald-600 rounded-md px-3 py-1.5 transition disabled:opacity-40">
+                          Mark open issues resolved
+                        </button>
+                        <input
+                          value={bulkNoteText}
+                          onChange={(e) => setBulkNoteText(e.target.value)}
+                          placeholder="Add a note to all selected…"
+                          className="text-[12px] bg-slate-800 border border-slate-600 rounded-md px-2.5 py-1.5 w-56 text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                        />
+                        <button onClick={() => bulkNote(bulkNoteText)} disabled={!bulkNoteText.trim()} className="text-[12px] font-semibold bg-teal-600 hover:bg-teal-500 rounded-md px-3 py-1.5 transition disabled:opacity-40">Add note</button>
+                        <select
+                          defaultValue=""
+                          onChange={(e) => { if (e.target.value) { bulkRefile(e.target.value); e.target.value = '' } }}
+                          disabled={!manageable}
+                          title="Move the on-disk archive file of every selected document into a different category"
+                          className="text-[12px] bg-slate-800 border border-slate-600 rounded-md px-2 py-1.5 text-white focus:outline-none focus:ring-2 focus:ring-teal-400 disabled:opacity-40"
+                        >
+                          <option value="" disabled>Re-file to category…</option>
+                          {Object.keys(SOUTHLAKE_RISK_TAXONOMY).map((cat) => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                        <button onClick={() => setBulkSel(new Set())} className="ml-auto text-[12px] text-slate-300 hover:text-white transition">✕ Clear</button>
+                      </div>
+                    )}
+
+                    {/* v45.32 — save the current 4-filter combination as a named view */}
+                    {(filterType !== 'All' || filterRisk !== 'All' || filterDept !== 'All' || filterExpiry !== 'All') && (
+                      savingView === 'docs' ? (
+                        <div className="flex items-center gap-2 bg-white border border-teal-300 rounded-lg px-3 py-2">
+                          <input
+                            autoFocus
+                            value={viewName}
+                            onChange={(e) => setViewName(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') commitViewName('docs'); if (e.key === 'Escape') setSavingView(null) }}
+                            placeholder={`“Docs · ${filterType}/${filterExpiry}”`}
+                            className="text-[12px] border border-slate-300 rounded px-2 py-1.5 flex-1 max-w-xs focus:outline-none focus:ring-2 focus:ring-teal-300"
+                          />
+                          <button onClick={() => commitViewName('docs')} className="text-[12px] font-semibold text-white bg-teal-600 rounded-md px-3 py-1.5">Save view</button>
+                          <button onClick={() => setSavingView(null)} className="text-[12px] text-slate-400 hover:text-slate-600">Cancel</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setSavingView('docs')} className="text-[12px] font-medium px-3 py-1.5 rounded-lg border border-dashed border-slate-300 text-slate-500 hover:border-teal-400 hover:text-teal-600 transition"
+                          title="Save the current type / risk / department / expiry combination as a one-click view in the sidebar">
+                          💾 Save current filters as view
+                        </button>
+                      )
+                    )}
+
+                    {/* v45.32 — archive health check (verified from disk via /api/archive-check) */}
+                    <div className="bg-white border border-slate-200 rounded-lg p-4">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <div className="flex-1 min-w-[220px]">
+                          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Archive Health Check</h3>
+                          <p className="text-[11px] text-slate-400 mt-0.5">Reads the real on-disk archive — counts per category, quarantine backlog, zero-byte / unreadable files, empty folders.</p>
+                        </div>
+                        <button onClick={runArchiveCheck} disabled={archCheck.loading}
+                          className="text-[12px] font-semibold text-white bg-slate-700 hover:bg-slate-800 rounded-lg px-3.5 py-2 transition disabled:opacity-50">
+                          {archCheck.loading ? 'Checking…' : 'Run check'}
+                        </button>
+                      </div>
+                      {archCheck.data && (
+                        <div className={`mt-3 rounded-lg border px-3.5 py-3 ${archCheck.data.healthy ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[13px] font-bold text-slate-800">
+                              {archCheck.data.healthy ? '✓ Archive healthy' : '⚠ Attention needed'}
+                            </span>
+                            <span className="text-[12px] text-slate-500">{archCheck.data.total_files} files on disk · {archCheck.data.total_size_mb} MB</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {Object.entries(archCheck.data.categories).map(([cat, n]) => (
+                              <span key={cat} className="text-[11px] font-mono bg-white border border-slate-200 rounded px-2 py-0.5 text-slate-600">{cat}: {n}</span>
+                            ))}
+                          </div>
+                          {archCheck.data.reasons.length > 0 && (
+                            <ul className="mt-2 space-y-1">
+                              {archCheck.data.reasons.map((r, i) => (
+                                <li key={i} className="text-[12px] text-red-700 flex items-start gap-1.5"><span className="font-bold">!</span>{r}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Full-text search (demo docs + on-disk archive) */}
                     <DocSearch contracts={visible} role={role} onSelect={(c) => { setSelected(c); }} />
 
@@ -4869,7 +5457,43 @@ function App() {
                       role={role}
                       resolvedFlags={resolvedFlags}
                       retiredNums={retiredNums}
+                      bulkSelected={activeTab === 'contracts' ? bulkSel : undefined}
+                      onBulkToggle={(n) => bulkToggle(n)}
+                      onBulkAll={() => setBulkSel(new Set(filtered.map((c) => c.num)))}
                     />
+
+                    {/* v45.32 — activity feed: the record of what happened across the portfolio (resolves, filings, deferrals, notes) */}
+                    <div className="bg-white border border-slate-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Recent Activity</h3>
+                        <span className="text-[11px] text-slate-400">{events.length} event{events.length === 1 ? '' : 's'} recorded</span>
+                        {events.length > 0 && (
+                          <button
+                            onClick={() => { setEvents([]); localStorage.removeItem('ccdm_activity') }}
+                            className="ml-auto text-[11px] text-slate-400 hover:text-slate-600 transition"
+                          >Clear feed</button>
+                        )}
+                      </div>
+                      {events.length === 0 ? (
+                        <p className="text-[12px] text-slate-400">No recorded activity yet — resolutions, deferrals, retirements, disposals, filings and notes will appear here with timestamps.</p>
+                      ) : (
+                        <div className="max-h-64 overflow-y-auto pr-1 space-y-1">
+                          {events.map((e, i) => (
+                            <div key={i} className="flex items-start gap-2.5 text-[12px] bg-slate-50 rounded-lg px-3 py-2">
+                              <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
+                                e.kind === 'resolve' ? 'bg-emerald-500'
+                                : e.kind === 'file' ? 'bg-teal-500'
+                                : e.kind === 'note' ? 'bg-amber-400'
+                                : e.kind === 'defer' || e.kind === 'defer-clear' ? 'bg-slate-400'
+                                : e.kind === 'retire' || e.kind === 'unretire' ? 'bg-purple-400'
+                                : 'bg-red-400'}`} />
+                              <span className="text-slate-700 flex-1 leading-snug">{e.text}</span>
+                              <span className="text-slate-400 shrink-0 text-[11px] font-mono">{e.ts}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
                 {activeTab === 'template-match' && (
@@ -4887,7 +5511,9 @@ function App() {
                   <CrossRefsView contracts={activeVisible} />
                 )}
                 {activeTab === 'smart-filing' && (
-                  <SmartFilingView contracts={visible} uploads={uploads} onUploaded={addUploads} />
+                  <SmartFilingView contracts={visible} uploads={uploads} onUploaded={addUploads}
+                    incomingFiles={activeTab === 'smart-filing' ? (incomingFiles ? incomingFiles.map((f) => ({ name: f.name, size: f.size, file: f })) : undefined) : undefined} onConsumeIncoming={() => setIncomingFiles(null)}
+                    onFilingConfirmed={(label) => logEvent('file', `${label} filed into the archive`, undefined)} />
                 )}
                 {activeTab === 'insights' && (
                   <InsightsView contracts={activeVisible} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} resolvedFlags={resolvedFlags} completedLinks={completedLinks} onSetFocusFields={setFocusFields} />
@@ -4904,7 +5530,9 @@ function App() {
                 <div className="px-5 py-4">
                   {canView(role, selected)
                     ? <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} onStatusOverride={(flagId) => { markFlagResolved(flagId) }} resolvedFlags={resolvedFlags}
-                      retired={retiredNums.has(selected.num)} onToggleRetired={!!role && canManage(role) ? () => toggleRetired(selected.num) : undefined} />
+                      retired={retiredNums.has(selected.num)} onToggleRetired={manageable ? () => toggleRetired(selected.num) : undefined}
+                      notesFor={notes[selected.num] || []} eventsFor={(events.filter((e) => e.docNum === selected.num)).slice().reverse()}
+                      onAddNote={(text) => addNote(selected.num, text)} manageable={manageable} />
                     : <RestrictedAccessPanel doc={selected} role={role} />}
                 </div>
               </aside>
@@ -4914,6 +5542,17 @@ function App() {
       </div>
 
       <ToastContainer toasts={toasts} />
+
+      {/* v45.32 — drag files anywhere → drop to file: whole-app drop target with visible feedback */}
+      {dragging && (
+        <div className="fixed inset-0 z-50 bg-teal-900/40 backdrop-blur-[2px] flex items-center justify-center pointer-events-none">
+          <div className="bg-white border-4 border-dashed border-teal-500 rounded-2xl px-10 py-8 text-center shadow-2xl">
+            <div className="text-4xl mb-2">📥</div>
+            <div className="text-lg font-bold text-slate-800">Drop to file</div>
+            <div className="text-[13px] text-slate-500 mt-1">Releasing opens Smart Filing — the AI classifies it, then you confirm the category</div>
+          </div>
+        </div>
+      )}
 
       {/* AI copilot (local Ollama, role-scoped) */}
       <AiBot open={aiOpen} onOpenChange={setAiOpen} context={botContext} roleLabel={role?.label || 'n/a'} role={role?.id || 'n/a'} excludedPaths={excludedPaths} anchor={aiIconPos} />
