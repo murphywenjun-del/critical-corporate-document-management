@@ -1,0 +1,5713 @@
+import { useState, useEffect, useRef, useMemo } from 'react'
+import type { ReactNode } from 'react'
+import { contracts, docLinks, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type ContractDoc, type Amendment, type DocLink,
+  ROLES, canView, canManage, archiveFileConf, contractToTemplateRef, DEMO_TODAY, CONF_LABEL, CONF_BADGE, retentionState, retentionUntil, type Role,
+  TEMPLATE_LIBRARY, matchTemplate, classifyType, RISK_FRAMEWORK,
+  SOUTHLAKE_RISK_TAXONOMY, flagHiroc, CRITERIA_BY_TYPE, RETENTION_BY_TYPE, DEFAULT_RETENTION, LITIGATION_HOLD_NOTE,
+  PIA_MATRIX, PIA_LIKELIHOOD_LABELS, PIA_IMPACT_LABELS, flagVelocity, piaPriority, piaBand, PRIORITY_BANDS, SEED_DEFERRED } from './data'
+
+
+// ── Toast Notification System ──────────────────────────────────────────────
+function useToast() {
+  const [toasts, setToasts] = useState<{ id: number; msg: string; type: 'success' | 'info' | 'warn' }[]>([])
+  const show = (msg: string, type: 'success' | 'info' | 'warn' = 'success') => {
+    const id = Date.now() + Math.random()
+    setToasts((t) => [...t, { id, msg, type }])
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3000)
+  }
+  return { toasts, show }
+}
+
+function ToastContainer({ toasts }: { toasts: { id: number; msg: string; type: string }[] }) {
+  if (toasts.length === 0) return null
+  return (
+    <div className="fixed top-16 right-4 z-[999] space-y-2">
+      {toasts.map((t) => (
+        <div key={t.id} className={`px-4 py-3 rounded-lg shadow-lg text-sm font-medium text-white transition-all animate-slideIn ${
+          t.type === 'success' ? 'bg-emerald-600' : t.type === 'warn' ? 'bg-amber-500' : 'bg-slate-700'
+        }`}>
+          {t.type === 'success' ? '✓' : t.type === 'warn' ? '⚠' : 'ℹ'} {t.msg}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+
+// ── Confirm Modal (in-page, replaces native confirm) ─────────────────────────
+function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Confirm', danger = false, showNote = false, defaultNote = '', aiDraft }: {
+  title: string
+  message: string
+  onConfirm: (note?: string) => void
+  onCancel: () => void
+  confirmLabel?: string
+  danger?: boolean
+  showNote?: boolean
+  defaultNote?: string
+  /** Async local-LLM draft (Ollama): when provided, drafting starts on open; the standard clause library (defaultNote) stays as live fallback. */
+  aiDraft?: () => Promise<string>
+}) {
+  const [note, setNote] = useState(defaultNote)
+  const [aiBusy, setAiBusy] = useState(!!aiDraft)
+  const [aiFailed, setAiFailed] = useState(false)
+  useEffect(() => {
+    if (!aiDraft) return
+    let cancelled = false
+    aiDraft()
+      .then((t) => { if (!cancelled) { setNote(t); setAiBusy(false) } })
+      .catch(() => { if (!cancelled) { setAiBusy(false); setAiFailed(true) } })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 p-7">
+        <div className="text-base font-bold text-slate-900 mb-2">{title}</div>
+        <div className="text-[13px] leading-relaxed text-slate-600 mb-4 whitespace-pre-line">{message}</div>
+        {showNote && (
+          <div className="mb-3">
+            <div className="flex items-center gap-1.5 mb-1">
+              {aiBusy ? (
+                <>
+                  <span className="w-3 h-3 border-2 border-teal-200 border-t-teal-600 rounded-full animate-spin shrink-0" />
+                  <span className="text-[11px] font-bold text-teal-600 uppercase">Local AI is drafting…</span>
+                  <span className="text-[11px] text-slate-400">gemma3:1b on this machine · usually ~15 s</span>
+                </>
+              ) : aiFailed ? (
+                <>
+                  <span className="text-[11px] font-bold text-slate-500 uppercase">Suggested Resolution</span>
+                  <span className="text-[11px] text-slate-400">standard clause library · local AI unavailable · editable</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-[11px] font-bold text-teal-600 uppercase">AI-Drafted Resolution</span>
+                  <span className="text-[11px] text-slate-400">local Ollama · editable</span>
+                </>
+              )}
+            </div>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder={aiBusy ? 'Drafting locally… (read-only until the AI finishes, ~15 s)' : 'e.g. Updated contract with legal, added clause 8.2, re-executed with both parties, filed amendment…'}
+              readOnly={aiBusy}
+              rows={8}
+              className={`w-full text-[13px] leading-relaxed border border-slate-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-teal-300 resize-y ${aiBusy ? 'bg-slate-50 text-slate-500' : ''}`}
+            />
+          </div>
+        )}
+        <div className="text-[11px] text-slate-400 mb-3">Resolved by: You · {new Date().toLocaleDateString()}</div>
+        <div className="flex gap-2">
+          <button onClick={onCancel} className="flex-1 text-[13px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg py-2.5 transition">Cancel</button>
+          <button onClick={() => onConfirm(showNote ? note : undefined)} className={`flex-1 text-[13px] font-bold text-white rounded-lg py-2.5 transition ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-teal-600 hover:bg-teal-700'}`}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+// ── AI Copilot (local Ollama RAG-style chat) ───────────────────────────────────
+function AiBot({ open, onOpenChange, context, roleLabel, role, excludedPaths, anchor }: { open: boolean; onOpenChange: (v: boolean) => void; context: string; roleLabel: string; role: string; excludedPaths: string[]; anchor?: { x: number; y: number } | null }) {
+  type Msg = { role: 'user' | 'assistant' | 'sys'; text: string; sources?: string[]; model?: string; ms?: number; note?: string }
+  const [msgs, setMsgs] = useState<Msg[]>([])
+  const [input, setInput] = useState('')
+  const [busy, setBusy] = useState(false)
+  const bodyRef = useRef<HTMLDivElement>(null)
+
+  // Draggable panel: free vertical position; horizontal position is always pinned to the
+  // LEFT or RIGHT edge — dragging across the screen midline snaps it to the opposite edge.
+  // It can structurally never rest in the middle.
+  const [side, setSide] = useState<'left' | 'right'>('right')
+  const [top, setTop] = useState(64)
+  const dragRef = useRef<{ startX: number; startY: number; startLeft: number; startTop: number } | null>(null)
+
+  useEffect(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight }, [msgs, busy, open])
+
+  const PANEL_H = 560
+  const clampTop = (t: number) => {
+    const min = 8
+    const max = Math.max(min, window.innerHeight - PANEL_H - 8)
+    return Math.min(max, Math.max(min, t))
+  }
+  // When the draggable icon was moved, the panel opens anchored next to it
+  // (same edge as the icon, just below it) — until the user drags the panel itself.
+  useEffect(() => {
+    if (open && anchor) {
+      setSide(anchor.x + 52 < window.innerWidth / 2 ? 'left' : 'right')
+      setTop(clampTop(anchor.y + 44))
+    }
+  }, [open, anchor?.x, anchor?.y]) // eslint-disable-line react-hooks/exhaustive-deps
+  const onDragStart = (e: React.MouseEvent) => {
+    // only start from the header grip, not from buttons inside the header
+    if ((e.target as HTMLElement).closest('button')) return
+    const vw = window.innerWidth
+    const startLeft = side === 'left' ? 16 : vw - 436 // current snap position
+    dragRef.current = { startX: e.clientX, startY: e.clientY, startLeft, startTop: top }
+    const onMove = (ev: MouseEvent) => {
+      if (!dragRef.current) return
+      const dx = ev.clientX - dragRef.current.startX
+      const dy = ev.clientY - dragRef.current.startY
+      // virtual panel position: follow the cursor; snap to whichever edge it is on
+      const virtualLeft = dragRef.current.startLeft + dx
+      setSide(virtualLeft + 210 < window.innerWidth / 2 ? 'left' : 'right')
+      setTop(clampTop(dragRef.current.startTop + dy))
+    }
+    const onUp = () => {
+      dragRef.current = null
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  const send = async (text?: string) => {
+    const q = (text ?? input).trim()
+    if (!q || busy) return
+    setInput('')
+    const history = msgs.filter((m) => m.role !== 'sys').slice(-3).map((m) => ({ role: m.role, content: m.text }))
+    setMsgs((prev) => [...prev, { role: 'user', text: q }])
+    setBusy(true)
+    try {
+      const res = await fetch('/api/ai-chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: q, context, history, role, excluded_paths: excludedPaths }),
+      })
+      const data = await res.json().catch(() => ({ ok: false, error: 'unparseable response' }))
+      if (data.ok) {
+        setMsgs((prev) => [...prev, { role: 'assistant', text: data.answer, sources: data.sources || [], model: data.model, ms: data.ms, note: data.note || '' }])
+      } else {
+        setMsgs((prev) => [...prev, { role: 'sys', text: `Local AI unavailable (${data.error || 'no response'}). The engine is Ollama on this machine — start it (and the dashboard server) to enable chat. Nothing is ever sent to the cloud.` }])
+      }
+    } catch (e: any) {
+      setMsgs((prev) => [...prev, { role: 'sys', text: 'Could not reach the local AI service. The dashboard server (uvicorn :8000 + Ollama) must be running on this machine — e.g. the static GH-Pages copy has no AI backend by design.' }])
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const chips = [
+    'How many contracts expire in the next 90 days?',
+    'Which documents are in retention and when can they be discarded?',
+    'What are the top open critical flags and why do they matter?',
+    'Explain my KPI numbers (criteria met, retention alerts).',
+  ]
+
+  return (
+    <>
+      {open && (
+        <div
+          className={`fixed z-[95] w-[420px] max-w-[94vw] bg-white rounded-xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden ${side === 'left' ? 'left-4' : 'right-4'}`}
+          style={{ top, height: Math.min(PANEL_H, window.innerHeight - 16) }}
+        >
+          {/* header — drag handle (vertical) + side toggle */}
+          <div
+            onMouseDown={onDragStart}
+            className="px-4 py-3 bg-slate-900 text-white shrink-0 cursor-grab active:cursor-grabbing select-none"
+            title="Drag the header: up/down freely, or across the screen to switch edges — the panel snaps to the nearest edge, never the middle"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[14px] font-bold flex items-center gap-2">
+                  <span className="text-slate-500 text-[11px] leading-none">⋮⋮</span> CCDM Assistant
+                </div>
+                <div className="text-[11px] text-slate-300 mt-0.5">Local Ollama · role-scoped to {roleLabel} · drag the header up/down or across — it snaps to the edge and never centers</div>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setSide(side === 'left' ? 'right' : 'left') }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className="text-[11px] font-bold bg-slate-700 hover:bg-slate-600 rounded px-2 py-1"
+                  title="Move to the other edge (the panel is never centered)"
+                >
+                  {side === 'left' ? '→ Right' : '← Left'}
+                </button>
+                <button onClick={() => onOpenChange(false)} onMouseDown={(e) => e.stopPropagation()} className="w-7 h-7 rounded-full hover:bg-slate-700 text-slate-300">✕</button>
+              </div>
+            </div>
+          </div>
+
+          {/* messages */}
+          <div ref={bodyRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-slate-50/60">
+            {msgs.length === 0 && !busy && (
+              <div>
+                <p className="text-[12px] text-slate-500 mb-2.5">Ask anything about the portfolio, flags, deadlines, retention rules or the archive. Suggested starts:</p>
+                <div className="space-y-1.5">
+                  {chips.map((c) => (
+                    <button key={c} onClick={() => send(c)} className="w-full text-left text-[12px] bg-white border border-slate-200 hover:border-teal-400 rounded-lg px-3 py-2 transition">{c}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {msgs.map((m, i) => (
+              m.role === 'sys' ? (
+                <div key={i} className="text-[12px] leading-relaxed bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2.5">{m.text}</div>
+              ) : m.role === 'user' ? (
+                <div key={i} className="ml-10 text-[13px] bg-teal-600 text-white rounded-xl rounded-tr-sm px-3.5 py-2.5 leading-relaxed">{m.text}</div>
+              ) : (
+                <div key={i} className="mr-4 text-[13px] bg-white border border-slate-200 rounded-xl rounded-tl-sm px-3.5 py-2.5 leading-relaxed text-slate-800 whitespace-pre-line">
+                  {m.text}
+                  {m.note && <div className="mt-2 text-[11px] italic text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1">{m.note}</div>}
+                  {(m.sources?.length || m.model) && (
+                    <div className="mt-2 pt-2 border-t border-slate-100 text-[11px] text-slate-400">
+                      {m.model && <span>local · {m.model}{m.ms ? ` · ${Math.round(m.ms / 1000)} s` : ''}</span>}
+                      {m.sources?.map((s) => <div key={s} className="font-mono truncate" title={s}>↗ {s}</div>)}
+                    </div>
+                  )}
+                </div>
+              )
+            ))}
+            {busy && (
+              <div className="flex items-center gap-2 text-[12px] text-slate-500">
+                <span className="w-3 h-3 border-2 border-teal-200 border-t-teal-600 rounded-full animate-spin shrink-0" />
+                Local AI is thinking (8k context, ~20–40 s on this machine)…
+              </div>
+            )}
+          </div>
+
+          {/* input */}
+          <div className="px-3 py-2.5 border-t border-slate-200 shrink-0">
+            <div className="flex gap-2">
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') send() }}
+                placeholder="Ask about contracts, flags, retention, archive…"
+                className="flex-1 text-[13px] border border-slate-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-teal-300"
+              />
+              <button onClick={() => send()} disabled={busy || !input.trim()}
+                className="text-[13px] font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg px-4 transition">Ask</button>
+            </div>
+            <div className="text-[11px] text-slate-400 mt-1.5">All inference runs locally (Ollama on this machine) — no cloud, consistent with the program's data policy.</div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+// ── Design tokens ──────────────────────────────────────────────────────────────
+
+const SEV_TEXT: Record<Flag['severity'], string> = {
+  Critical: 'text-red-600',
+  High: 'text-orange-600',
+  Medium: 'text-amber-600',
+  Low: 'text-emerald-600',
+}
+const SEV_DOT: Record<Flag['severity'], string> = {
+  Critical: 'bg-red-500',
+  High: 'bg-orange-500',
+  Medium: 'bg-amber-500',
+  Low: 'bg-emerald-500',
+}
+const COMP_TYPE_BG: Record<string, string> = {
+  hard: 'bg-red-50 text-red-700',
+  best_practice: 'bg-amber-50 text-amber-700',
+}
+
+// ── Modal (in-page confirmation dialog) ─────────────────────────────────────
+
+function Modal({ title, children, onConfirm, onCancel, confirmLabel = 'Confirm' }: {
+  title: string
+  children: React.ReactNode
+  onConfirm: () => void
+  onCancel: () => void
+  confirmLabel?: string
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm" onClick={onCancel}>
+      <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-md mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-100">
+          <h3 className="text-[13px] font-semibold text-slate-900">{title}</h3>
+        </div>
+        <div className="px-5 py-4 max-h-[60vh] overflow-y-auto">{children}</div>
+        <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex justify-end gap-2">
+          <button onClick={onCancel} className="text-xs font-medium px-4 py-2 rounded text-slate-500 hover:text-slate-700 bg-white border border-slate-200">
+            Cancel
+          </button>
+          <button onClick={onConfirm} className="text-xs font-bold px-4 py-2 rounded bg-teal-600 text-white hover:bg-teal-700 shadow-sm">
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── KPI Card (flat, big number) ──────────────────────────────────────────────
+
+// 16px line icons for KPI cards (consistent stroke width, muted slate)
+function KpiIcon({ d }: { d: string }) {
+  return (
+    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d={d} />
+    </svg>
+  )
+}
+const KPI_ICONS = {
+  docs: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 15h10',
+  alert: 'M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z',
+  flag: 'M3 3v18m0-18h13l-2.5 4L16 11H3',
+  check: 'M9 12l2 2 4-4m6 2a8 8 0 11-16 0 8 8 0 0116 0z',
+  gauge: 'M12 15a3 3 0 100-6 3 3 0 000 6zm0 0l4.5 4.5M5.6 5.6a9 9 0 1112.8 0',
+  clock: 'M12 8v4l3 3m5-1a9 9 0 11-18 0 9 9 0 0118 0z',
+}
+
+function KpiCard({ label, value, valueClass, onClick, title, icon }: { label: string; value: number | string; valueClass?: string; onClick?: () => void; title?: string; icon?: ReactNode }) {
+  return (
+    <div
+      className={`bg-white border border-slate-200 rounded-lg p-4 ${onClick ? 'cursor-pointer hover:border-slate-300 hover:shadow-sm transition' : ''}`}
+      onClick={onClick}
+      title={title}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{label}</div>
+        {icon && <span className="text-slate-300 shrink-0">{icon}</span>}
+      </div>
+      <div className={`text-3xl font-bold mt-2 text-slate-900 tabular-nums ${valueClass || ''}`}>{value}</div>
+    </div>
+  )
+}
+
+// ── Tab Bar ───────────────────────────────────────────────────────────────────
+
+type TabId = 'work-queue' | 'risk-register' | 'contracts' | 'template-match' | 'cross-refs' | 'deadlines' | 'smart-filing' | 'insights'
+
+const TABS: Array<{ id: TabId; label: string }> = [
+  { id: 'work-queue', label: 'Work Queue' },
+  { id: 'risk-register', label: 'Risk Register' },
+  { id: 'contracts', label: 'Documents' },
+  { id: 'template-match', label: 'Template Match' },
+  { id: 'deadlines', label: 'Deadlines' },
+  { id: 'smart-filing', label: 'Filing' },
+  { id: 'insights', label: 'Insights' },
+]
+
+function TabBar({ active, onChange }: { active: TabId; onChange: (t: TabId) => void }) {
+  return (
+    <div className="flex gap-6 border-b border-slate-200 overflow-x-auto">
+      {TABS.map((t) => (
+        <button
+          key={t.id}
+          onClick={() => onChange(t.id)}
+          className={`relative pb-3 text-sm font-medium whitespace-nowrap transition-colors ${
+            active === t.id ? 'text-teal-700' : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          {t.label}
+          {active === t.id && (
+            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-teal-600 rounded-full" />
+          )}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ── Tag Selector (filter pills) ──────────────────────────────────────────────
+
+function TagSelector({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string
+  options: string[]
+  selected: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">{label}</p>
+      <div className="flex flex-wrap gap-2">
+        {options.map((opt) => {
+          const active = selected === opt
+          return (
+            <button
+              key={opt}
+              onClick={() => onChange(opt)}
+              className={`text-xs px-2.5 py-1.5 rounded-full border transition-colors ${
+                active
+                  ? 'bg-teal-700 text-white border-teal-700 font-medium'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              {opt}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+
+// ── Risk Register Table (all flags across all contracts) ─────────────────────
+
+function RiskRegisterTable({
+  contracts: allContracts,
+  onSelectContract,
+  onSwitchTab,
+  onFix,
+  onConfirmAction,
+  resolvedFlags,
+}: {
+  contracts: ContractDoc[]
+  onSelectContract: (c: ContractDoc) => void
+  onSwitchTab?: (tab: TabId) => void
+  onFix?: (flagId: string) => void
+  onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string, aiDraft?: () => Promise<string>) => void
+  resolvedFlags?: Set<string> // used in insights hint
+}) {
+  const [selSev, setSelSev] = useState('All')
+  const [selCat, setSelCat] = useState('All')
+  const [selSub, setSelSub] = useState('All')
+  const [selClinDept, setSelClinDept] = useState('All')
+  const [selFlagStatus, setSelFlagStatus] = useState('All')
+  const [selSource, setSelSource] = useState('All')
+  const [selScore, setSelScore] = useState<number | null>(null)
+  const [search, setSearch] = useState('')
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, string>>(() => {
+    try { const s = localStorage.getItem('southlake_status_overrides'); if (s) return JSON.parse(s) } catch {}
+    return {}
+  })
+  useEffect(() => { localStorage.setItem('southlake_status_overrides', JSON.stringify(statusOverrides)) }, [statusOverrides])
+  const rawFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
+  const allFlags = rawFlags
+  const filtered = allFlags.filter((f) => {
+    if (selSev !== 'All' && f.severity !== selSev) return false
+    if (selCat !== 'All' && flagHiroc(f.field).cat !== selCat) return false
+    if (selSub !== 'All' && flagHiroc(f.field).riskName !== selSub) return false
+    if (selClinDept !== 'All' && f.department !== selClinDept) return false
+    if (selFlagStatus !== 'All' && f.status !== selFlagStatus) return false
+    if (selSource !== 'All' && f.source !== selSource) return false
+    if (selScore !== null && f.risk_score !== selScore) return false
+    if (search) {
+      const q = search.toLowerCase()
+      const match = f.flag_if?.toLowerCase().includes(q) || f.field?.toLowerCase().includes(q) || f.contract?.displayName?.toLowerCase().includes(q) || f.contract?.name?.toLowerCase().includes(q)
+      if (!match) return false
+    }
+    return true
+  })
+  const sorted = [...filtered].sort((a, b) => piaPriority(b) - piaPriority(a))
+  const categories = ['All', ...Object.keys(SOUTHLAKE_RISK_TAXONOMY)]
+  const subcats = selCat === 'All'
+    ? ['All', ...Array.from(new Set(allFlags.map((f) => flagHiroc(f.field).riskName)))]
+    : ['All', ...(SOUTHLAKE_RISK_TAXONOMY[selCat] || [])]
+  // Clinical depts: distinct values present in the flag register (client taxonomy
+  // department mapping lives on the register's next page — not provided yet)
+  const clinDepts = ['All', ...Array.from(new Set(allFlags.map((f) => f.department).filter((d): d is string => !!d)))]
+
+  return (
+    <div>
+      {/* Systemic patterns hint */}
+      {(() => {
+        const allF = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f })))
+        const byField: Record<string, number> = {}
+        for (const f of allF) { byField[f.field] = (byField[f.field] || 0) + 1 }
+        const systemic = Object.entries(byField).filter(([, v]) => v >= 3)
+        return systemic.length > 0 ? (
+          <div className="bg-teal-50 border border-teal-200 rounded-lg px-4 py-2.5 mb-3 flex items-center gap-3">
+            <span className="text-teal-600 shrink-0"><svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 18h6m-5 3h4M12 3a6 6 0 00-3.5 10.9c.7.5 1.2 1.2 1.4 2.1h4.2c.2-.9.7-1.6 1.4-2.1A6 6 0 0012 3z"/></svg></span>
+            <span className="text-xs text-teal-700"><b>{systemic.length} systemic patterns</b> — same issue in 3+ contracts. Consider process-level fixes.</span>
+            <button onClick={() => onSwitchTab?.('insights')} className="ml-auto text-xs font-bold text-teal-600 hover:text-teal-800 hover:underline shrink-0">View Prevention Playbook →</button>
+          </div>
+        ) : null
+      })()}
+
+      {/* PIA scoring model (client-provided Southlake PIA §7) */}
+      <div className="mt-4 bg-white border border-slate-200 rounded-lg p-4">
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          <span className="text-xs font-bold text-slate-700">Risk Scoring Model — Southlake PIA §7</span>
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-200">client-provided · 2026-10-30</span>
+        </div>
+        <div className="flex gap-5 flex-wrap">
+          <div className="flex-1 min-w-[300px]">
+            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wide mb-1.5">§7.5 Risk Matrix (Likelihood × Impact, cell = L×I)</div>
+            <div className="grid gap-0.5" style={{ gridTemplateColumns: 'auto repeat(5, 1fr)' }}>
+              <span />
+              {PIA_IMPACT_LABELS.map((l, i) => (
+                <div key={i} className="text-[9px] font-bold text-slate-400 text-center px-1">{l}<div className="text-[8px] font-normal">({i + 1})</div></div>
+              ))}
+              {PIA_MATRIX.map((row, li) => (
+                <div key={li} className="contents">
+                  <div className="text-[9px] font-bold text-slate-400 text-right pr-1 leading-tight">{PIA_LIKELIHOOD_LABELS[li]}<div className="text-[8px] font-normal">({li + 1})</div></div>
+                  {row.map((cell, ii) => {
+                    const v = (li + 1) * (ii + 1)
+                    const cls = v >= 20 ? 'bg-red-100 text-red-800 border-red-300' : v >= 12 ? 'bg-orange-50 text-orange-800 border-orange-300' : v >= 6 ? 'bg-yellow-50 text-yellow-800 border-yellow-300' : 'bg-slate-50 text-slate-600 border-slate-200'
+                    return <div key={ii} className={`text-[9px] text-center border rounded px-1 py-1 ${cls}`}>{cell}</div>
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 min-w-[280px]">
+            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wide mb-1.5">§7.4 Priority Formula</div>
+            <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 font-mono font-bold text-slate-700">Priority = (Likelihood × Impact) + Velocity</div>
+            <ul className="mt-2 space-y-1.5 text-[11px] text-slate-500 leading-relaxed list-disc pl-4">
+              <li><b className="text-slate-700">Impact</b> = highest of People / Assets / Finance / Care / Reputation, assessed stand-alone (§7.1).</li>
+              <li><b className="text-slate-700">Likelihood</b> = 12-month occurrence, Very Unlikely (≤5%) → Very Likely (&gt;75%) (§7.2).</li>
+              <li><b className="text-slate-700">Velocity</b> = how fast the risk is felt. Per-field 1–5 assignment is a <b>documented assumption</b> — the PIA defines the formula but not the scale; confirm with client.</li>
+              <li>Priority bands: <span className="text-red-700 font-bold">≥{PRIORITY_BANDS.critical} Critical</span> · <span className="text-orange-700 font-bold">{PRIORITY_BANDS.high}–{PRIORITY_BANDS.critical - 1} High</span> · <span className="text-yellow-700 font-bold">{PRIORITY_BANDS.medium}–{PRIORITY_BANDS.high - 1} Medium</span> · &lt;{PRIORITY_BANDS.medium} Low.</li>
+              <li>§7.3: register shows <b>inherent</b> risk (before controls); remediated flags are the residual view.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* Collapsible L×I Distribution */}
+      <details className="mt-4 bg-white border border-slate-200 rounded-lg">
+        <summary className="px-4 py-2.5 text-xs font-bold text-slate-600 cursor-pointer select-none">
+          L × I Risk Distribution <span className="font-normal text-slate-400">(click to expand)</span>
+        </summary>
+        <div className="px-4 pb-4">
+          {(() => {
+            const counts: Record<string, number> = {}
+            const LABELS: string[][] = [
+              PIA_LIKELIHOOD_LABELS,
+              PIA_IMPACT_LABELS,
+            ]
+            for (const f of allFlags) {
+              const label = `${LABELS[0][f.likelihood-1] || '?'} × ${LABELS[1][f.impact-1] || '?'}`
+              counts[label] = (counts[label] || 0) + 1
+            }
+            return (
+              <>
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([label, cnt]) => {
+                  const lIdx = PIA_LIKELIHOOD_LABELS.indexOf(label.split(' × ')[0])
+                  const iIdx = PIA_IMPACT_LABELS.indexOf(label.split(' × ')[1] || '')
+                  const matchScore = (lIdx + 1) * (iIdx + 1)
+                  const isActive = selScore === matchScore
+                  const sev = matchScore >= 20 ? 'bg-red-500 hover:bg-red-600' :
+                    matchScore >= 12 ? 'bg-orange-500 hover:bg-orange-600' :
+                    matchScore >= 6 ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-slate-400 hover:bg-slate-500'
+                  return (
+                    <button
+                      key={label}
+                      onClick={() => setSelScore(isActive ? null : matchScore)}
+                      className={`${isActive ? sev + ' ring-2 ring-offset-1 ring-teal-300' : sev} text-white text-[11px] font-bold px-2.5 py-1.5 rounded cursor-pointer transition-all ${!isActive ? 'opacity-70 hover:opacity-100' : ''}`}
+                      title={isActive ? 'Click to clear filter' : `Filter: ${cnt} flags with this score`}
+                    >
+                      {label} · {cnt}{isActive ? ' ✓' : ''}
+                    </button>
+                  )
+                })}
+              </div>
+              {selScore !== null && (
+                <div className="mt-3 bg-teal-50 border border-teal-200 rounded-lg p-3">
+                  <div className="text-[11px] font-bold text-teal-700 mb-2">
+                    Score = {selScore}: {allFlags.filter((f) => f.risk_score === selScore).length} flags across {new Set(allFlags.filter((f) => f.risk_score === selScore).map((f) => f.contract.num)).size} contracts
+                    <button onClick={() => setSelScore(null)} className="ml-2 text-teal-500 underline">clear</button>
+                  </div>
+                  <div className="space-y-1">
+                    {allFlags.filter((f) => f.risk_score === selScore).map((f, i) => (
+                      <button key={i} onClick={() => { onSelectContract(f.contract); setSelScore(null) }} className="flex items-center gap-2 text-[11px] text-slate-700 hover:text-teal-700 hover:bg-white rounded px-2 py-1 w-full text-left transition">
+                        <span className={`w-2 h-2 rounded-full ${f.severity === 'Critical' ? 'bg-red-500' : f.severity === 'High' ? 'bg-orange-500' : 'bg-yellow-500'}`} />
+                        <span className="font-medium">#{f.contract.num} {f.contract.displayName}</span>
+                        <span className="text-slate-400">· {f.flag_if}</span>
+                        <span className="ml-auto text-teal-600 text-[11px] font-bold">→</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              </>
+            )
+          })()}
+        </div>
+      </details>
+
+      {/* Search + Export */}
+      <div className="mb-3 flex items-center gap-3">
+        <div className="relative flex-1 max-w-md">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search flags, contracts… (e.g. 'breach', 'NDA', 'VP signature')"
+            className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500/20 focus:border-teal-300 outline-none transition"
+          />
+          {search && <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs">✕</button>}
+        </div>
+        <button
+          onClick={() => {
+            const header = 'Severity,L,Impact,Score,Velocity,Priority,Category,Subcategory,Department,Status,Source,Compliance,Issue,Contract\n'
+            const rows = sorted.map((f) => [
+              f.severity, f.likelihood, f.impact, f.risk_score, flagVelocity(f), piaPriority(f),
+              flagHiroc(f.field).cat, flagHiroc(f.field).riskName, f.department,
+              f.status, f.source, f.compliance_type,
+              `"${f.flag_if.replace(/"/g, '""')}"`,
+              `#${f.contract.num} ${f.contract.displayName}`
+            ].join(',')).join('\n')
+            const blob = new Blob([header + rows], { type: 'text/csv' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `risk_register_${new Date().toISOString().slice(0, 10)}.csv`
+            a.click()
+            URL.revokeObjectURL(url)
+          }}
+          className="text-[11px] font-medium text-slate-500 hover:text-teal-600 border border-slate-200 rounded px-2 py-1.5 bg-white hover:bg-teal-50 transition"
+        >
+          Export CSV ({sorted.length})
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="mb-4">
+        <div className="flex gap-6 flex-wrap">
+          <TagSelector label="Severity" options={['All', 'Critical', 'High', 'Medium', 'Low']} selected={selSev} onChange={setSelSev} />
+          <TagSelector label="HIROC Category" options={categories} selected={selCat} onChange={setSelCat} />
+          <TagSelector label="Status" options={['All', 'open', 'remediated', 'accepted']} selected={selFlagStatus} onChange={setSelFlagStatus} />
+          <details className="text-[11px] text-slate-400">
+            <summary className="cursor-pointer hover:text-slate-600 py-1">More filters ▾</summary>
+            <div className="flex gap-6 mt-2 flex-wrap">
+              <TagSelector label="Subcategory" options={subcats} selected={selSub} onChange={setSelSub} />
+              <TagSelector label="Clinical Dept" options={clinDepts} selected={selClinDept} onChange={setSelClinDept} />
+              <TagSelector label="Source" options={['All', 'rule', 'ai_scan']} selected={selSource} onChange={setSelSource} />
+            </div>
+          </details>
+        </div>
+      </div>
+
+      {/* Source legend */}
+      <div className="flex items-center gap-4 mb-2 text-[11px] text-slate-400">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500" /> Rule-based</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500" /> AI-detected</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> Open</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Remediated</span>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+        <table className="w-full text-sm min-w-[700px]">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-20">Severity</th>
+              <th className="text-center px-2 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-20">Risk · Priority</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-20">Status</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Issue</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-28">Contract</th>
+              <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-16">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((f, i) => (
+              <tr key={i} className={`border-b border-slate-100 last:border-0 transition-colors ${f.severity === 'Critical' ? 'border-l-4 border-l-red-500 bg-red-50/40 hover:bg-red-50' : f.severity === 'High' ? 'border-l-4 border-l-orange-400 bg-orange-50/30 hover:bg-orange-50' : 'hover:bg-slate-50'}`}>
+                <td className="px-4 py-2.5">
+                  <span className={`flex items-center gap-1.5 text-xs font-medium ${SEV_TEXT[f.severity]}`}>
+                    <span className={`w-2 h-2 rounded-full ${SEV_DOT[f.severity]}`} />
+                    {f.severity}
+                  </span>
+                </td>
+                <td className="px-2 py-2.5 text-center">
+                  <div className="text-[11px] font-mono font-bold text-slate-500" title={`L${f.likelihood} × I${f.impact} = ${f.risk_score}, + Velocity ${flagVelocity(f)} (PIA §7.4)`}>{f.likelihood}×{f.impact} +V{flagVelocity(f)}</div>
+                  <div className={`text-xs font-bold ${piaPriority(f) >= PRIORITY_BANDS.critical ? 'text-red-600' : piaPriority(f) >= PRIORITY_BANDS.high ? 'text-orange-600' : piaPriority(f) >= PRIORITY_BANDS.medium ? 'text-yellow-600' : 'text-emerald-600'}`} title="Priority = (L×I) + Velocity">P{piaPriority(f)} · {piaBand(piaPriority(f))}</div>
+                </td>
+                <td className="px-3 py-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
+                      f.status === 'open' ? 'bg-red-600 text-white' :
+                      f.status === 'remediated' ? 'bg-emerald-600 text-white' :
+                      'bg-slate-500 text-white'
+                    }`}>
+                      {f.status === 'open' ? 'Open' : f.status === 'remediated' ? '✓ Done' : 'Accepted'}
+                    </span>
+                    <span className={`w-1.5 h-1.5 rounded-full ${f.source === 'ai_scan' ? 'bg-purple-500' : 'bg-teal-500'}`} title={f.source === 'ai_scan' ? 'AI-detected' : 'Rule-based'} />
+                  </div>
+                </td>
+                <td className="px-4 py-2.5 text-[13px] text-slate-800 max-w-xs truncate" title={f.flag_if}>{f.flag_if}</td>
+                <td className="px-4 py-2.5">
+                  <button onClick={() => onSelectContract(f.contract)} className="text-[13px] font-medium text-teal-700 hover:text-teal-900 hover:underline">
+                    #{f.contract.num} {f.contract.displayName}
+                  </button>
+                </td>
+                <td className="px-3 py-2.5">
+                  <div className="flex items-center gap-1">
+                    {statusOverrides[`${f.contract.num}_${f.field}_${i}`] === 'remediated' ? (
+                      <span className="text-[11px] text-emerald-600 font-bold">✓ Done</span>
+                    ) : statusOverrides[`${f.contract.num}_${f.field}_${i}`] === 'accepted' ? (
+                      <span className="text-[11px] text-slate-500">Accepted</span>
+                    ) : resolvedFlags?.has(`f-${f.contract.num}-${f.field}`) ? (
+                      <span className="text-[11px] text-emerald-600 font-bold">✓ Resolved</span>
+                    ) : (
+                      <button onClick={(e) => { e.stopPropagation(); onConfirmAction?.(`Resolve Flag`, `"${f.field}"\n\nDocument: ${f.contract.displayName} (#${f.contract.num})\nSeverity: ${f.severity}\nL×I: ${f.likelihood}×${f.impact} = ${f.risk_score}`, () => { setStatusOverrides((p) => ({ ...p, [`${f.contract.num}_${f.field}_${i}`]: 'remediated' })); onFix?.(`f-${f.contract.num}-${f.field}`) }, true, getAIProposal(f.field, f.contract.displayName), () =>
+                        aiProposalDraft({
+                          flag_field: f.field,
+                          flag_if: f.flag_if,
+                          doc_num: f.contract.num,
+                          doc_name: f.contract.displayName,
+                          doc_type: f.contract.type,
+                          severity: f.severity,
+                        })) }} className="text-[11px] font-bold px-2 py-0.5 bg-emerald-600 text-white rounded hover:bg-emerald-700 transition">Fix</button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {sorted.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">
+                  No flags match the selected filters
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-slate-400 mt-2">{sorted.length} of {allFlags.length} flags</p>
+    </div>
+  )
+}
+
+// ── Contract List (flat items, not cards) ───────────────────────────────────
+
+
+// ── Criteria-Based Compliance Panel (F) ─────────────────────────────────────────
+// Sam's proposal: applicability varies by document type
+function CriteriaPanel({ contracts: allContracts, resolvedFlags }: { contracts: ContractDoc[]; resolvedFlags?: Set<string> }) {
+  // Group by type and show criteria met — LIVE: per-doc share of applicable criteria
+  // not violated by an open (unresolved) flag; consistent with the "Criteria Met (avg)" KPI.
+  // Uploads without a checklist for their type are excluded (n = 0).
+  const docCriteriaMet = (c: ContractDoc): number | null => {
+    const n = (CRITERIA_BY_TYPE[c.type] || []).length
+    if (n === 0) return null
+    const open = c.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${c.num}-${f.field}`))).length
+    return Math.max(0, Math.min(1, 1 - open / n))
+  }
+
+  const byType: Record<string, ContractDoc[]> = {}
+  for (const c of allContracts) {
+    if (!byType[c.type]) byType[c.type] = []
+    byType[c.type].push(c)
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <h3 className="text-[13px] font-semibold text-slate-900">Criteria-Based Compliance</h3>
+        <span className="text-[11px] text-slate-400">Applicability varies by document type</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4">
+        {Object.entries(byType).map(([type, docs]) => {
+          const criteria = CRITERIA_BY_TYPE[type] || []
+          const total = docs.length
+          const clean = docs.filter((d) => d.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${d.num}-${f.field}`))).length === 0).length
+          const openGaps = docs.reduce((sum, d) => sum + d.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${d.num}-${f.field}`))).length, 0)
+          // Live per-type criteria share: 100% of applicable criteria met, minus open gaps (no negative rates)
+          const vals = docs.map(docCriteriaMet).filter((v): v is number => v !== null)
+          const rate = vals.length > 0 ? Math.round(100 * vals.reduce((a, b) => a + b, 0) / vals.length) : 100
+          return (
+            <div key={type} className="border border-slate-100 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[13px] font-semibold text-slate-800">{type}</span>
+                <span className="text-[11px] text-slate-400">{total} docs</span>
+              </div>
+              <div className="flex items-end justify-between mb-2">
+                <div className="text-[11px] text-slate-500">{clean}/{total} clean · {openGaps} open gaps of {criteria.length * total} criteria checked</div>
+                {criteria.length > 0 && (
+                  <div className={`text-2xl font-bold tabular-nums ${rate >= 80 ? 'text-emerald-600' : rate >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{rate}%</div>
+                )}
+              </div>
+              {criteria.length > 0 ? (
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${rate >= 80 ? 'bg-emerald-500' : rate >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                    style={{ width: `${rate}%` }}
+                  />
+                </div>
+              ) : (
+                <div className="text-[11px] text-slate-400 mt-2 italic">No criteria checklist mapped for this type yet</div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── ContractList (with archive + superseded) ───────────────────────────────────
+
+function ContractList({
+  contracts: allContracts,
+  selectedNum,
+  onSelect,
+  role,
+  resolvedFlags,
+  retiredNums,
+  bulkSelected,
+  onBulkToggle,
+  onBulkAll,
+}: {
+  contracts: ContractDoc[]
+  selectedNum: number | null
+  onSelect: (c: ContractDoc) => void
+  role?: Role
+  resolvedFlags?: Set<string>
+  retiredNums?: Set<number>
+  // v45.32 — paperless-style bulk selection: pass the selection set to enable checkboxes + bulk actions
+  bulkSelected?: Set<number>
+  onBulkToggle?: (num: number) => void
+  onBulkAll?: () => void
+}) {
+  const bulkMode = !!bulkSelected
+  const allChecked = bulkMode && allContracts.length > 0 && allContracts.every((c) => bulkSelected!.has(c.num))
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100">
+      {bulkMode && (
+        <label className="flex items-center gap-2 px-4 py-2 bg-slate-50 border-b border-slate-200 text-[12px] font-semibold text-slate-600 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={allChecked}
+            onChange={() => { onBulkAll?.() }}
+            className="w-4 h-4 accent-teal-600 cursor-pointer"
+          />
+          Select all visible documents ({allContracts.length}) — bulk actions appear above the list
+        </label>
+      )}
+      {allContracts.map((c) => {
+        const locked = role ? !canView(role, c) : false
+        // Repository meta (item 5, 2026-10-17: centralized contract repository)
+        const expired = !!c.expiryDate && c.expiryDate < DEMO_TODAY
+        // (retention display now driven by retentionState() directly, 4-state)
+        const openCount = c.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${c.num}-${f.field}`))).length
+        const relatedCount =
+          (c.amendments?.length ?? 0) +
+          (c.baseContractId != null ? 1 : 0) +
+          docLinks.filter((l) => l.sourceNum === c.num).length
+        const rowCls = `w-full text-left transition-colors hover:bg-slate-50 ${selectedNum === c.num ? 'bg-teal-50/50' : ''} ${locked ? 'opacity-70' : ''} ${bulkMode ? 'pl-10 pr-4 py-3' : 'px-4 py-3'}`
+        const rowInner = (
+        <div className="flex items-center gap-3">
+              {/* Left: number + type + confidentiality (stacked — long type labels like PROCUREMENT need the width) */}
+              <div className="w-28 shrink-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-mono text-slate-400">#{c.num}</span>
+                  <span className="text-[11px] text-slate-500 uppercase tracking-tight" title={c.type}>{c.type.replace(/_/g, ' ')}</span>
+                </div>
+                {role && (
+                  <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded border ${CONF_BADGE[c.confidentiality]}`}>
+                    {CONF_LABEL[c.confidentiality]}
+                  </span>
+                )}
+              </div>
+
+              {/* Middle: name */}
+              <div className="flex-1 min-w-0">
+                <p className="text-[15px] font-semibold text-slate-900 truncate flex items-center gap-1.5">
+                  {locked && (
+                    <svg className="w-3 h-3 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v2h8z" />
+                    </svg>
+                  )}
+                  {c.displayName}
+                </p>
+                {locked ? (
+                  <p className="text-xs text-slate-400">Content restricted — not viewable by role “{role?.label}”</p>
+                ) : (
+                  <>
+                    <p className="text-[13px] text-slate-500 truncate" title={c.summary}>{c.summary}</p>
+                    {/* Repository row: status · storage location · related documents */}
+                    <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-1">
+                      {retiredNums?.has(c.num) && (
+                        <span className="font-bold text-slate-600 bg-slate-100 border border-slate-300 px-1.5 py-0.5 rounded" title="Manually tagged no longer in use — out of alert scope (KPIs / Work Queue / Risk Register); retention and disposal obligations still apply">RETIRED</span>
+                      )}
+                      {(() => { const rs = retentionState(c);
+                        if (rs.status === 'elapsed') return <span className="font-bold text-slate-500" title={`Retention period complete (${retentionUntil(c)}) — eligible for disposal`}>ARCHIVED</span>
+                        if (rs.status === 'hold') return <span className="font-bold text-amber-600" title={`Deletion not allowed yet — keep until ${retentionUntil(c)} (Schedule A)`}>EXPIRED · IN RETENTION</span>
+                        if (expired) return <span className="font-bold text-red-600" title={c.expiryDate ? `Expired ${c.expiryDate}` : undefined}>EXPIRED</span>
+                        return <span className="font-bold text-emerald-600" title={c.expiryDate ? `Expires ${c.expiryDate}` : 'No expiry date on file'}>ACTIVE</span>
+                      })()}
+                      <span className="text-slate-300">·</span>
+                      <span className="font-mono truncate" title={c.filePath} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><svg className="w-3 h-3 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>{c.filePath}</span>
+                      <span className="text-slate-300">·</span>
+                      <span>{relatedCount > 0 ? `${relatedCount} related doc${relatedCount > 1 ? 's' : ''}` : 'no linked docs'}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Right: risk indicators + badges */}
+              <div className="flex items-center gap-3 shrink-0">
+                {c.baseContractId != null && (
+                  <span className="text-[11px] font-bold bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded border border-purple-200">
+                    AMENDMENT
+                  </span>
+                )}
+                {c.flags.some((f) => f.field === 'duplicate_version') && (
+                  <span className="text-[11px] font-bold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200">
+                    SUPERSEDED
+                  </span>
+                )}
+                {c.isUpload && (
+                  <span className="text-[11px] font-bold bg-teal-600 text-white px-1.5 py-0.5 rounded">
+                    NEW · uploaded
+                  </span>
+                )}
+                {c.flags.length === 0 && (
+                  <span className="text-[11px] font-bold bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200">
+                    CLEAN ✓
+                  </span>
+                )}
+                {locked ? (
+                  <span className="text-[11px] text-slate-400 italic">restricted</span>
+                ) : (
+                  <>
+                    <div className="text-right">
+                      <div className="text-xs font-bold text-slate-700">{c.riskScore.toFixed(1)}</div>
+                      <div className="text-[11px] text-slate-400">score</div>
+                    </div>
+                    <div className="flex flex-col items-center gap-0.5">
+                      <span className={`w-2.5 h-2.5 rounded-full ${c.riskLevel === 'Critical' ? 'bg-red-500' : c.riskLevel === 'High' ? 'bg-orange-500' : 'bg-emerald-500'}`} />
+                      <span className={`text-[11px] font-medium ${c.riskLevel === 'Critical' ? 'text-red-600' : c.riskLevel === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>
+                        {c.riskLevel}
+                      </span>
+                    </div>
+                    <span className="text-xs text-slate-500 w-8 text-right" title={openCount < c.flagsCount ? `${openCount} open of ${c.flagsCount}` : undefined}>
+                      {openCount > 0 ? `${openCount} open` : c.flagsCount > 0 ? 'done ✓' : 'clean'}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+        )
+        return (
+          <div key={c.num} className={`relative ${rowCls}`} onClick={() => onSelect(c)} role="button" tabIndex={0}>
+            {bulkMode && (
+              <input
+                type="checkbox"
+                checked={bulkSelected!.has(c.num)}
+                onChange={() => { onBulkToggle?.(c.num) }}
+                onClick={(e) => e.stopPropagation()}
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 accent-teal-600 cursor-pointer"
+                title="Select for bulk actions"
+              />
+            )}
+            {rowInner}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Restricted Access panel (RBAC) ─────────────────────────────────────────
+
+function RestrictedAccessPanel({ doc, role }: { doc: ContractDoc; role: Role }) {
+  return (
+    <div className="space-y-4">
+      <div className="bg-white border border-slate-200 rounded-lg p-6 text-center">
+        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+          <svg className="w-6 h-6 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v2h8z" />
+          </svg>
+        </div>
+        <h3 className="text-[13px] font-semibold text-slate-900">Access Restricted</h3>
+        <p className="text-xs text-slate-500 mt-1">#{doc.num} · {doc.displayName}</p>
+      </div>
+      <div className="bg-white border border-slate-200 rounded-lg p-4 text-xs space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-slate-400">Classification</span>
+          <span className={`text-[11px] font-bold px-2 py-0.5 rounded border ${CONF_BADGE[doc.confidentiality]}`}>
+            {CONF_LABEL[doc.confidentiality]}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-slate-400">Your role</span>
+          <span className="font-medium text-slate-700">{role.label}</span>
+        </div>
+        <div className="flex items-start justify-between gap-3">
+          <span className="text-slate-400 shrink-0">To gain access</span>
+          <span className="text-slate-600 text-right">Request via Records Management — <b>{doc.retentionOwner}</b>, or your department head.</span>
+        </div>
+        <p className="text-[11px] text-slate-400 border-t border-slate-100 pt-3">
+          Role-based access control: employees only see documents authorized for their role.
+          Confidential &amp; PHI-restricted agreements are hidden from non-legal roles, per Southlake’s
+          Confidentiality — Vendors/Third Parties and PHI Disclosure policies.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ── Retention Board (retention period alerts, 2026-10-17 meeting) ─────────
+
+function RetentionBoard({
+  contracts: allContracts,
+  approved,
+  onApprove,
+  manageable,
+  disposed,
+  onDispose,
+}: {
+  contracts: ContractDoc[]
+  approved: Set<string>
+  onApprove: (c: ContractDoc) => void
+  manageable?: boolean
+  disposed?: Set<string>
+  onDispose?: (c: ContractDoc) => void
+}) {
+  const rows = allContracts
+    .filter((c) => c.expiryDate)
+    .map((c) => ({ c, ...retentionState(c) }))
+    .sort((a, b) => a.daysLeft - b.daysLeft)
+  const counts = {
+    elapsed: rows.filter((r) => r.status === 'elapsed').length,
+    imminent: rows.filter((r) => r.status === 'imminent').length,
+    hold: rows.filter((r) => r.status === 'hold').length,
+    retained: rows.filter((r) => r.status === 'retained').length,
+  }
+  const statusMeta: Record<string, { label: string; chip: string; text: string }> = {
+    elapsed: { label: 'ELIGIBLE FOR DISCARD', chip: 'bg-red-50 border-red-200 text-red-700', text: 'text-red-600' },
+    imminent: { label: 'DUE ≤ 90 DAYS', chip: 'bg-amber-50 border-amber-200 text-amber-700', text: 'text-amber-600' },
+    hold: { label: 'EXPIRED · IN RETENTION', chip: 'bg-slate-100 border-slate-300 text-slate-700', text: 'text-slate-600' },
+    retained: { label: 'IN RETENTION', chip: 'bg-emerald-50 border-emerald-200 text-emerald-700', text: 'text-emerald-600' },
+  }
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2 mt-6">
+        <div className="text-xs font-bold text-slate-700">Document Retention &amp; Disposition</div>
+        <span className="text-[11px] text-slate-400">Reference date {DEMO_TODAY} · alerts notify the document owner</span>
+      </div>
+      {/* Summary chips */}
+      <div className="flex gap-4 mb-3">
+        {(['elapsed', 'imminent', 'hold', 'retained'] as const).map((u) => (
+          <div key={u} className={`flex-1 border rounded-lg p-3 text-center ${statusMeta[u].chip}`}>
+            <div className="text-2xl font-bold">{counts[u]}</div>
+            <div className="text-[11px] font-bold uppercase tracking-wide mt-0.5">{statusMeta[u].label}</div>
+          </div>
+        ))}
+      </div>
+      {/* Table */}
+      <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+        <table className="w-full text-sm min-w-[700px]">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-12">Num</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Document</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-28">Retention Until</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-24">Days Left</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-28">Notify</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-24">Paper copies</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-32">Status / Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ c, until, daysLeft, status }) => {
+              const sm = statusMeta[status]
+              const isApproved = approved.has(String(c.num))
+              return (
+                <tr key={c.num} className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${status === 'elapsed' ? 'bg-red-50/20' : ''}`}>
+                  <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">#{c.num}</td>
+                  <td className="px-4 py-2.5">
+                    <div className="text-sm text-slate-800">{c.displayName}</div>
+                    <div className="text-[11px] text-slate-400">{c.retentionBasis}</div>
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-slate-600 font-mono">{until}</td>
+                  <td className={`px-4 py-2.5 text-xs font-bold ${sm.text}`}>
+                    {daysLeft < 0 ? `${Math.abs(daysLeft)}d ago` : `${daysLeft}d`}
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-slate-500">{c.retentionOwner}</td>
+                  <td className="px-4 py-2.5 text-xs text-slate-600">
+                    {c.paper ? (
+                      <div>
+                        <div className="font-bold">{c.paper.copies} {c.paper.copies > 1 ? 'copies' : 'copy'}</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">{c.paper.location}</div>
+                      </div>
+                    ) : (
+                      <span className="text-slate-300">digital only</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {status === 'elapsed' ? (
+                      isApproved ? (
+                        <div className="space-y-1">
+                          <span className="text-[11px] font-bold text-emerald-600">✓ Destruction approved</span>
+                          {c.paper && (
+                            disposed?.has(String(c.num)) ? (
+                              <span className="text-[11px] font-bold text-emerald-600">✓ Paper copies disposed</span>
+                            ) : (
+                              <button
+                                onClick={() => onDispose?.(c)}
+                                disabled={!manageable}
+                                title={!manageable ? 'Paper disposal sign-off is restricted to the Legal role (demo RBAC)' : undefined}
+                                className="text-[11px] font-bold text-slate-600 border border-slate-200 bg-slate-50 hover:bg-slate-100 rounded px-2 py-1 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                Dispose {c.paper.copies} paper {c.paper.copies > 1 ? 'copies' : 'copy'} →
+                              </button>
+                            )
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => onApprove(c)}
+                          disabled={!manageable}
+                          title={!manageable ? 'Destruction approval is restricted to the Legal role (demo RBAC)' : undefined}
+                          className="text-[11px] font-bold text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 rounded px-2 py-1 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Approve discard →
+                        </button>
+                      )
+                    ) : status === 'hold' ? (
+                      <div>
+                        <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded border ${sm.chip}`}>{sm.label}</span>
+                        <div className="text-[11px] text-slate-400 mt-1">Deletion not allowed yet — keep until {until}</div>
+                      </div>
+                    ) : (
+                      <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded border ${sm.chip}`}>{sm.label}</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[11px] text-slate-400 mt-2">
+        Retention periods follow Southlake Health’s <b className="text-slate-500">Records Retention Schedule (Schedule A)</b> —
+        “Records Retention, Storage and Destruction,” PolicyStat #19415930 (rev. 12/2023). When a document reaches its
+        required retention deadline, the owner is alerted; after approval it is routed to Records Management for disposal.
+      </p>
+      <p className="text-[11px] text-slate-400 mt-1.5">
+        {LITIGATION_HOLD_NOTE}
+      </p>
+    </div>
+  )
+}
+
+// ── Full-text Search (demo documents + on-disk archive) ────────────────────
+
+function Highlight({ text, q }: { text: string; q: string }) {
+  if (!q) return <>{text}</>
+  const idx = text.toLowerCase().indexOf(q.toLowerCase())
+  if (idx < 0) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, idx)}
+      <mark className="bg-amber-100 text-amber-800 rounded-sm">{text.slice(idx, idx + q.length)}</mark>
+      {text.slice(idx + q.length)}
+    </>
+  )
+}
+
+function matchDoc(c: ContractDoc, needle: string): boolean {
+  const hay = [
+    c.name, c.displayName, c.type, c.summary, c.department,
+    ...c.extractedFields.map((f) => `${f.label} ${f.value}`),
+    ...c.flags.map((f) => f.flag_if),
+    ...c.textHighlights.map((t) => t.text),
+  ].join(' ').toLowerCase()
+  return hay.includes(needle)
+}
+
+function DocSearch({ contracts: allContracts, onSelect, role }: { contracts: ContractDoc[]; onSelect: (c: ContractDoc) => void; role?: Role | null }) {
+  const [q, setQ] = useState('')
+  const [hits, setHits] = useState<{ file: string; path: string; snippet: string; size_bytes: number; source: string }[] | null>(null)
+  const [diskCount, setDiskCount] = useState<number | null>(null)
+  const needle = q.trim().toLowerCase()
+  useEffect(() => {
+    if (needle.length < 2) { setHits(null); setDiskCount(null); return }
+    let cancelled = false
+    fetch(`/api/search?q=${encodeURIComponent(needle)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled) { setHits(d ? d.results : []); setDiskCount(d ? d.count : 0) } })
+      .catch(() => { if (!cancelled) { setHits([]); setDiskCount(0) } })
+    return () => { cancelled = true }
+  }, [needle])
+  // RBAC: demo docs arrive pre-gated from the caller; disk files are gated here by their archive confidentiality
+  const local = needle.length >= 2 ? allContracts.filter((c) => matchDoc(c, needle)) : []
+  const gatedHits = role ? (hits || []).filter((h) => canView(role, { confidentiality: archiveFileConf(h.file) })) : hits
+  const gatedDiskCount = role ? (gatedHits || []).length : diskCount
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <div className="relative">
+        <svg className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Full-text search across documents & on-disk archive (e.g. “PHIPA”, “indemnity”, “$150,000”)…"
+          className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+        />
+      </div>
+      {needle.length >= 2 && (
+        <div className="mt-3 space-y-4">
+          {/* Demo document matches */}
+          <div>
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+              Demo documents <span className="text-teal-600">({local.length})</span>
+            </div>
+            {local.length === 0 && <div className="text-[11px] text-slate-400">No matching demo documents.</div>}
+            {local.map((c) => (
+              <button key={c.num} onClick={() => onSelect(c)} className="w-full text-left px-3 py-2 -mx-3 hover:bg-slate-50 rounded transition-colors">
+                <div className="text-xs font-medium text-slate-800">
+                  <span className="font-mono text-slate-400">#{c.num}</span> {c.displayName}
+                  <span className="text-slate-400"> · {c.department}</span>
+                </div>
+                <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                  <Highlight text={c.summary} q={needle} />
+                </div>
+              </button>
+            ))}
+          </div>
+          {/* On-disk archive matches (RBAC-gated: files above the role's access level are hidden) */}
+          {hits !== null ? (
+            <div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                On-disk archive <span className="text-teal-600">({gatedDiskCount ?? 0} files)</span>
+                <span className="font-normal normal-case text-slate-400"> · data/archive, verified from disk</span>
+                {role && (hits || []).length > (gatedHits || []).length && (
+                  <span className="font-normal normal-case text-slate-400"> · {(hits || []).length - (gatedHits || []).length} hidden by role access</span>
+                )}
+              </div>
+              {(gatedHits || []).length === 0 && <div className="text-[11px] text-slate-400">No matches in the on-disk archive (or all matches are above your access level).</div>}
+              {(gatedHits || []).map((h, i) => (
+                <div key={i} className="px-3 py-2 -mx-3 hover:bg-slate-50 rounded transition-colors">
+                  <div className="text-xs font-medium text-slate-700 truncate">{h.path}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+                    <Highlight text={h.snippet} q={needle} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-[11px] text-slate-400">Archive search offline — start the API server (server.py, port 8000) to search on-disk files.</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Relevance score for global search: how many indexable fields of the document
+// contain the needle (name, type, department, summary, flags, amendments).
+function scoreDoc(c: ContractDoc, needle: string): number {
+  let s = 0
+  const hay = [c.name, c.displayName, c.type, c.department, c.summary, c.filePath]
+  for (const h of hay) if (h && h.toLowerCase().includes(needle)) s += 1
+  for (const f of c.flags || []) {
+    if ((f.flag_if || '').toLowerCase().includes(needle) || (f.field || '').toLowerCase().includes(needle)) s += 1
+  }
+  if ((c.amendments || []).some((a) => (a.label || '').toLowerCase().includes(needle))) s += 1
+  return s
+}
+
+// Global search (top bar, paperless-style): autocomplete across demo documents
+// (relevance-sorted) + on-disk archive snippets. Live; offline-safe.
+function GlobalSearch({ contracts, role, onPick }: { contracts: ContractDoc[]; role: Role | null; onPick: (c: ContractDoc) => void }) {
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
+  const [hits, setHits] = useState<{ file: string; path: string; snippet: string; source: string }[] | null>(null)
+  const [diskOffline, setDiskOffline] = useState(false)
+  const needle = q.trim().toLowerCase()
+  useEffect(() => {
+    if (needle.length < 2) { setHits(null); setDiskOffline(false); return }
+    let cancelled = false
+    fetch(`/api/search?q=${encodeURIComponent(needle)}&limit=5`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled) { setHits(d ? d.results : []); setDiskOffline(false) } })
+      .catch(() => { if (!cancelled) { setHits([]); setDiskOffline(true) } })
+    return () => { cancelled = true }
+  }, [needle])
+  const scored = needle.length >= 2
+    ? contracts.map((c) => ({ c, n: scoreDoc(c, needle) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n).slice(0, 6)
+    : []
+  const gatedHits = role && hits ? hits.filter((h) => canView(role, { confidentiality: archiveFileConf(h.file) })) : hits || []
+  return (
+    <div className="relative" onKeyDown={(e) => { if (e.key === 'Escape') { setOpen(false); setQ('') } }}>
+      <div className="flex items-center border border-slate-200 bg-slate-50 rounded-lg pl-2.5 pr-1.5 py-1 focus-within:ring-2 focus-within:ring-teal-300 transition">
+        <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+        <input
+          value={q}
+          onChange={(e) => { setQ(e.target.value); setOpen(true) }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          placeholder="Search documents & archive…"
+          className="text-[12px] bg-transparent border-0 focus:outline-none w-40 pl-1.5 placeholder:text-slate-400"
+        />
+      </div>
+      {open && needle.length >= 2 && (
+        <div className="absolute right-0 top-full mt-1.5 w-[380px] bg-white border border-slate-200 rounded-lg shadow-xl z-50 overflow-hidden">
+          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-3 pt-2.5 pb-1">
+            Documents <span className="text-teal-600">({scored.length})</span>
+            <span className="font-normal normal-case text-slate-400"> · sorted by relevance</span>
+          </div>
+          {scored.length === 0 && <div className="px-3 py-1.5 text-[11px] text-slate-400">No matching documents.</div>}
+          {scored.map(({ c, n }) => (
+            <button key={c.num} onMouseDown={() => { onPick(c); setQ(''); }} className="w-full text-left px-3 py-2 hover:bg-slate-50 transition-colors border-t border-slate-100">
+              <div className="text-xs font-medium text-slate-800 flex items-center gap-1.5">
+                <span className="font-mono text-slate-400">#{c.num}</span> {c.displayName}
+                <span className="text-[10px] text-teal-600 font-semibold ml-auto shrink-0">{n} field{n > 1 ? 's' : ''} match</span>
+              </div>
+              {c.summary && <div className="text-[11px] text-slate-500 truncate mt-0.5"><Highlight text={c.summary} q={needle} /></div>}
+            </button>
+          ))}
+          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide px-3 pt-2.5 pb-1 border-t border-slate-100">
+            On-disk archive {diskOffline ? '(offline)' : `(${gatedHits.length} file${gatedHits.length === 1 ? '' : 's'})`}
+            <span className="font-normal normal-case text-slate-400"> · verified from disk</span>
+          </div>
+          {diskOffline ? (
+            <div className="px-3 pb-2 text-[11px] text-slate-400">Archive search offline — start the API server (port 8000).</div>
+          ) : gatedHits.length === 0 ? (
+            <div className="px-3 pb-2 text-[11px] text-slate-400">No matching files in the on-disk archive.</div>
+          ) : (
+            <div className="max-h-40 overflow-y-auto">
+              {gatedHits.map((h, i) => (
+                <div key={i} className="px-3 py-1.5 border-t border-slate-100">
+                  <div className="text-[11px] font-medium text-slate-600 truncate">{h.path}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5 line-clamp-2"><Highlight text={h.snippet} q={needle} /></div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Template Match (2026-10-17 meeting, item 2) ─────────────────────────
+// AI contract comparison: incoming document vs approved template / executed
+// reference — type classification, similarity estimate, clause-level diff,
+// and a "needs attention" shortlist so Legal skips the boilerplate.
+
+const RISK_BADGE: Record<string, { bg: string; fg: string; label: string }> = {
+  Critical: { bg: '#fef2f2', fg: '#b91c1c', label: 'CRITICAL' },
+  High: { bg: '#fff7ed', fg: '#c2410c', label: 'HIGH' },
+  Medium: { bg: '#fffbeb', fg: '#b45309', label: 'MEDIUM' },
+  Low: { bg: '#eff6ff', fg: '#1d4ed8', label: 'LOW' },
+}
+
+function TemplateMatchView({ allContracts, role }: { allContracts: ContractDoc[]; role: Role }) {
+  const visibleDocs = allContracts.filter((c) => canView(role, c))
+  const [incomingNum, setIncomingNum] = useState<number | ''>(4) // #4 DSA Provider — demo default (falls back to placeholder for roles that can't view it)
+  const [refMode, setRefMode] = useState<'template' | 'contract'>('template')
+  const [tplId, setTplId] = useState('tpl-dsa')
+  const [refContractNum, setRefContractNum] = useState<number>(9)
+  const [ai, setAi] = useState<{ status: 'idle' | 'loading' | 'done' | 'error'; data?: { summary: string; key_findings: string[]; review_focus: string[] }; model?: string; error?: string }>({ status: 'idle' })
+
+  // Auto-suggest the best reference when the incoming document changes (template mode only)
+  const prevNum = useRef<number | ''>('')
+  useEffect(() => {
+    if (incomingNum === '' || prevNum.current === incomingNum) { prevNum.current = incomingNum; return }
+    if (refMode === 'template') {
+      const inc = allContracts.find((c) => c.num === incomingNum)
+      if (inc) {
+        const cls = classifyType(inc)
+        const t = TEMPLATE_LIBRARY.find((x) => x.type === cls.type)
+        if (t) setTplId(t.id)
+      }
+    }
+    prevNum.current = incomingNum
+  }, [incomingNum, allContracts, refMode])
+
+  const incoming = incomingNum !== '' ? visibleDocs.find((c) => c.num === incomingNum) || null : null
+  const refContract = refMode === 'contract' ? visibleDocs.find((c) => c.num === refContractNum && c.num !== incomingNum) || null : null
+  const tpl = refMode === 'contract' && refContract
+    ? contractToTemplateRef(refContract)
+    : TEMPLATE_LIBRARY.find((t) => t.id === tplId) || TEMPLATE_LIBRARY[0]
+  const result = incoming ? matchTemplate(incoming, tpl) : null
+  const simColor = !result ? '#64748b' : result.similarity >= 90 ? '#10b981' : result.similarity >= 70 ? '#f59e0b' : '#ef4444'
+
+  // Real local AI (Ollama, server.py: primary model from OLLAMA_MODEL env, automatic fallback to gemma3:1b): LLM clause review of the diff above
+  const runAiReview = () => {
+    if (!incoming || !result) return
+    setAi({ status: 'loading' })
+    fetch('/api/llm-compare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        incoming: { num: incoming.num, name: incoming.displayName, type: incoming.type, fields: incoming.extractedFields, flags: incoming.flags },
+        ref: { label: tpl.name, fields: tpl.fieldValues },
+        diffs: result.diffs,
+      }),
+    })
+      .then((r) => r.json())
+      .then((d) => setAi(d.ok ? { status: 'done', data: d.data, model: d.model } : { status: 'error', error: d.error }))
+      .catch((e) => setAi({ status: 'error', error: String(e) }))
+  }
+
+  const selStyle: React.CSSProperties = {
+    fontSize: 12, border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px',
+    background: '#fff', color: '#0f172a', minWidth: 240,
+  }
+
+  return (
+    <div>
+      {/* AI Clause Review — moved to the TOP of the page (directly under the Template Match tab key group) */}
+      <div style={{ background: incoming ? '#fff' : '#f8fafc', border: '1px solid ' + (incoming ? '#e2e8f0' : '#cbd5e1'), borderRadius: 14, padding: 18, marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 800 }}>AI Clause Review</span>
+          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: '#f0fdfa', color: '#0f766e', fontWeight: 700 }}>local Ollama · runs on this machine</span>
+          <button
+            onClick={runAiReview}
+            disabled={ai.status === 'loading' || !incoming || !result}
+            style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '6px 14px', borderRadius: 8, border: '1px solid #0d9488', background: ai.status === 'loading' ? '#ccfbf1' : (!incoming || !result) ? '#e2e8f0' : '#0d9488', color: ai.status === 'loading' || !incoming || !result ? '#94a3b8' : '#fff', cursor: ai.status === 'loading' || !incoming || !result ? 'not-allowed' : 'pointer', opacity: ai.status === 'loading' ? 0.7 : 1 }}
+          >
+            {ai.status === 'loading' ? 'Generating…' : ai.status === 'done' ? 'Re-run AI review' : 'Run AI review'}
+          </button>
+        </div>
+        {!incoming && (
+          <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.6 }}>
+            Select the incoming agreement below to run the comparison — then “Run AI review” sends the clause diff to the
+            local Ollama model for a legal-review summary.
+          </div>
+        )}
+        {incoming && ai.status === 'idle' && (
+          <div style={{ fontSize: 11, color: '#94a3b8', lineHeight: 1.6 }}>
+            Sends the clause diff below to the local Ollama model for a legal-review summary: what a reviewer
+            should focus on, which findings matter most, and any clause risks the deterministic engine may have
+            under-weighted. Runs entirely on this machine (127.0.0.1:11434).
+          </div>
+        )}
+        {incoming && ai.status === 'loading' && (
+          <div style={{ fontSize: 11, color: '#64748b' }}>Local model generating review… (~10–40 s)</div>
+        )}
+        {incoming && ai.status === 'error' && (
+          <div style={{ fontSize: 11, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 10, lineHeight: 1.5 }}>
+            AI review unavailable: {ai.error}. The deterministic clause diff below remains the source of truth —
+            start Ollama (ollama serve) and try again.
+          </div>
+        )}
+        {incoming && ai.status === 'done' && ai.data && (
+          <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.6 }}>
+            <div style={{ marginBottom: 10 }}>{ai.data.summary}</div>
+            {ai.data.key_findings && ai.data.key_findings.length > 0 && (
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', marginBottom: 4 }}>KEY FINDINGS</div>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {ai.data.key_findings.map((f, i) => (
+                    <li key={i} style={{ marginBottom: 3 }}>{f}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {ai.data.review_focus && ai.data.review_focus.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#64748b', marginBottom: 4 }}>REVIEW FOCUS</div>
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {ai.data.review_focus.map((f, i) => (
+                    <li key={i} style={{ marginBottom: 3 }}>{f}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div style={{ fontSize: 9, color: '#cbd5e1', marginTop: 10 }}>Generated locally by {ai.model} — assistive only; the clause diff below is the system of record.</div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
+        <div style={{ flex: 1, minWidth: 280, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>INCOMING AGREEMENT (select a Southlake contract to compare)</div>
+          <select style={selStyle} value={incomingNum} onChange={(e) => setIncomingNum(e.target.value ? Number(e.target.value) : '')}>
+            <option value="">— Select document —</option>
+            {visibleDocs.map((c) => (
+              <option key={c.num} value={c.num}>#{c.num} · {c.displayName} ({c.type})</option>
+            ))}
+          </select>
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8 }}>
+            <b>{role.label}</b> role can view {visibleDocs.length} of {allContracts.length} documents ({allContracts.length - visibleDocs.length} restricted, hidden from this list).
+          </div>
+        </div>
+        <div style={{ minWidth: 280, flex: 1, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>COMPARE AGAINST</div>
+            <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
+              <button
+                onClick={() => setRefMode('template')}
+                style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 8, border: '1px solid ' + (refMode === 'template' ? '#0d9488' : '#e2e8f0'), background: refMode === 'template' ? '#f0fdfa' : '#fff', color: refMode === 'template' ? '#0f766e' : '#94a3b8', cursor: 'pointer' }}
+              >Template</button>
+              <button
+                onClick={() => setRefMode('contract')}
+                style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 8, border: '1px solid ' + (refMode === 'contract' ? '#0d9488' : '#e2e8f0'), background: refMode === 'contract' ? '#f0fdfa' : '#fff', color: refMode === 'contract' ? '#0f766e' : '#94a3b8', cursor: 'pointer' }}
+              >Past signed contract</button>
+            </div>
+          </div>
+          {refMode === 'template' ? (
+            <>
+              <select style={{ ...selStyle, width: '100%' }} value={tplId} onChange={(e) => setTplId(e.target.value)}>
+                {TEMPLATE_LIBRARY.map((t) => (
+                  <option key={t.id} value={t.id}>{t.name} · {t.type} · {t.kind}</option>
+                ))}
+              </select>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>{tpl.notes}</div>
+            </>
+          ) : (
+            <>
+              <select style={{ ...selStyle, width: '100%' }} value={refContractNum} onChange={(e) => setRefContractNum(Number(e.target.value))}>
+                {visibleDocs.filter((c) => c.num !== incomingNum).map((c) => (
+                  <option key={c.num} value={c.num}>#{c.num} · {c.displayName} ({c.type})</option>
+                ))}
+              </select>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
+                Clause-level diff against a previously signed contract in the repository — the “did the party deviate from
+                what we already accepted?” check.
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {!incoming && (
+        <div style={{ fontSize: 12, color: '#94a3b8', padding: 30, textAlign: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14 }}>
+          Select an incoming agreement to run the comparison.
+        </div>
+      )}
+
+      {incoming && result && (
+        <>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
+            {/* Classification */}
+            <div style={{ flex: 1, minWidth: 260, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>DETECTED TYPE</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 16, fontWeight: 800 }}>{result.classifiedType.replace('_', ' ')}</span>
+                <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: '#eef2ff', color: '#4338ca', fontWeight: 700 }}>
+                  {(result.typeConfidence * 100).toFixed(0)}% confidence
+                </span>
+              </div>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 8 }}>Keyword evidence: {result.typeEvidence}</div>
+            </div>
+            {/* Similarity */}
+            <div style={{ flex: 1, minWidth: 300, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', marginBottom: 8 }}>CLAUSE SIMILARITY vs {tpl.name}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                <span style={{ fontSize: 36, fontWeight: 800, color: simColor }}>{result.similarity}%</span>
+                <span style={{ fontSize: 11, color: '#64748b', lineHeight: 1.5 }}>{result.verdict}<br />
+                  {result.alignedCount} of {result.totalClauses} reference clauses align.</span>
+              </div>
+              <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 10, lineHeight: 1.5 }}>
+                Deterministic clause alignment over extracted fields (runs offline, instant). For clause-text-level
+                judgment, use “AI Clause Review” above — local Ollama, no cloud.
+              </div>
+            </div>
+          </div>
+
+          {/* Needs attention */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 18, marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 14, fontWeight: 800 }}>Needs Attention</span>
+              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: '#fef2f2', color: '#b91c1c', fontWeight: 800 }}>{result.attention.length}</span>
+              <span style={{ fontSize: 10, color: '#94a3b8' }}>— reviewer focus: skip the aligned boilerplate, review these</span>
+            </div>
+            {result.attention.length === 0 && (
+              <div style={{ fontSize: 12, color: '#16a34a' }}>No clause deviations detected against this reference. Routine sign-off.</div>
+            )}
+            {result.attention.map((d, i) => {
+              const badge = RISK_BADGE[d.risk!] || RISK_BADGE.Medium
+              return (
+                <div key={i} style={{
+                  display: 'flex', gap: 10, alignItems: 'flex-start', padding: '9px 10px', marginBottom: 8,
+                  background: badge.bg, borderRadius: 10, border: `1px solid ${badge.fg}22`,
+                }}>
+                  <span style={{ fontSize: 9, fontWeight: 800, color: badge.fg, background: '#fff', border: `1px solid ${badge.fg}44`, borderRadius: 4, padding: '2px 6px', marginTop: 1, whiteSpace: 'nowrap' }}>{badge.label}</span>
+                  <div style={{ fontSize: 12, color: '#334155', lineHeight: 1.5 }}>
+                    <b>{d.field}</b> · reference: “{d.refValue}” → incoming: “{d.incomingValue}”
+                    {d.reason && <span style={{ color: '#64748b' }}> — {d.reason}</span>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Full clause diff */}
+          <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14, padding: 18 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, marginBottom: 10 }}>Full Clause Diff ({result.diffs.length} clauses)</div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                <thead>
+                  <tr style={{ color: '#94a3b8' }}>
+                    {['Clause', tpl.kind === 'executed' ? 'Executed reference' : 'Template', 'Incoming #' + incoming.num, 'Status', 'Risk'].map((h) => (
+                      <th key={h} style={{ textAlign: 'left', padding: '7px 8px', borderBottom: '1px solid #e2e8f0', fontSize: 10, fontWeight: 700 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.diffs.map((d, i) => (
+                    <tr key={i} style={{ background: d.risk === 'Critical' ? '#fef2f2' : i % 2 ? '#f8fafc' : '#fff' }}>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f1f5f9', fontWeight: 700 }}>{d.field}</td>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f1f5f9', color: '#64748b' }}>{d.refValue}</td>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f1f5f9', color: d.status === 'aligned' ? '#334155' : '#b91c1c', fontWeight: d.status === 'aligned' ? 400 : 700 }}>{d.incomingValue}</td>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f1f5f9', fontWeight: 700, color: d.status === 'aligned' ? '#16a34a' : d.status === 'missing' ? '#94a3b8' : '#b91c1c' }}>
+                        {d.status === 'aligned' ? '✓ aligned' : d.status === 'missing' ? '— missing' : '✗ changed'}
+                      </td>
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f1f5f9' }}>
+                        {d.risk ? <span style={{ fontSize: 9, fontWeight: 800, color: RISK_BADGE[d.risk].fg, background: RISK_BADGE[d.risk].bg, padding: '2px 6px', borderRadius: 4 }}>{RISK_BADGE[d.risk].label}</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 10, lineHeight: 1.5 }}>
+              Deterministic clause alignment over extracted fields. “Needs Attention” = clauses where the incoming
+              document deviates from the approved reference and the deviation triggers a risk rule; aligned boilerplate
+              is skipped in review.
+            </div>
+          </div>
+
+          {/* AI Clause Review moved to the top of the page — see card above the selectors */}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Deadlines / Tickler Table (enhanced) ───────────────────────────────────
+
+function DeadlinesTimeline({ contracts: allContracts, onSelectContract }: { contracts: ContractDoc[]; onSelectContract?: (c: ContractDoc) => void }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const sorted = allContracts.filter((c) => c.expiryDate).sort((a, b) => (a.expiryDate || '').localeCompare(b.expiryDate || ''))
+  const minDate = sorted[0]?.expiryDate || today
+  const maxDate = sorted[sorted.length - 1]?.expiryDate || today
+
+  // Calculate position on timeline (0-100%)
+  const pos = (d: string) => {
+    const min = new Date(minDate).getTime()
+    const max = new Date(maxDate).getTime()
+    if (max === min) return 50
+    return Math.round(((new Date(d).getTime() - min) / (max - min)) * 100)
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4 mb-4">
+      <div className="text-xs font-bold text-slate-700 mb-3">Expiration Timeline</div>
+      <div className="relative h-32">
+        {/* Timeline line */}
+        <div className="absolute top-1/2 left-0 right-0 h-1 bg-slate-200 rounded" />
+        {/* Today marker */}
+        <div className="absolute top-0 bottom-0 w-0.5 bg-red-400 opacity-50" style={{ left: `${pos(today)}%` }} />
+        <span className="absolute text-[11px] text-red-500 -translate-x-1/2" style={{ left: `${pos(today)}%`, top: '-12px' }}>Today</span>
+        {/* Contract dots */}
+        {sorted.map((c) => (
+          <div key={c.num} className="absolute top-1/2 -translate-y-1/2 group cursor-pointer" style={{ left: `${pos(c.expiryDate!)}%` }} onClick={() => onSelectContract?.(c)}>
+            <div className={`w-3 h-3 rounded-full border-2 border-white shadow ${c.expiryDate! < today ? 'bg-red-500' : c.expiryDate!.slice(0, 7) === today.slice(0, 7) ? 'bg-amber-500' : 'bg-teal-500'} group-hover:scale-125 transition-transform`} />
+            <div className="absolute bottom-5 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[11px] px-1.5 py-0.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition">
+              #{c.num} {c.expiryDate} · click →
+            </div>
+          </div>
+        ))}
+        {/* Axis labels */}
+        <div className="absolute bottom-0 left-0 text-[11px] text-slate-400">{minDate}</div>
+        <div className="absolute bottom-0 right-0 text-[11px] text-slate-400">{maxDate}</div>
+      </div>
+      {/* Legend */}
+      <div className="flex items-center gap-4 mt-2 text-[11px] text-slate-400">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> Expired</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> Expiring (this month)</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500" /> Future</span>
+        <span className="flex items-center gap-1"><span className="w-0.5 h-3 bg-red-400" /> Today</span>
+      </div>
+    </div>
+  )
+}
+
+function DeadlinesTable({ contracts: allContracts, onSelectContract }: { contracts: ContractDoc[]; onSelectContract?: (c: ContractDoc) => void }) {
+  const [dlFilter, setDlFilter] = useState<'all' | 'expired' | 'critical' | 'warning' | 'ok' | 'archived'>('all')
+  const today = new Date(DEMO_TODAY) // demo reference date
+  const rows = allContracts
+    .filter((c) => c.expiryDate)
+    .map((c) => {
+      const exp = new Date(c.expiryDate)
+      const daysLeft = Math.ceil((exp.getTime() - today.getTime()) / 86400000)
+      const noticeDays = c.renewalNoticeDays || 60
+      const noticeDeadline = new Date(exp.getTime() - noticeDays * 86400000)
+      const daysToNotice = Math.ceil((noticeDeadline.getTime() - today.getTime()) / 86400000)
+      let urgency: 'expired' | 'critical' | 'warning' | 'ok'
+      if (daysLeft < 0) urgency = 'expired'
+      else if (daysLeft <= 30) urgency = 'critical'
+      else if (daysLeft <= 90) urgency = 'warning'
+      else urgency = 'ok'
+      return { c, daysLeft, daysToNotice, noticeDays, urgency }
+    })
+    .sort((a, b) => a.daysLeft - b.daysLeft)
+  const shown = dlFilter === 'all' ? rows : rows.filter((r) => dlFilter === 'archived' ? retentionState(r.c).status === 'elapsed' : r.urgency === dlFilter)
+
+  const urgencyColors: Record<string, { bg: string; text: string; bar: string }> = {
+    expired:  { bg: 'bg-red-50',  text: 'text-red-700',  bar: 'bg-red-500' },
+    critical: { bg: 'bg-amber-50', text: 'text-amber-700', bar: 'bg-amber-500' },
+    warning:  { bg: 'bg-yellow-50', text: 'text-yellow-700', bar: 'bg-yellow-400' },
+    ok:       { bg: 'bg-emerald-50/50', text: 'text-emerald-700', bar: 'bg-emerald-500' },
+  }
+  const urgencyLabels: Record<string, string> = {
+    expired: 'EXPIRED', critical: 'CRITICAL', warning: 'UPCOMING', ok: 'ACTIVE',
+  }
+
+  const archivedCount = rows.filter((r) => retentionState(r.c).status === 'elapsed').length
+  return (
+    <div>
+      {/* Summary bar */}
+      <div className="flex gap-4 mb-4">
+        <button onClick={() => setDlFilter(dlFilter === 'archived' ? 'all' : 'archived')} className={`flex-1 ${dlFilter === 'archived' ? 'bg-slate-200 border-slate-400' : 'bg-slate-100 border-slate-200 hover:border-slate-400'} rounded-lg p-3 text-center transition`}>
+          <div className="text-2xl font-bold text-slate-600">{archivedCount}</div>
+          <div className="text-[11px] text-slate-500 uppercase tracking-wide mt-0.5">Archived {dlFilter === 'archived' ? '· showing' : ''}</div>
+        </button>
+        {(['expired','critical','warning','ok'] as const).map((u) => {
+          const count = rows.filter((r) => r.urgency === u).length
+          const uc = urgencyColors[u]
+          const active = dlFilter === u
+          return (
+            <button key={u} onClick={() => setDlFilter(active ? 'all' : u)} className={`flex-1 ${uc.bg} ${active ? 'border-2 ' + u + '-300' : 'border-slate-200 hover:border-slate-400'} rounded-lg p-3 text-center transition`}>
+              <div className={`text-2xl font-bold ${uc.text}`}>{count}</div>
+              <div className="text-[11px] text-slate-500 uppercase tracking-wide mt-0.5">{urgencyLabels[u]}{active ? ' · showing' : ''}</div>
+            </button>
+          )
+        })}
+      </div>
+      {dlFilter !== 'all' && (
+        <p className="text-[11px] text-teal-700 bg-teal-50 border border-teal-200 rounded px-3 py-1.5 mb-3">
+          Filter: <b>{dlFilter === 'archived' ? 'ARCHIVED (retention complete)' : urgencyLabels[dlFilter].toLowerCase()}</b> — {shown.length} of {rows.length} documents · <button onClick={() => setDlFilter('all')} className="font-semibold underline">clear</button>
+        </p>
+      )}
+
+      {/* Source legend */}
+      <div className="flex items-center gap-4 mb-2 text-[11px] text-slate-400">
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-teal-500" /> Rule-based</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500" /> AI-detected</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> Open</span>
+        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Remediated</span>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white border border-slate-200 rounded-lg overflow-x-auto">
+        <table className="w-full text-sm min-w-[700px]">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-12">Num</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide">Document</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-24">Expiry</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-20">Days Left</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-28">Renewal Notice</th>
+              <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wide w-20">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((r, i) => {
+              const uc = urgencyColors[r.urgency]
+              return (
+                <tr key={i} className={`border-b border-slate-100 last:border-0 hover:bg-slate-50 ${r.urgency === 'expired' ? 'bg-red-50/30' : ''}`}>
+                  <td className="px-4 py-2.5 text-xs text-slate-400 font-mono">#{r.c.num}</td>
+                  <td className="px-4 py-2.5">
+                    <button onClick={() => onSelectContract?.(r.c)} className="text-sm text-slate-800 hover:text-teal-600 hover:underline text-left">
+                      {r.c.displayName}
+                    </button>
+                    <div className="text-[11px] text-slate-400">{r.c.department}</div>
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-slate-600 font-mono">{r.c.expiryDate}</td>
+                  <td className={`px-4 py-2.5 text-xs font-bold ${uc.text}`}>
+                    {r.daysLeft < 0 ? `${Math.abs(r.daysLeft)}d ago` : `${r.daysLeft}d`}
+                  </td>
+                  <td className="px-4 py-2.5 text-xs text-slate-500">
+                    {r.daysToNotice < 0
+                      ? <span className="text-red-600 font-medium">Overdue ({Math.abs(r.daysToNotice)}d)</span>
+                      : <span>{r.daysToNotice}d remaining</span>}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${uc.bar}`} />
+                      <span className={`text-[11px] font-bold ${uc.text}`}>{urgencyLabels[r.urgency]}</span>
+                    </div>
+                    {/* Urgency bar */}
+                    <div className="w-16 h-1 bg-slate-100 rounded-full mt-1 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${uc.bar}`}
+                        style={{ width: `${Math.min(100, Math.max(5, 100 - Math.max(0, r.daysLeft)))}%` }}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+// ── 5×5 L×I Risk Matrix ──────────────────────────────────────────────────────
+
+// Risk labels + bands come from RISK_FRAMEWORK (data.ts) — the single
+// integration point for Southlake's internal risk register (item 3, 2026-10-17).
+const L_LABELS = ['', ...RISK_FRAMEWORK.likelihoodLabels]
+const I_LABELS = ['', ...RISK_FRAMEWORK.impactLabels]
+
+// @ts-ignore - inlined into Risk Register collapsible
+function RiskMatrixView({ contracts: allContracts, onSelectContract, resolvedFlags }: { contracts: ContractDoc[]; onSelectContract?: (c: ContractDoc) => void; resolvedFlags?: Set<string> }) {
+  // Collect all flags with L and I
+  const rawFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
+  // Cascade: flags resolved in Work Queue no longer appear in the matrix or taxonomy counts
+  const allFlags = rawFlags.filter((f) => !(resolvedFlags && resolvedFlags.has(`f-${f.contract.num}-${f.field}`)))
+  const hiddenCount = rawFlags.length - allFlags.length
+
+  // Cell click state: [l, i] or null
+  const [selectedCell, setSelectedCell] = useState<[number, number] | null>(null)
+
+  // Build the 5×5 grid
+  const grid: number[][] = Array.from({ length: 5 }, () => Array(5).fill(0))
+  allFlags.forEach((f) => {
+    const l = Math.min(5, Math.max(1, f.likelihood))
+    const i = Math.min(5, Math.max(1, f.impact))
+    grid[5 - l][i - 1]++ // row 0 = L5 (top), col 0 = I1 (left)
+  })
+
+  // Color based on L×I score (bands from RISK_FRAMEWORK — swappable when the
+  // Southlake internal risk register arrives)
+  function cellColor(l: number, i: number): string {
+    const score = l * i
+    if (score >= RISK_FRAMEWORK.bands.red) return 'bg-red-100 border-red-300'
+    if (score >= RISK_FRAMEWORK.bands.orange) return 'bg-orange-50 border-orange-200'
+    if (score >= RISK_FRAMEWORK.bands.yellow) return 'bg-yellow-50 border-yellow-200'
+    return 'bg-emerald-50 border-emerald-200'
+  }
+  function cellText(l: number, i: number): string {
+    const score = l * i
+    if (score >= RISK_FRAMEWORK.bands.red) return 'text-red-700'
+    if (score >= RISK_FRAMEWORK.bands.orange) return 'text-orange-700'
+    if (score >= RISK_FRAMEWORK.bands.yellow) return 'text-yellow-700'
+    return 'text-emerald-700'
+  }
+
+  // Flags in selected cell
+  const cellFlags = selectedCell ? allFlags.filter((f) => {
+    const l = Math.min(5, Math.max(1, f.likelihood))
+    const i = Math.min(5, Math.max(1, f.impact))
+    return l === selectedCell[0] && i === selectedCell[1]
+  }) : []
+
+  return (
+    <div className="space-y-6">
+      {/* Methodology header */}
+      <div className="bg-white border border-slate-200 rounded-lg p-5">
+        <h3 className="text-[13px] font-semibold text-slate-900 mb-1">How We Score Risk</h3>
+        <p className="text-xs text-slate-500 mb-4">
+          Each risk gets two scores: how likely it is to happen (L) and how bad it would be (I). Multiply them to get a risk score out of 25.
+        </p>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <h4 className="text-xs font-bold text-slate-600 mb-2">LIKELIHOOD (L)</h4>
+            <div className="space-y-1">
+              {[1,2,3,4,5].map((v) => (
+                <div key={v} className="flex items-center gap-2 text-xs">
+                  <span className="w-5 h-5 flex items-center justify-center rounded bg-slate-100 font-bold text-slate-700">{v}</span>
+                  <span className="text-slate-600">{L_LABELS[v]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-slate-600 mb-2">IMPACT (I)</h4>
+            <div className="space-y-1">
+              {[1,2,3,4,5].map((v) => (
+                <div key={v} className="flex items-center gap-2 text-xs">
+                  <span className="w-5 h-5 flex items-center justify-center rounded bg-slate-100 font-bold text-slate-700">{v}</span>
+                  <span className="text-slate-600">{I_LABELS[v]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 text-xs text-slate-500">
+          <strong>Risk score = L × I</strong> → 1–5 = Low · 6–11 = Moderate · 12–19 = High · 20–25 = Critical
+        </div>
+      </div>
+
+      {/* 5×5 Grid — clickable cells */}
+      <div className="bg-white border border-slate-200 rounded-lg p-5">
+        <h3 className="text-[13px] font-semibold text-slate-900 mb-1">Risk Matrix</h3>
+        <div className="text-[11px] text-slate-400 mb-2">{RISK_FRAMEWORK.source} · bands ≥{RISK_FRAMEWORK.bands.red} red / ≥{RISK_FRAMEWORK.bands.orange} orange / ≥{RISK_FRAMEWORK.bands.yellow} yellow{hiddenCount > 0 ? ` · ${hiddenCount} resolved flag${hiddenCount > 1 ? 's' : ''} hidden` : ''}</div>
+        <p className="text-[11px] text-slate-400 mb-4">Click a cell to see which documents/flags fall in that risk band.</p>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[700px]">
+            <thead>
+              <tr>
+                <th className="w-8"></th>
+                {[1,2,3,4,5].map((i) => (
+                  <th key={i} className="text-center text-[11px] font-medium text-slate-500 pb-2">
+                    <div className="text-xs font-bold text-slate-700">{I_LABELS[i]}</div>
+                    <div className="text-[11px] text-slate-400">Impact {i}</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[5,4,3,2,1].map((l) => (
+                <tr key={l}>
+                  <td className="text-right pr-2">
+                    <div className="text-xs font-bold text-slate-700">{L_LABELS[l]}</div>
+                    <div className="text-[11px] text-slate-400">L={l}</div>
+                  </td>
+                  {[1,2,3,4,5].map((i) => {
+                    const count = grid[5-l][i-1]
+                    const isActive = selectedCell?.[0] === l && selectedCell?.[1] === i
+                    return (
+                      <td key={i} onClick={() => count > 0 && setSelectedCell(isActive ? null : [l, i])} className={`border p-2 text-center cursor-pointer transition ${cellColor(l,i)} ${isActive ? 'ring-2 ring-teal-500 ring-inset' : ''} ${count > 0 ? 'hover:brightness-95' : 'opacity-50 cursor-default'}`}>
+                        <div className={`text-lg font-bold ${cellText(l,i)}`}>{l*i}</div>
+                        {count > 0 && (
+                          <div className="text-[11px] font-medium text-slate-700 mt-0.5">{count} flag{count>1?'s':''}</div>
+                        )}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Cell detail panel — shows flags in selected cell */}
+        {selectedCell && cellFlags.length > 0 && (
+          <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden">
+            <div className="px-4 py-2 bg-slate-50 border-b flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700">
+                L={selectedCell[0]} × I={selectedCell[1]} = {selectedCell[0]*selectedCell[1]} · {cellFlags.length} flag{cellFlags.length>1?'s':''}
+              </span>
+              <button onClick={() => setSelectedCell(null)} className="text-[11px] text-slate-400 hover:text-slate-600">✕ Close</button>
+            </div>
+            <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto">
+              {cellFlags.map((f, idx) => (
+                <div key={idx} onClick={() => onSelectContract?.(f.contract)} className="px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-medium text-slate-700">
+                      Contract #{f.contract.num} · {f.contract.displayName}
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">{f.field} · {f.flag_if?.slice(0, 60)}</div>
+                  </div>
+                  <span className="text-[11px] text-teal-600 font-medium whitespace-nowrap ml-3">Open →</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-4 mt-4 text-[11px] text-slate-500">
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100 border border-red-300"/>Critical (20–25)</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-50 border border-orange-200"/>High (12–19)</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-50 border border-yellow-200"/>Moderate (6–11)</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-50 border border-emerald-200"/>Low (1–5)</span>
+        </div>
+      </div>
+
+      {/* Southlake / HIROC risk taxonomy (client-provided, Jul 2019 register) */}
+      <div className="bg-white border border-slate-200 rounded-lg p-5">
+        <h3 className="text-[13px] font-semibold text-slate-900 mb-1">Southlake / HIROC Risk Taxonomy — 12 Categories (client-provided, Jul 2019 register)</h3>
+        <p className="text-[11px] text-slate-400 mb-4">Each flag is auto-classified to a client category → risk name (nearest match). C×P scoring page pending — score bands remain AI 5×5 L×I meanwhile.</p>
+        <div className="grid grid-cols-3 gap-3">
+          {Object.entries(SOUTHLAKE_RISK_TAXONOMY).map(([cat, riskNames]) => {
+            const catFlags = allFlags.filter((f) => flagHiroc(f.field).cat === cat)
+            const nameCount: Record<string, number> = {}
+            catFlags.forEach((f) => { const n = flagHiroc(f.field).riskName; nameCount[n] = (nameCount[n] || 0) + 1 })
+            const top = Object.entries(nameCount).sort((a, b) => b[1] - a[1]).slice(0, 3)
+            return (
+              <div key={cat} className="border border-slate-200 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold text-slate-700">{cat}</span>
+                  <span className="text-[11px] text-slate-400">{catFlags.length} flags</span>
+                </div>
+                {top.length > 0 ? (
+                  top.map(([n, c]) => (
+                    <div key={n} className="text-[11px] text-slate-500 mb-0.5">• {n} <span className="text-slate-400">({c})</span></div>
+                  ))
+                ) : (
+                  <div className="text-[11px] text-slate-300">no flags in current register</div>
+                )}
+                <div className="text-[11px] text-slate-300 mt-1.5">{riskNames.length} risk names in category</div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Cross-References View (closed-loop, modal-confirmed) ────────────────────
+
+type WfState = 'detected' | 'acknowledged' | 'fixing' | 'verified' | 'closed'
+const WF_STEPS: Array<{ id: WfState; label: string; color: string; desc: string }> = [
+  { id: 'detected',     label: 'Detected',   color: 'bg-red-100 text-red-700 border-red-200',     desc: 'System flagged this gap' },
+  { id: 'acknowledged', label: 'Acknowledged', color: 'bg-amber-100 text-amber-700 border-amber-200', desc: 'A human has seen and accepted this gap' },
+  { id: 'fixing',       label: 'Fixing',     color: 'bg-blue-100 text-blue-700 border-blue-200',    desc: 'Target document is being updated' },
+  { id: 'verified',     label: 'Verified',   color: 'bg-emerald-100 text-emerald-700 border-emerald-200', desc: 'Human confirmed the fix is correct' },
+  { id: 'closed',       label: 'Closed',     color: 'bg-slate-100 text-slate-500 border-slate-200', desc: 'Loop complete, no further action needed' },
+]
+
+function CrossRefsView({ contracts: allContracts }: { contracts: ContractDoc[] }) {
+  const [wf, setWf] = useState<Record<string, WfState>>(() => {
+    const init: Record<string, WfState> = {}
+    for (const l of docLinks) {
+      init[`${l.sourceNum}-${l.targetName}`] = l.status === 'synced' ? 'closed' : 'detected'
+    }
+    return init
+  })
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [wizard, setWizard] = useState<DocLink | null>(null) // open wizard for this link
+  const [toast, setToast] = useState('')
+  useEffect(() => {
+    if (toast) {
+      const t = setTimeout(() => setToast(''), 4000)
+      return () => clearTimeout(t)
+    }
+  }, [toast])
+
+  function lk(l: DocLink) { return `${l.sourceNum}-${l.targetName}` }
+
+  const openCount = docLinks.filter((l) => wf[lk(l)] !== 'closed').length
+
+
+
+
+  function LinkCard({ link }: { link: DocLink }) {
+    const key = lk(link)
+    const state = wf[key]
+    const isExpanded = expanded[key] || false
+    const isSynced = link.status === 'synced'
+    const source = allContracts.find((c) => c.num === link.sourceNum)
+    const stepIdx = WF_STEPS.findIndex((s) => s.id === state)
+
+    return (
+      <div className={`border rounded-lg overflow-hidden ${isSynced ? 'border-emerald-200' : state === 'detected' ? 'border-red-200' : state === 'verified' || state === 'closed' ? 'border-emerald-200' : 'border-amber-200'}`}>
+        {/* Main row - click to expand */}
+        <div className="p-4 cursor-pointer" onClick={() => setExpanded((p) => ({ ...p, [key]: !isExpanded }))}>
+          <div className="flex items-center gap-1 mb-2">
+            {WF_STEPS.map((s, i) => (
+              <div key={s.id} className="flex items-center">
+                <div className={`w-2.5 h-2.5 rounded-full border-2 ${i <= stepIdx ? 'bg-teal-500 border-teal-400' : 'bg-white border-slate-300'}`} />
+                {i < WF_STEPS.length - 1 && <div className={`w-5 h-0.5 ${i < stepIdx ? 'bg-teal-300' : 'bg-slate-200'}`} />}
+              </div>
+            ))}
+            <span className={`ml-2 text-[11px] font-bold px-2 py-0.5 rounded border ${WF_STEPS[stepIdx]?.color}`}>
+              {WF_STEPS[stepIdx]?.label}
+            </span>
+            <span className="ml-auto text-[11px] text-slate-400">{isExpanded ? '▲' : '▼ details'}</span>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-bold text-slate-800 truncate">{source ? `#${source.num} ${source.displayName}` : `Contract #${link.sourceNum}`}</div>
+              <div className="text-[11px] text-slate-500">{link.sourceClause}</div>
+            </div>
+            <div className="text-slate-300 text-sm">→</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-bold text-slate-800 truncate">{link.targetName}</div>
+              <div className="text-[11px] text-slate-500">{link.targetClause}</div>
+            </div>
+          </div>
+
+          {!isExpanded && !isSynced && (
+            <div className="mt-2 flex items-center gap-3">
+              <div className="text-[11px] text-slate-500 line-clamp-1 flex-1">{link.riskIfNotUpdated}</div>
+              {stepIdx < 4 && !isSynced && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setWizard(link); setExpanded((p) => ({ ...p, [key]: true })) }}
+                  className="text-[11px] font-bold text-teal-600 bg-teal-50 border border-teal-200 rounded px-2 py-1 hover:bg-teal-100 transition shrink-0"
+                >
+                  ▶ Open Workflow
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Expanded detail */}
+        {isExpanded && (
+          <div className="px-4 pb-4 border-t border-slate-100 bg-slate-50/50 space-y-3">
+            <div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase mb-1">What changed</div>
+              <div className="text-xs text-slate-700 bg-white rounded border border-slate-200 p-2">{link.changeDescription}</div>
+            </div>
+            <div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase mb-1">Risk if not updated</div>
+              <div className={`text-xs p-2 rounded border ${state === 'closed' ? 'text-slate-500 bg-slate-50 border-slate-200' : 'text-red-700 bg-red-50 border-red-200'}`}>
+                {link.riskIfNotUpdated}
+              </div>
+            </div>
+
+            {/* Workflow button */}
+            <div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase mb-2">Workflow</div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setWizard(link) }}
+                  disabled={isSynced}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-all ${
+                    isSynced ? 'bg-emerald-50 text-emerald-600 border-emerald-200 cursor-default' :
+                    state === 'detected' ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100' :
+                    'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
+                  }`}
+                >
+                  {isSynced ? '✓ Resolved' : state === 'closed' ? 'Reopen' : `Continue from "${WF_STEPS[stepIdx]?.label}"`}
+                </button>
+                <span className="text-[11px] text-slate-400">
+                  {isSynced ? 'No action needed' : `${4 - stepIdx} steps remaining`}
+                </span>
+              </div>
+            </div>
+
+            {/* Verification checklist */}
+            {state === 'fixing' && (
+              <div className="bg-amber-50 border border-amber-200 rounded p-2">
+                <div className="text-[11px] font-bold text-amber-700 uppercase mb-1">Before verifying, confirm:</div>
+                <div className="text-[11px] text-slate-600 space-y-0.5">
+                  <div>□ Target document ({link.targetName}) has been updated</div>
+                  <div>□ Clause {link.targetClause} now matches the new requirement</div>
+                  <div>□ No other documents reference the old value</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Summary */}
+      <div className="flex gap-3">
+        {WF_STEPS.map((s) => {
+          const count = docLinks.filter((l) => wf[lk(l)] === s.id).length
+          return (
+            <div key={s.id} className="flex-1 bg-white border border-slate-200 rounded-lg p-3 text-center">
+              <div className={`text-xl font-bold ${s.id==='detected'?'text-red-600':s.id==='acknowledged'?'text-amber-600':s.id==='fixing'?'text-blue-600':s.id==='verified'?'text-emerald-600':'text-slate-500'}`}>{count}</div>
+              <div className="text-[11px] text-slate-400">{s.label}</div>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="text-xs text-slate-500">{openCount} of {docLinks.length} links open. Click a card to expand. Status changes require modal confirmation.</div>
+
+      <div className="space-y-3">
+        {docLinks.map((l) => <LinkCard key={lk(l)} link={l} />)}
+      </div>
+
+      {/* Workflow Wizard Modal */}
+      {wizard && (() => {
+        const w = wizard
+        const wKey = `${w.sourceNum}-${w.targetName}`
+        const wState = wf[wKey]
+        const wStepIdx = WF_STEPS.findIndex((s) => s.id === wState)
+        const wSource = allContracts.find((c) => c.num === w.sourceNum)
+        const nextStep = wStepIdx < 4 ? WF_STEPS[wStepIdx + 1] : null
+        const isDone = wState === 'closed' || wState === 'verified'
+        
+        // Step content generator
+        function stepContent(to: WfState) {
+          switch (to) {
+            case 'acknowledged': return (
+              <div className="space-y-4">
+                <div className="text-sm text-slate-600">Confirm a responsible person has <b>reviewed and accepted</b> this gap.</div>
+                <div className="bg-amber-50 border border-amber-200 rounded p-3 text-xs text-amber-800">
+                  <b>Gap:</b> {w.beforeText}
+                </div>
+                <div className="text-[11px] text-slate-400">Suggested owner: document custodian · SLA: 5 business days</div>
+              </div>
+            )
+            case 'fixing': return (
+              <div className="space-y-4">
+                <div className="text-sm text-slate-600">Target document will be <b>updated</b> to match source requirement.</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="text-[11px] font-bold text-red-400 uppercase mb-1">Current</div>
+                    <div className="text-xs text-slate-700 bg-red-50 border border-red-100 rounded p-3">{w.beforeText}</div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-bold text-emerald-600 uppercase mb-1">Required</div>
+                    <div className="text-xs text-slate-700 bg-emerald-50 border border-emerald-100 rounded p-3">{w.afterText}</div>
+                  </div>
+                </div>
+                {w.keyChanges.length > 0 && <div className="text-[11px] text-slate-500"><b>Changes:</b> {w.keyChanges.join(' · ')}</div>}
+                <div className="text-[11px] text-slate-400">SLA: 30 days · Notify: custodian + Legal</div>
+              </div>
+            )
+            case 'verified': return (
+              <div className="space-y-4">
+                <div className="text-sm text-slate-600">Confirm the target document <b>has been updated</b> and matches source.</div>
+                <div className="bg-blue-50 border border-blue-200 rounded p-3 text-xs space-y-1">
+                  <div className="text-blue-700 font-medium">Verification checklist:</div>
+                  <div>□ {w.targetName} has been revised</div>
+                  <div>□ Clause {w.targetClause} now matches: "{w.afterText}"</div>
+                  <div>□ No other documents reference the old value</div>
+                </div>
+                <div className="text-[11px] text-slate-400">Verifier: Risk team · Evidence: revised doc version</div>
+              </div>
+            )
+            case 'closed': return (
+              <div className="space-y-4">
+                <div className="text-sm text-slate-600">Marking this cross-reference as <b>fully resolved</b>.</div>
+                <div className="bg-emerald-50 border border-emerald-200 rounded p-3 text-xs text-emerald-800">
+                  ✓ {w.beforeText} → {w.afterText}
+                </div>
+                <div className="text-[11px] text-slate-400">Permanent. To reopen, set back to "Detected".</div>
+              </div>
+            )
+            default: return <div className="text-[11px] text-slate-500">Review and continue.</div>
+          }
+        }
+        
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setWizard(null)}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className="px-5 pt-4 pb-3 border-b border-slate-100">
+                <div className="text-base font-bold text-slate-800">Workflow: #{w.sourceNum} → {w.targetName}</div>
+                <div className="text-xs text-slate-500 mt-1">{wSource?.displayName} → {w.targetName}</div>
+                {/* Step boxes - click to jump, like original 5 buttons */}
+                <div className="flex items-center gap-1.5 mt-3">
+                  {WF_STEPS.map((s, i) => (
+                    <button
+                      key={s.id}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setWf((p) => ({ ...p, [wKey]: s.id as WfState }))
+                        setToast(`→ "${s.label}"`)
+                      }}
+                      className={`text-xs font-medium px-3 py-2 rounded-lg border transition-all ${
+                        i === wStepIdx ? `${s.color} ring-2 ring-offset-1 ring-teal-300` :
+                        i < wStepIdx ? 'bg-emerald-50 text-emerald-600 border-emerald-200' :
+                        'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                      }`}
+                    >
+                      {i < wStepIdx && '✓ '}{s.label}{i === wStepIdx && ' ·'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="px-5 py-4">
+                {isDone ? (
+                  <div className="text-center py-4">
+                    <div className="mb-3"><svg className="w-10 h-10 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}><circle cx="12" cy="12" r="9"/><path strokeLinecap="round" strokeLinejoin="round" d="M8.5 12.5l2.5 2.5 4.5-5"/></svg></div>
+                    <div className="text-base font-bold text-emerald-700">Workflow Complete</div>
+                    <div className="text-[11px] text-slate-500 mt-1">All 5 steps completed for this cross-reference.</div>
+                  </div>
+                ) : (
+                  stepContent(nextStep!.id as WfState)
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 rounded-b-xl">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setWizard(null)} className="text-sm text-slate-400 hover:text-slate-600 px-3 py-2">
+                    ✕
+                  </button>
+                  {wStepIdx > 0 && (
+                    <button
+                      onClick={() => {
+                        const prev = WF_STEPS[wStepIdx - 1]
+                        setWf((p) => ({ ...p, [wKey]: prev.id as WfState }))
+                      }}
+                      className="text-sm text-slate-600 bg-slate-100 border border-slate-200 hover:bg-slate-200 px-4 py-2 rounded-lg"
+                    >
+                      ← {WF_STEPS[wStepIdx - 1]?.label}
+                    </button>
+                  )}
+                  <div className="flex-1" />
+                  {wStepIdx < 4 && (
+                    <button
+                      onClick={() => {
+                        const nxt = WF_STEPS[wStepIdx + 1]
+                        setWf((p) => ({ ...p, [wKey]: nxt.id as WfState }))
+                      }}
+                      className="text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 px-5 py-2 rounded-lg"
+                    >
+                      {WF_STEPS[wStepIdx + 1]?.label} →
+                    </button>
+                  )}
+                  {isDone && (
+                    <button onClick={() => setWizard(null)} className="text-sm font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-5 py-2 rounded-lg">
+                      ✓ Done
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+      
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-4 right-4 bg-slate-800 text-white text-xs px-4 py-2.5 rounded-lg shadow-lg max-w-sm z-50">
+          {toast}
+          <button onClick={() => setToast('')} className="ml-2 text-slate-400 hover:text-white">✕</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Amendments View (closed-loop, modal-confirmed) ──────────────────────────
+
+// @ts-ignore - merged into CrossRefs tab
+function AmendmentsView({ contracts: allContracts, onSelect, resolvedFlags }: { contracts: ContractDoc[]; onSelect: (c: ContractDoc) => void; resolvedFlags?: Set<string> }) {
+  type AState = 'pending' | 'reviewed' | 'executed' | 'verified' | 'archived'
+  const A_STEPS: Array<{ id: AState; label: string; color: string; desc: string }> = [
+    { id: 'pending',  label: 'Pending',  color: 'bg-red-100 text-red-700 border-red-200', desc: 'Awaiting review' },
+    { id: 'reviewed', label: 'Reviewed', color: 'bg-blue-100 text-blue-700 border-blue-200', desc: 'Terms have been read and checked' },
+    { id: 'executed', label: 'Executed', color: 'bg-emerald-100 text-emerald-700 border-emerald-200', desc: 'All required signatures collected' },
+    { id: 'verified', label: 'Verified ✓', color: 'bg-teal-100 text-teal-700 border-teal-200', desc: 'Human confirmed terms are correct' },
+    { id: 'archived', label: 'Archived', color: 'bg-slate-100 text-slate-500 border-slate-200', desc: 'Closed, no further action' },
+  ]
+
+  const [awf, setAwf] = useState<Record<string, AState>>(() => {
+    const init: Record<string, AState> = {}
+    for (const c of allContracts) {
+      if (c.amendments) {
+        for (const a of c.amendments) {
+          init[`${c.num}-${a.id}`] = a.supersedesOriginal ? 'pending' : 'verified'
+        }
+      }
+      if (c.baseContractId != null) init[`doc-${c.num}`] = 'pending'
+    }
+    return init
+  })
+  const [exp, setExp] = useState<Record<string, boolean>>({})
+  const [modal, setModal] = useState<{ key: string; label: string; to: AState; context: AState; keyChanges?: string[]; beforeContext?: string; afterContext?: string } | null>(null)
+
+  const withAmendments = allContracts.filter((c) => c.amendments && c.amendments.length > 0)
+  const amendmentDocs = allContracts.filter((c) => c.baseContractId != null)
+
+  function confirmModal() {
+    if (!modal) return
+    setAwf((p) => ({ ...p, [modal.key]: modal.to }))
+    setModal(null)
+  }
+
+  function StatusBtns({ k, state, label, keyChanges, beforeContext, afterContext }: {
+    k: string; state: AState; label: string; keyChanges?: string[]; beforeContext?: string; afterContext?: string
+  }) {
+    return (
+      <div>
+        <div className="text-[11px] font-bold text-slate-500 uppercase mb-1.5">Status</div>
+        <div className="flex flex-wrap gap-1.5">
+          {A_STEPS.map((s) => {
+            const isActive = state === s.id
+            return (
+              <button
+                key={s.id}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (isActive) return
+                  setModal({ key: k, to: s.id, label, context: state, keyChanges, beforeContext, afterContext })
+                }}
+                className={`text-[11px] font-medium px-2 py-1 rounded border transition-all ${
+                  isActive ? `${s.color} ring-2 ring-offset-1 ring-teal-300` : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'
+                }`}
+              >
+                {s.label}{isActive && ' ✓'}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Amendment doc card (e.g. #11) ──
+  function DocCard({ c }: { c: ContractDoc }) {
+    const k = `doc-${c.num}`
+    const state = awf[k] || 'pending'
+    const isExp = exp[k] || false
+    const parent = allContracts.find((x) => x.num === c.baseContractId)
+
+    return (
+      <div className="border border-slate-200 rounded-lg overflow-hidden">
+        <div className="p-4 cursor-pointer" onClick={() => setExp((p) => ({ ...p, [k]: !isExp }))}>
+          <div className="flex items-center gap-3 mb-1">
+            <button onClick={(e) => { e.stopPropagation(); parent && onSelect(parent) }} className="text-xs font-medium text-teal-600 hover:underline">
+              #{parent?.num} {parent?.displayName}
+            </button>
+            <span className="text-slate-300">→</span>
+            <button onClick={(e) => { e.stopPropagation(); onSelect(c) }} className="text-xs font-medium text-teal-600 hover:underline">
+              #{c.num} {c.displayName}
+            </button>
+            <span className={`ml-auto text-[11px] font-bold px-2 py-0.5 rounded border ${A_STEPS.find((s) => s.id === state)?.color}`}>
+              {A_STEPS.find((s) => s.id === state)?.label}
+            </span>
+            <span className="text-[11px] text-slate-400">{isExp ? '▲' : '▼'}</span>
+          </div>
+          {!isExp && c.flags.length > 0 && (() => {
+            const open = c.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${c.num}-${f.field}`)))
+            if (open.length === 0) return null
+            return (
+              <div className="text-[11px] text-slate-500">{open.length} open risk{open.length > 1 ? 's' : ''} · top: {open[0].flag_if.slice(0, 60)}…</div>
+            )
+          })()}
+        </div>
+
+        {isExp && (
+          <div className="px-4 pb-4 border-t border-slate-100 bg-slate-50/50 space-y-3">
+            {c.flags.length > 0 && (
+              <div>
+                <div className="text-[11px] font-bold text-slate-500 uppercase mb-1">Risk Flags</div>
+                <div className="space-y-1.5">
+                  {c.flags.map((f, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs bg-white rounded border border-slate-200 p-2">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${SEV_DOT[f.severity]}`} />
+                      <span className="text-slate-600 flex-1">{f.flag_if}</span>
+                      <span className="text-slate-400 font-mono text-[11px] flex-shrink-0">L{f.likelihood}×I{f.impact}={f.risk_score}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase mb-1">Key Fields</div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {c.extractedFields.map((f, i) => (
+                  <div key={i} className="text-[11px] bg-white rounded border border-slate-100 p-1.5">
+                    <span className="text-slate-400">{f.label}: </span>
+                    <span className={f.status === '✗' ? 'text-red-600 font-medium' : f.status === '?' ? 'text-amber-600' : 'text-slate-700'}>{f.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <StatusBtns k={k} state={state} label={`#${c.num} ${c.displayName}`}
+              keyChanges={c.flags.map((f) => f.flag_if)}
+              beforeContext={parent ? `Parent #${parent.num}: ${parent.summary.slice(0, 120)}` : ''}
+              afterContext={c.summary}
+            />
+            {state === 'executed' && (
+              <div className="bg-teal-50 border border-teal-200 rounded p-2 text-[11px] text-slate-600">
+                <strong>Before verifying:</strong> Confirm all VP signatures in place, effective date correct,
+                and cross-referenced docs (Security Policy, Breach Plan) updated to match.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Amendment entry inside parent ──
+  function AmendRow({ c, a }: { c: ContractDoc; a: Amendment }) {
+    const k = `${c.num}-${a.id}`
+    const state = awf[k] || 'pending'
+    const isExp = exp[k] || false
+
+    return (
+      <div className="border border-slate-200 rounded-lg overflow-hidden">
+        <div className="p-3 cursor-pointer" onClick={() => setExp((p) => ({ ...p, [k]: !isExp }))}>
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${a.supersedesOriginal ? 'bg-red-500' : 'bg-teal-500'}`} />
+            <span className="text-xs font-bold text-slate-700 flex-1">{a.label}</span>
+            {a.supersedesOriginal && <span className="text-[11px] font-bold bg-red-50 text-red-600 px-1.5 rounded">SUPERSEDES</span>}
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded border ${A_STEPS.find((s) => s.id === state)?.color}`}>
+              {A_STEPS.find((s) => s.id === state)?.label}
+            </span>
+            <span className="text-[11px] text-slate-400">{a.effectiveDate}</span>
+            <span className="text-slate-300 text-xs">{isExp ? '▲' : '▼'}</span>
+          </div>
+        </div>
+
+        {isExp && (
+          <div className="px-3 pb-3 border-t border-slate-100 bg-slate-50/50 space-y-2.5">
+            <div>
+              <div className="text-[11px] font-bold text-slate-500 uppercase mb-1">Key Changes</div>
+              <div className="flex flex-wrap gap-1">
+                {a.keyChanges.map((k2, j) => (
+                  <span key={j} className="text-[11px] bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-600">{k2}</span>
+                ))}
+              </div>
+            </div>
+            <StatusBtns k={k} state={state} label={`#${c.num} ${a.label}`}
+              keyChanges={a.keyChanges}
+              beforeContext={`Parent #${c.num}: ${c.summary.slice(0, 120)}`}
+              afterContext={a.keyChanges.join('; ')}
+            />
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+      {amendmentDocs.length > 0 && (
+        <div>
+          <h3 className="text-[13px] font-semibold text-slate-900 mb-1">Amendment Documents</h3>
+          <p className="text-xs text-slate-500 mb-3">Click to expand. Status changes open a confirmation dialog with before/after content.</p>
+          <div className="space-y-3">{amendmentDocs.map((c) => <DocCard key={c.num} c={c} />)}</div>
+        </div>
+      )}
+
+      {withAmendments.length > 0 && (
+        <div>
+          <h3 className="text-[13px] font-semibold text-slate-900 mb-3">Amendment Timelines</h3>
+          <div className="space-y-3">
+            {withAmendments.map((c) => (
+              <div key={c.num} className="bg-white border border-slate-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <button onClick={() => onSelect(c)} className="text-sm font-medium text-teal-600 hover:underline">
+                    #{c.num} {c.displayName}
+                  </button>
+                  <span className="text-xs text-slate-400">· {c.amendments!.length} amendments</span>
+                </div>
+                <div className="space-y-4">{c.amendments!.map((a) => <AmendRow key={`${c.num}-${a.id}`} c={c} a={a} />)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modal */}
+      {modal && (
+        <Modal
+          title={`Confirm: ${A_STEPS.find((s) => s.id === modal.to)?.label}`}
+          onConfirm={confirmModal}
+          onCancel={() => setModal(null)}
+          confirmLabel={`Confirm → ${A_STEPS.find((s) => s.id === modal.to)?.label}`}
+        >
+          <div className="space-y-3">
+            <div>
+              <div className="text-[11px] font-bold text-slate-400 uppercase mb-1">Document</div>
+              <div className="text-xs text-slate-700 font-medium">{modal.label}</div>
+            </div>
+
+            {modal.keyChanges && modal.keyChanges.length > 0 && (
+              <div>
+                <div className="text-[11px] font-bold text-slate-400 uppercase mb-1">Key Changes</div>
+                <div className="space-y-1">
+                  {modal.keyChanges.map((k, i) => (
+                    <div key={i} className="text-[11px] text-slate-600 flex items-start gap-1.5">
+                      <span className="text-teal-500 mt-0.5">•</span>
+                      <span>{k}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {modal.beforeContext && (
+              <div>
+                <div className="text-[11px] font-bold text-red-400 uppercase mb-1">Before (current state)</div>
+                <div className="text-[11px] text-slate-700 bg-red-50 border border-red-100 rounded p-2 leading-relaxed">{modal.beforeContext}</div>
+              </div>
+            )}
+
+            {modal.afterContext && (
+              <div>
+                <div className="text-[11px] font-bold text-emerald-600 uppercase mb-1">After (this change)</div>
+                <div className="text-[11px] text-slate-700 bg-emerald-50 border border-emerald-100 rounded p-2 leading-relaxed">{modal.afterContext}</div>
+              </div>
+            )}
+
+            <div>
+              <div className="text-[11px] font-bold text-slate-400 uppercase mb-1">Status Change</div>
+              <div className="flex items-center gap-2 text-xs">
+                <span className={`px-2 py-0.5 rounded border ${A_STEPS.find((s) => s.id === modal.context)?.color}`}>
+                  {A_STEPS.find((s) => s.id === modal.context)?.label}
+                </span>
+                <span className="text-slate-400">→</span>
+                <span className={`px-2 py-0.5 rounded border ${A_STEPS.find((s) => s.id === modal.to)?.color}`}>
+                  {A_STEPS.find((s) => s.id === modal.to)?.label}
+                </span>
+              </div>
+            </div>
+
+            {modal.to === 'verified' && (
+              <div className="bg-amber-50 border border-amber-200 rounded p-2 text-[11px] text-slate-600">
+                <strong>Before confirming, verify:</strong>
+                <div className="mt-1 space-y-0.5">
+                  <div>□ All required VP signatures collected</div>
+                  <div>□ Effective date matches agreement</div>
+                  <div>□ Cross-referenced documents updated to match</div>
+                </div>
+              </div>
+            )}
+            {modal.to === 'archived' && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded p-2 text-[11px] text-slate-600">
+                <strong>Archiving.</strong> Reopen by setting status back to "Pending".
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+// ── ContractDoc Detail Panel ────────────────────────────────────────────────────
+
+function ContractDetail({
+  selected,
+  docLinks: allDocLinks,
+  onStatusOverride,
+  resolvedFlags,
+  retired,
+  onToggleRetired,
+  notesFor,
+  eventsFor,
+  onAddNote,
+  manageable,
+}: {
+  selected: ContractDoc
+  onBack?: () => void
+  docLinks: DocLink[]
+  onStatusOverride?: (flagId: string) => void
+  resolvedFlags?: Set<string>
+  retired?: boolean
+  onToggleRetired?: () => void
+  notesFor?: { ts: string; text: string; who: string }[]
+  eventsFor?: { ts: string; text: string; kind: string; docNum?: number; who?: string }[]
+  onAddNote?: (text: string) => void
+  manageable?: boolean
+}) {
+  const s = selected
+  void onStatusOverride
+  const sOpen = s.flags.filter((f) => f.status === 'open' && !(resolvedFlags && resolvedFlags.has(`f-${s.num}-${f.field}`))).length
+  const isResolved = (f: (typeof s.flags)[0]) => resolvedFlags?.has(`f-${s.num}-${f.field}`) || f.status === 'remediated'
+  return (
+    <div>
+      {/* Title */}
+      <div className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Contract #{s.num}</div>
+
+      {/* v45.31 — Retired control (manual "no longer in use" tag) */}
+      {retired && (
+        <div className="mb-4 flex items-start justify-between gap-3 bg-slate-100 border border-slate-300 rounded-lg px-3 py-2.5">
+          <div className="text-[12px] text-slate-600 leading-relaxed">
+            <b className="text-slate-800">RETIRED — no longer in use.</b> Excluded from alerts, KPIs and the work queue.<br />
+            <span className="text-[11px] text-slate-500">Retention and disposal obligations still apply — the document stays in the archive.</span>
+          </div>
+        </div>
+      )}
+      {onToggleRetired && (
+        <button
+          onClick={onToggleRetired}
+          className={`w-full mb-4 text-[13px] font-semibold rounded-lg px-4 py-2.5 transition border ${retired ? 'bg-white border-teal-300 text-teal-700 hover:bg-teal-50' : 'bg-slate-50 border-slate-300 text-slate-600 hover:bg-slate-100'}`}
+          title="Toggle the manual retired tag (out-of-scope documents are hidden from alerts but kept in the archive for retention/disposal)"
+        >
+          {retired ? '↩ Unretire — back in alert scope' : '▣ Retire this document (no longer in use)'}
+        </button>
+      )}
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[11px] text-slate-400 uppercase tracking-wide">{s.type}</span>
+            <span className="text-[11px] text-slate-300">·</span>
+            <span className="text-[11px] text-slate-400">{s.displayName}</span>
+          </div>
+          <h2 className="text-lg font-bold text-slate-900">{s.displayName}</h2>
+          <p className="text-sm text-slate-500 mt-1">{s.summary}</p>
+        </div>
+        <div className="flex items-center gap-4 shrink-0">
+          <div className="text-right">
+            <div className="text-3xl font-bold text-slate-900 leading-none">{s.riskScore.toFixed(1)}</div>
+            <div className="text-xs text-slate-400 mt-0.5">/ 25</div>
+          </div>
+          <div className="flex flex-col items-center">
+            <span className={`w-3 h-3 rounded-full ${s.riskLevel === 'Critical' ? 'bg-red-500' : s.riskLevel === 'High' ? 'bg-orange-500' : 'bg-emerald-500'}`} />
+            <span className={`text-xs font-semibold mt-1 ${s.riskLevel === 'Critical' ? 'text-red-600' : s.riskLevel === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>
+              {s.riskLevel}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="h-px bg-slate-200 mb-6" />
+
+      {/* Flags table */}
+      <section className="mb-6">
+        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+          Flags ({sOpen} open of {s.flagsCount})
+        </h3>
+        {s.flags.length === 0 ? (
+          <div className="border border-emerald-200 bg-emerald-50/50 rounded-lg px-4 py-3">
+            <p className="text-sm text-emerald-700 font-medium">✓ No flags detected</p>
+            <p className="text-xs text-emerald-600 mt-0.5">This document appears compliant</p>
+          </div>
+        ) : (
+          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100">
+            {s.flags.map((f) => (
+              <div key={f.field} className={isResolved(f) ? 'opacity-60' : ''}>
+                <div className="flex items-start gap-3 px-4 py-3">
+                  <span className={`w-2 h-2 rounded-full ${isResolved(f) ? 'bg-emerald-500' : SEV_DOT[f.severity]} mt-1 shrink-0`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <span className={`text-xs font-bold ${SEV_TEXT[f.severity]}`}>{f.severity}</span>
+                      <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${COMP_TYPE_BG[f.compliance_type] || ''}`}>
+                        {f.compliance_type === 'hard' ? 'HARD' : 'BP'}
+                      </span>
+                      <span className="text-xs text-slate-400" title="PIA §7.4: Priority = (L×I) + Velocity">
+                        L{f.likelihood}×I{f.impact}={f.risk_score} +V{flagVelocity(f)} → <span className="font-bold text-slate-700">P{piaPriority(f)} · {piaBand(piaPriority(f))}</span>
+                      </span>
+                      <span className="text-[11px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{flagHiroc(f.field).cat} · {flagHiroc(f.field).riskName}</span>
+                      {isResolved(f) && (
+                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">RESOLVED ✓</span>
+                      )}
+                    </div>
+                    <p className={`text-sm ${isResolved(f) ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{f.flag_if}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Extracted fields + Jev side by side */}
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <section>
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Extracted Fields</h3>
+          <div className="bg-white border border-slate-200 rounded-lg divide-y divide-slate-100">
+            {s.extractedFields.map((f) => (
+              <div key={f.label} className="flex items-start gap-3 px-4 py-2.5">
+                <span className={`text-sm font-medium ${f.status === '✓' ? 'text-emerald-600' : f.status === '✗' ? 'text-red-500' : 'text-slate-400'} w-4 text-center shrink-0`}>
+                  {f.status}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wide">{f.label}</span>
+                  <p className="text-sm text-slate-800">{f.value}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">AI Assessment</h3>
+          <div className="bg-white border border-slate-200 rounded-lg p-4 space-y-3">
+            {[
+              { label: 'Risk Severity', value: s.jev.riskSeverity.choice, conf: s.jev.riskSeverity.confidence },
+              { label: 'Human Review', value: `${(s.jev.needsHumanReview * 100).toFixed(0)}%`, conf: s.jev.needsHumanReview },
+              { label: 'Compliance', value: `${(s.jev.isComplianceRelated * 100).toFixed(0)}%`, conf: s.jev.isComplianceRelated },
+              { label: 'Alert', value: `${(s.jev.shouldAlert * 100).toFixed(0)}%`, conf: s.jev.shouldAlert },
+              { label: 'Decision Confidence', value: s.jev.decisionConfidence.toFixed(2), conf: s.jev.decisionConfidence },
+            ].map((row) => (
+              <div key={row.label}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-slate-500">{row.label}</span>
+                  <span className={`text-xs font-semibold ${row.conf >= 0.7 ? 'text-red-600' : row.conf >= 0.4 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    {row.value}
+                  </span>
+                </div>
+                <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full ${row.conf >= 0.7 ? 'bg-red-500' : row.conf >= 0.4 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                    style={{ width: `${Math.round(row.conf * 100)}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Related Documents (below JEV, in right column) */}
+          <div className="mt-4">
+            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Related Documents</h3>
+            <div className="space-y-4">
+              {s.amendments && s.amendments.length > 0 ? (
+                s.amendments.map((a) => (
+                  <div key={a.id} className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <div className="text-xs font-bold text-amber-800">{a.label}</div>
+                    <div className="text-[11px] text-amber-700 mt-0.5">Effective: {a.effectiveDate} {a.supersedesOriginal && '· supersedes original'}</div>
+                    {a.keyChanges.length > 0 && <div className="text-[11px] text-amber-600 mt-0.5">{a.keyChanges.join(' · ')}</div>}
+                  </div>
+                ))
+              ) : (
+                <div className="text-xs text-slate-400">No amendments linked to this contract</div>
+              )}
+              {allDocLinks.filter((l: DocLink) => l.sourceNum === s.num).map((l: DocLink, i: number) => (
+                <div key={`dl-${i}`} className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                  <div className="text-xs font-medium text-slate-700">→ {l.targetName}</div>
+                  <div className="text-[11px] text-slate-500 mt-0.5">{l.changeDescription}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </div>
+
+      {/* Amendments */}
+      {s.amendments && s.amendments.length > 0 && (
+        <section className="mb-6">
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Amendments</h3>
+          <AmendmentTimeline amendments={s.amendments} />
+        </section>
+      )}
+
+      {/* v45.32 — Notes & Activity (paperless-style): margin annotations + the record of what happened to this document */}
+      {(notesFor || eventsFor || onAddNote) && (
+        <section className="mb-6 bg-white border border-slate-200 rounded-lg p-4">
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Notes &amp; Activity</h3>
+          {onAddNote && (
+            <div className="flex items-start gap-2 mb-3">
+              <textarea
+                rows={2}
+                placeholder={manageable ? `Add a note for #${s.num} (visible in this panel and the activity feed)…` : 'Notes require the Legal role (demo RBAC)'}
+                disabled={!manageable}
+                onChange={(e) => { void e.target.value }}
+                id={`note-input-${s.num}`}
+                className="flex-1 text-[12px] border border-slate-200 rounded-lg px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:opacity-40 resize-y"
+              />
+              <button
+                onClick={() => {
+                  const el = document.getElementById(`note-input-${s.num}`) as HTMLTextAreaElement | null
+                  const text = el?.value.trim()
+                  if (!text) return
+                  onAddNote(text)
+                  if (el) el.value = ''
+                }}
+                disabled={!manageable}
+                className="text-[12px] font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-lg px-3 py-2 transition disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+              >Add note</button>
+            </div>
+          )}
+          {(notesFor || []).length > 0 && (
+            <div className="space-y-2 mb-3">
+              {(notesFor || []).map((n, i) => (
+                <div key={i} className="text-[12px] bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                  <div className="text-slate-700">{n.text}</div>
+                  <div className="text-[10px] text-slate-400 mt-1">{n.who} · {n.ts}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">Activity</div>
+          {(eventsFor || []).length > 0 ? (
+            <div className="space-y-1.5">
+              {(eventsFor || []).slice(0, 6).map((e, i) => (
+                <div key={i} className="flex items-start gap-2 text-[11px]">
+                  <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${e.kind === 'resolve' ? 'bg-emerald-500' : e.kind === 'file' ? 'bg-teal-500' : e.kind === 'defer' ? 'bg-slate-400' : e.kind === 'note' ? 'bg-amber-400' : 'bg-red-400'}`} />
+                  <span className="text-slate-600 flex-1">{e.text}{e.who ? <span className="text-slate-400"> · by {e.who}</span> : null}</span>
+                  <span className="text-slate-400 shrink-0">{e.ts}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-[11px] text-slate-400">No recorded activity for this document yet — resolutions, filings, deferrals and notes will appear here.</div>
+          )}
+        </section>
+      )}
+
+
+    </div>
+  )
+}
+
+// ── Amendment Timeline ──────────────────────────────────────────────────────
+
+function AmendmentTimeline({ amendments }: { amendments: Amendment[] }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4">
+      <div className="relative pl-5 border-l-2 border-slate-200 space-y-4">
+        {amendments.map((a) => (
+          <div key={a.id} className="relative">
+            <span
+              className={`absolute -left-[21px] top-1.5 w-3 h-3 rounded-full border-2 ${
+                a.supersedesOriginal ? 'bg-red-500 border-red-300' : 'bg-teal-500 border-teal-300'
+              }`}
+            />
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-700">{a.label}</span>
+              {a.supersedesOriginal && (
+                <span className="text-[11px] font-bold bg-red-50 text-red-600 px-1.5 py-0.5 rounded">SUPERSEDES</span>
+              )}
+              <span className="text-xs text-slate-400 ml-auto">{a.effectiveDate}</span>
+            </div>
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {a.keyChanges.map((k, j) => (
+                <span key={j} className="text-[11px] bg-slate-100 rounded px-1.5 py-0.5 text-slate-600">{k}</span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Settings Sidebar ─────────────────────────────────────────────────────────
+
+function SettingsSidebar({
+  selectedType, onSelectType,
+  selectedRisk, onSelectRisk,
+  selectedDept, onSelectDept,
+  selectedExpiry, onSelectExpiry,
+  onGoToSmartFiling,
+  savedViews, onApplyView, onDeleteView,
+}: {
+  selectedType: string; onSelectType: (v: string) => void
+  selectedRisk: string; onSelectRisk: (v: string) => void
+  selectedDept: string; onSelectDept: (v: string) => void
+  selectedExpiry: string; onSelectExpiry: (v: string) => void
+  onGoToSmartFiling: () => void
+  savedViews?: { id: string; name: string; kind: 'docs' | 'wq'; filters: Record<string, string> }[]
+  onApplyView?: (v: { id: string; name: string; kind: 'docs' | 'wq'; filters: Record<string, string> }) => void
+  onDeleteView?: (id: string) => void
+}) {
+  const types = ['All', ...Array.from(new Set(contracts.map((c) => c.type)))]
+  const risks = ['All', 'Low', 'Critical']
+  const departments = ['All', ...SOUTHDEPARTMENTS]
+  const expiries = ['All', 'Expired', '< 30d', '< 90d', '> 90d', 'Archived', 'Retired']
+  const [showAllDepts, setShowAllDepts] = useState(false)
+  const deptOptions = showAllDepts ? departments : ['All', ...departments.slice(1, 5)]
+
+  // One large option per row — real tap targets, no pill soup
+  const ListFilter = ({ label, options, selected, onChange }: { label: string; options: string[]; selected: string; onChange: (v: string) => void }) => (
+    <div>
+      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">{label}</p>
+      <div className="space-y-1">
+        {options.map((opt) => {
+          const active = selected === opt
+          return (
+            <button
+              key={opt}
+              onClick={() => onChange(opt)}
+              className={`w-full text-left text-[13px] px-3 py-2 rounded-md border transition-colors ${
+                active
+                  ? 'bg-teal-600 border-teal-600 text-white font-semibold'
+                  : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              {opt}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Primary action — the most-used operation, made the biggest element in the sidebar */}
+      <button
+        onClick={onGoToSmartFiling}
+        className="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-semibold rounded-lg px-4 py-3 shadow-sm transition"
+      >
+        Upload document — AI filing
+      </button>
+      <p className="text-[11px] text-slate-400 -mt-4 mb-1">AI reads the file, classifies it, and files it automatically — you’ll see exactly where it was placed.</p>
+
+      {/* Filters — large one-per-row options */}
+      <div className="space-y-5">
+        <ListFilter label="Contract Type" options={types} selected={selectedType} onChange={onSelectType} />
+        <ListFilter label="Risk Level" options={risks} selected={selectedRisk} onChange={onSelectRisk} />
+        <div>
+          <ListFilter label={`Department (${departments.length - 1})`} options={deptOptions} selected={selectedDept} onChange={onSelectDept} />
+          {departments.length - 1 > 4 && (
+            <button onClick={() => setShowAllDepts(!showAllDepts)} className="mt-1.5 text-[12px] font-medium text-teal-700 hover:underline px-3">
+              {showAllDepts ? 'Show fewer' : `Show all ${departments.length - 1} departments`}
+            </button>
+          )}
+        </div>
+        <ListFilter label="Expiry" options={expiries} selected={selectedExpiry} onChange={onSelectExpiry} />
+      </div>
+
+      {/* v45.32 — Saved views: filter combinations the user bookmarked, applied in one click */}
+      {savedViews && savedViews.length > 0 && (
+        <div>
+          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">My Views ({savedViews.length})</p>
+          <div className="space-y-1">
+            {savedViews.map((v) => (
+              <div key={v.id} className="group flex items-center gap-1.5">
+                <button
+                  onClick={() => onApplyView?.(v)}
+                  className="flex-1 text-left text-[13px] px-3 py-2 rounded-md border border-slate-200 bg-white text-slate-700 hover:border-teal-400 hover:bg-teal-50 transition-colors"
+                  title={v.kind === 'docs' ? `Apply: type=${v.filters.type} risk=${v.filters.risk} dept=${v.filters.dept} expiry=${v.filters.expiry}` : `Apply WQ view: tile=${v.filters.tile} expiry=${v.filters.expiry}`}
+                >
+                  <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded mr-1.5 ${v.kind === 'docs' ? 'bg-teal-100 text-teal-700' : 'bg-blue-100 text-blue-700'}`}>
+                    {v.kind === 'docs' ? 'DOCS' : 'WQ'}
+                  </span>
+                  {v.name}
+                </button>
+                <button onClick={() => onDeleteView?.(v.id)} className="text-[12px] text-slate-300 hover:text-red-500 px-1.5 transition" title="Delete view">✕</button>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-slate-400 mt-1.5 leading-relaxed">One click re-applies the saved filter combination.</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Pipeline (small footer strip) ───────────────────────────────────────────
+
+
+
+
+// ── Work Queue View (action-oriented workbench) ─────────────────────────────
+
+function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields, manageable, expiryFilter, onClearExpiry, retiredNums, deferMap, onDefer, onClearDefer, onBulkResolve, onBulkDefer, viewRequest, onSaveWqView, onReportWqTile }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string, aiDraft?: () => Promise<string>) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[]; manageable?: boolean; expiryFilter?: string; onClearExpiry?: () => void; retiredNums?: Set<number>; deferMap?: Record<string, { until: string; note?: string }>; onDefer?: (id: string, days: number, note?: string) => void; onClearDefer?: (id: string) => void; onBulkResolve?: (ids: string[]) => void; onBulkDefer?: (ids: string[], days: number, note?: string) => void; viewRequest?: { filter: string; ts: number } | null; onSaveWqView?: (name: string, tile: string) => void; onReportWqTile?: (tile: string) => void }) {
+  const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref' | 'resolved' | 'deferred'>('all')
+  const [wqPage, setWqPage] = useState(1) // task-table pagination (15 per page)
+  const [showResolved, setShowResolved] = useState(false)
+  const [search, setSearch] = useState('')
+  const [deferFor, setDeferFor] = useState<string | null>(null) // v45.31 — which row is showing the defer-duration picker
+  const [deferReason, setDeferReason] = useState('') // v45.33 · G2 — optional defer reason (handoff: why it was held)
+  // v45.32 — bulk selection + saved views (paperless-style)
+  const [wqSel, setWqSel] = useState<Set<string>>(new Set())
+  const [wqSavingView, setWqSavingView] = useState(false)
+  const [wqViewName, setWqViewName] = useState('')
+  const [bulkDeferReason, setBulkDeferReason] = useState('') // v45.33 · G2 — shared reason for bulk defers
+  useEffect(() => { if (viewRequest) setFilter(viewRequest.filter as typeof filter) }, [viewRequest?.ts])
+  useEffect(() => { onReportWqTile?.(filter) }, [filter])
+
+  // Compute work items
+  type WorkItem = {
+    id: string
+    what: string
+    docLabel: string
+    docNum: number
+    contract: ContractDoc
+    severity: 'critical' | 'high' | 'medium' | 'low'
+    status: string
+    action: string
+    due?: string
+    pri?: number
+    isNew?: boolean // from a Smart Filing upload — surface at the top of its severity tier
+    deferNote?: string // v45.33 · G2 — why the item is deferred (visible to the next employee)
+  }
+
+  const items: WorkItem[] = []
+  const now = new Date().getTime()
+
+  // Critical flags
+  for (const c of allContracts) {
+    if (retiredNums?.has(c.num)) continue // v45.31 — retired (out-of-scope) docs don't generate work items
+    for (const f of c.flags) {
+      if (f.severity === 'Critical' && f.status === 'open') {
+        const def = deferMap?.[`f-${c.num}-${f.field}`]
+        const defActive = def && new Date(def.until).getTime() > now
+        items.push({
+          id: `f-${c.num}-${f.field}`,
+          what: f.flag_if,
+          docLabel: c.displayName,
+          docNum: c.num,
+          contract: c,
+          severity: 'critical',
+          status: defActive ? `Deferred · until ${new Date(def!.until).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : f.status,
+          action: 'Fix',
+          isNew: c.isUpload === true,
+          deferNote: defActive ? def!.note : undefined,
+          pri: piaPriority(f),
+        })
+      } else if (f.severity === 'High' && f.status === 'open') {
+        const def = deferMap?.[`f-${c.num}-${f.field}`]
+        const defActive = def && new Date(def.until).getTime() > now
+        items.push({
+          id: `f-${c.num}-${f.field}`,
+          what: f.flag_if,
+          docLabel: c.displayName,
+          docNum: c.num,
+          contract: c,
+          severity: 'high',
+          status: defActive ? `Deferred · until ${new Date(def!.until).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : f.status,
+          action: 'Review',
+          isNew: c.isUpload === true,
+          deferNote: defActive ? def!.note : undefined,
+          pri: piaPriority(f),
+        })
+      }
+    }
+  }
+
+  // Cross-refs
+  for (const d of docLinks) {
+    if (d.status !== 'synced') {
+      const src = allContracts.find((c) => c.num === d.sourceNum)
+      if (src) {
+        items.push({
+          id: `x-${d.sourceNum}-${d.targetName}`,
+          what: `${d.sourceClause} → ${d.targetName}`,
+          docLabel: src.displayName,
+          docNum: src.num,
+          contract: src,
+          severity: 'high',
+          status: d.status,
+          action: 'Process',
+        })
+      }
+    }
+  }
+
+  // Expiring
+  for (const c of allContracts) {
+    if (retiredNums?.has(c.num)) continue // v45.31 — retired docs are out of scope: no renewal work items
+    if (c.expiryDate) {
+      const days = Math.ceil((new Date(c.expiryDate).getTime() - now) / (24 * 3600 * 1000))
+      if (days <= 90) {
+        items.push({
+          id: `e-${c.num}`,
+          what: c.type,
+          docLabel: c.displayName,
+          docNum: c.num,
+          contract: c,
+          severity: days < 0 ? 'critical' : days < 30 ? 'high' : 'medium',
+          status: days < 0 ? 'Past due' : `${days}d left`,
+          action: days < 0 ? 'Renew' : 'Schedule',
+          due: c.expiryDate,
+        })
+      }
+    }
+  }
+
+  // Filter out resolved flags and completed cross-refs
+  // v45.31 — items inside a deferral window ("Deferred") stop alerting: hidden from every
+  // view except the "Deferred" filter; when the window passes the status auto-reverts to open
+  const defActiveIds = new Set(items.filter((i) => {
+    const d = deferMap?.[i.id]
+    return i.id.startsWith('f-') && d && new Date(d.until).getTime() > now
+  }).map((i) => i.id))
+  const active = items.filter((i) => {
+    if (resolvedFlags.has(i.id)) return false
+    if (completedLinks.has(i.id)) return false
+    if (defActiveIds.has(i.id) && filter !== 'deferred') return false
+    // If focusFields is set (from Insights), only show matching flags
+    if (focusFields && focusFields.length > 0 && i.id.startsWith('f-')) {
+      const field = i.id.split('-').slice(2).join('-')
+      if (!focusFields.some((f) => field.includes(f) || f.includes(field))) return false
+    }
+    return true
+  })
+
+  // Keep pagination sane when any input that changes the row set changes
+  useEffect(() => { setWqPage(1) }, [search, filter, expiryFilter, focusFields])
+
+  // Add created tasks from Insights
+  const taskItems: WorkItem[] = createdTasks.map((t) => ({
+    id: `t-${t.id}`,
+    what: t.label,
+    docLabel: allContracts.find((c) => c.num === t.contractNum)?.displayName || 'Task',
+    docNum: t.contractNum,
+    contract: allContracts.find((c) => c.num === t.contractNum) || allContracts[0],
+    severity: 'high' as const,
+    status: 'New',
+    action: 'Complete',
+  }))
+
+  const allItems = [...active, ...taskItems]
+
+  // Sort: new uploads first within each severity tier, then critical > high > medium > low, then by docNum
+  const sevOrder = { critical: 0, high: 1, medium: 2, low: 3 }
+  // PIA §7.4: within a severity tier, rank by Priority = (L×I) + Velocity (fastest-impact first)
+  allItems.sort((a, b) => (sevOrder[a.severity] - sevOrder[b.severity]) || ((b.pri || 0) - (a.pri || 0)) || ((b.isNew ? 1 : 0) - (a.isNew ? 1 : 0)) || (a.docNum - b.docNum))
+
+  // Archived = retention-complete docs (discard-eligible); shown as a disposal queue when the sidebar filter is on
+  const archRows = allContracts.filter((c) => retentionState(c).status === 'elapsed')
+  const fmtRetDate = (s: string) => new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const docChip = (c: ContractDoc) => {
+    const rs = retentionState(c)
+    if (rs.status === 'elapsed') return <span className="ml-1.5 text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded align-middle">ARCHIVED</span>
+    if (rs.status === 'hold') return <span className="ml-1.5 text-[11px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded align-middle" title={`Deletion not allowed yet — keep until ${fmtRetDate(retentionUntil(c))} (Schedule A)`}>EXPIRED · IN RETENTION</span>
+    if (rs.status === 'imminent') return <span className="ml-1.5 text-[11px] font-bold text-blue-700 bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded align-middle">EXPIRING SOON</span>
+    return <span className="ml-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded align-middle">ACTIVE</span>
+  }
+
+  // Filter
+  const filtered = allItems.filter((i) => {
+    if (search) {
+      const q = search.toLowerCase()
+      if (!i.what.toLowerCase().includes(q) && !i.docLabel.toLowerCase().includes(q) && !String(i.docNum).includes(q)) return false
+    }
+    if (filter === 'all') return true
+    if (filter === 'critical') return i.severity === 'critical'
+    if (filter === 'high') return i.severity === 'high'
+    if (filter === 'expiring') return i.id.startsWith('e-')
+    if (filter === 'crossref') return i.id.startsWith('x-')
+    if (filter === 'deferred') return defActiveIds.has(i.id)
+    return true
+  })
+
+  // Summary counts
+  const counts = {
+    critical: allItems.filter((i) => i.severity === 'critical').length,
+    high: allItems.filter((i) => i.severity === 'high').length,
+    expiring: allItems.filter((i) => i.id.startsWith('e-')).length,
+    crossref: allItems.filter((i) => i.id.startsWith('x-')).length,
+    deferred: defActiveIds.size,
+  }
+  const totalResolved = (resolvedFlags?.size || 0) + (completedLinks?.size || 0)
+
+  return (
+    <div>
+      {/* Summary Tiles */}
+      <div className="grid grid-cols-6 gap-3 mb-5">
+        <button onClick={() => setFilter('critical')} className={`text-left p-3 rounded-lg border transition ${filter === 'critical' ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+          <div className="text-2xl font-bold text-red-600">{counts.critical}</div>
+          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Critical</div>
+        </button>
+        <button onClick={() => setFilter('high')} className={`text-left p-3 rounded-lg border transition ${filter === 'high' ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+          <div className="text-2xl font-bold text-amber-600">{counts.high}</div>
+          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">High</div>
+        </button>
+        <button onClick={() => setFilter('crossref')} className={`text-left p-3 rounded-lg border transition ${filter === 'crossref' ? 'border-teal-300 bg-teal-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+          <div className="text-2xl font-bold text-teal-600">{counts.crossref}</div>
+          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Cross-Refs</div>
+        </button>
+        <button onClick={() => setFilter('expiring')} className={`text-left p-3 rounded-lg border transition ${filter === 'expiring' ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
+          <div className="text-2xl font-bold text-blue-600">{counts.expiring}</div>
+          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Expiring</div>
+        </button>
+        <button onClick={() => setFilter('deferred')} className={`text-left p-3 rounded-lg border transition ${filter === 'deferred' ? 'border-slate-400 bg-slate-100 ring-2 ring-slate-300' : 'border-slate-200 bg-slate-50 hover:border-slate-400'}`}>
+          <div className="text-2xl font-bold text-slate-500">{counts.deferred}</div>
+          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Deferred</div>
+        </button>
+        <button onClick={() => setFilter('resolved')} className={`text-left p-3 rounded-lg border transition ${filter === 'resolved' ? 'border-emerald-400 bg-emerald-100 ring-2 ring-emerald-200' : 'border-emerald-200 bg-emerald-50 hover:border-emerald-400'}`}>
+          <div className="text-2xl font-bold text-emerald-600">{totalResolved}</div>
+          <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wide mt-0.5">Resolved</div>
+          <div className="mt-1 text-[11px] font-semibold text-emerald-600">{filter === 'resolved' ? '▲ Showing log' : '▼ View log'}</div>
+        </button>
+      </div>
+
+      {/* Search + Filter — the 4 big cards above already act as quick filters, so this row is just search + count */}
+      <div className="flex items-center gap-3 mb-4">
+        <input
+          type="text"
+          placeholder="Search flags, docs…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="text-[13px] border border-slate-200 rounded-lg px-3.5 py-2.5 w-64 focus:outline-none focus:ring-2 focus:ring-teal-300"
+        />
+        <button onClick={() => setFilter('all')} className="text-[12px] font-medium px-2.5 py-1.5 rounded-full border border-slate-200 text-slate-600 hover:border-slate-400 transition">All ({allItems.length})</button>
+        {/* v45.32 — save the current filter combo as a reusable view (applies from the sidebar) */}
+        {(filter !== 'all' || (expiryFilter && expiryFilter !== 'All')) && (
+          wqSavingView ? (
+            <span className="inline-flex items-center gap-1.5">
+              <input
+                autoFocus
+                value={wqViewName}
+                onChange={(e) => setWqViewName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { onSaveWqView?.(wqViewName.trim() || `WQ · ${filter}`, filter); setWqSavingView(false); setWqViewName('') } }}
+                placeholder={`“WQ · ${filter}”`}
+                className="text-[12px] border border-slate-300 rounded px-2 py-1.5 w-36 focus:outline-none focus:ring-2 focus:ring-teal-300"
+              />
+              <button onClick={() => { onSaveWqView?.(wqViewName.trim() || `WQ · ${filter}`, filter); setWqSavingView(false); setWqViewName('') }} className="text-[12px] font-semibold text-white bg-teal-600 rounded px-2.5 py-1.5">Save</button>
+            </span>
+          ) : (
+            <button onClick={() => setWqSavingView(true)} className="text-[12px] font-medium px-2.5 py-1.5 rounded-full border border-dashed border-slate-300 text-slate-500 hover:border-teal-400 hover:text-teal-600 transition" title="Save this filter combination (tile + document-level expiry) as a named view in the sidebar">
+              💾 Save view
+            </button>
+          )
+        )}
+        <span className="ml-auto text-[12px] text-slate-500">Showing {filtered.length} of {allItems.length}</span>
+      </div>
+
+      {/* v45.32 — bulk actions bar: appears when flag items are selected in the table below */}
+      {wqSel.size > 0 && (
+        <div className="mb-3 bg-slate-900 text-white rounded-lg px-4 py-2.5 flex items-center gap-3 flex-wrap">
+          <span className="text-[12px] font-bold">{wqSel.size} item{wqSel.size > 1 ? 's' : ''} selected</span>
+          <button onClick={() => { onBulkResolve?.([...wqSel]); setWqSel(new Set()) }} disabled={!manageable}
+            className="text-[12px] font-semibold bg-emerald-500 hover:bg-emerald-600 rounded-md px-3 py-1.5 transition disabled:opacity-40">
+            Resolve selected
+          </button>
+          {[30, 60, 90].map((d) => (
+            <button key={d} onClick={() => { onBulkDefer?.([...wqSel], d, bulkDeferReason.trim() || undefined); setWqSel(new Set()); setBulkDeferReason('') }} disabled={!manageable}
+              title={`Defer for ${d} days — stops alerting, auto-reverts to open when the window passes. A shared reason is recorded for the next employee.`}
+              className="text-[12px] font-semibold bg-slate-700 hover:bg-slate-600 rounded-md px-3 py-1.5 transition disabled:opacity-40">
+              Defer {d}d
+            </button>
+          ))}
+          <input
+            value={bulkDeferReason}
+            onChange={(e) => setBulkDeferReason(e.target.value)}
+            placeholder="Shared reason (optional)"
+            title="Recorded on every deferred item — the next employee sees why these were held"
+            className="w-44 text-[12px] bg-slate-800 border border-slate-600 rounded-md px-2 py-1.5 text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400"
+          />
+          <button onClick={() => setWqSel(new Set())} className="ml-auto text-[12px] text-slate-300 hover:text-white transition">✕ Clear selection</button>
+        </div>
+      )}
+
+      {/* Active expiry/retention filter notice — makes sidebar filters visible on this table */}
+      {expiryFilter && expiryFilter !== 'All' && (
+        <div className="mb-4 flex items-center justify-between gap-3 bg-teal-50 border border-teal-200 rounded-lg px-4 py-2.5">
+          <span className="text-[13px] text-teal-800">
+            Active filter: <b className="font-bold">{expiryFilter.toUpperCase()}</b> — showing items from {allContracts.length} document{allContracts.length === 1 ? '' : 's'}
+            {expiryFilter !== 'Archived' && expiryFilter !== 'Retired' && <span className="text-teal-700/80"> · document-level filter — rows are that document's <b>work items</b> ("open" = not yet resolved; "Past due" = renewal deadline passed), the chip shows the <b>document</b> status</span>}
+          </span>
+          <button onClick={onClearExpiry} className="text-[12px] font-semibold text-teal-700 hover:underline shrink-0">Clear filter</button>
+        </div>
+      )}
+
+      {/* Resolved Log — kept at the TOP of the list: the record of what you just fixed (newest first, one line, expandable) */}
+      {resolvedLog && resolvedLog.length > 0 && (
+        <div className="mb-4 bg-emerald-50 border border-emerald-200 rounded-lg overflow-hidden">
+          <button onClick={() => setShowResolved((v) => !v)} className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-emerald-100/60 transition text-left">
+            <span className="text-[13px] font-bold text-emerald-700 shrink-0">✓ Resolved ({resolvedLog.length})</span>
+            <span className="text-[12px] text-slate-600 truncate flex-1" title={resolvedLog[0].label}>
+              latest: {resolvedLog[0].label} · {resolvedLog[0].time}
+            </span>
+            <span className="text-[11px] text-emerald-600 font-semibold shrink-0">{showResolved ? '▲ Hide' : `▼ Show all ${Math.min(resolvedLog.length, 10)}`}</span>
+          </button>
+          {showResolved && (
+            <div className="divide-y divide-emerald-100 bg-white/50">
+              {resolvedLog.slice(0, 10).map((entry) => (
+                <div key={entry.id} className="px-4 py-2 text-[11px]">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-slate-700 truncate">{entry.label}</span>
+                    <span className="text-slate-400 shrink-0">{entry.time}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Resolved by: <span className="font-medium text-slate-500">{entry.who || 'You'}</span> · {entry.type === 'workflow' ? 'Cross-Ref' : 'Flag'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Resolved log — full record, replaces the open-items table while the Resolved tile is active */}
+      {filter === 'resolved' ? (
+        <div className="bg-white border border-emerald-200 rounded-lg overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-emerald-100 flex items-center justify-between gap-3">
+            <span className="text-[13px] font-semibold text-emerald-800">Resolved log ({totalResolved})</span>
+            {totalResolved > 0 && (
+              <button
+                onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); localStorage.removeItem('ccdm_uploads'); localStorage.removeItem('southlake_retired'); localStorage.removeItem('southlake_defers'); localStorage.removeItem('ccdm_notes'); localStorage.removeItem('ccdm_activity'); localStorage.removeItem('ccdm_savedviews'); localStorage.removeItem('resolvedLog'); fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resolvedFlags: [], completedLinks: [], defers: {}, notes: {}, activity: [], resolvedLog: [] }) }).catch(() => {}); window.location.reload() }}
+                className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-800 hover:underline"
+              >
+                Reset all
+              </button>
+            )}
+          </div>
+          {totalResolved === 0 ? (
+            <div className="px-4 py-8 text-center">
+              <p className="text-[13px] text-slate-500">No fixes recorded yet.</p>
+              <p className="text-[12px] text-slate-400 mt-1">Confirm a "Fix →" on any flag in the open items and it will be logged here with a timestamp.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-emerald-100">
+              {(resolvedLog || []).map((entry) => (
+                <div key={entry.id} className="px-4 py-2.5 text-[12px]">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium text-slate-700 truncate">{entry.label}</span>
+                    <span className="text-slate-400 shrink-0">{entry.time}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Resolved by: <span className="font-medium text-slate-500">{entry.who || 'You'}</span> · {entry.type === 'workflow' ? 'Cross-Ref' : 'Flag'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="px-4 py-2 border-t border-emerald-100 text-[11px] text-slate-400">Click "All" above to return to the open items.</div>
+        </div>
+      ) : expiryFilter === 'Archived' ? (
+        /* Archive & Disposal Queue — retention complete, discard-eligible */
+        <div className="bg-white border border-slate-300 rounded-lg overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
+            <div className="text-[13px] font-bold text-slate-700">Archive &amp; Disposal Queue <span className="font-mono text-[11px] text-slate-400">({archRows.length})</span></div>
+            <div className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+              Retention period complete → discard-eligible. Disposal (digital + paper) needs owner sign-off (PolicyStat #19415930 §4.4) — "open" / "Expired" statuses above refer to the <b>work item</b>, not the document.
+            </div>
+          </div>
+          {archRows.length === 0 ? (
+            <div className="px-4 py-8 text-center text-[13px] text-slate-500">
+              No documents ready for disposal in this view.<br />
+              <span className="text-[11px] text-slate-400">Expired documents still in retention show here once their retention period completes.</span>
+            </div>
+          ) : (
+            <table className="w-full text-left">
+              <tbody className="divide-y divide-slate-100">
+                {archRows.map((c) => {
+                  const archKey = `arch-${c.num}`
+                  const pending = resolvedFlags.has(archKey)
+                  const owner = RETENTION_BY_TYPE[c.type]?.owner || DEFAULT_RETENTION.owner
+                  return (
+                    <tr key={c.num} className="hover:bg-slate-50/70 cursor-pointer transition" onClick={() => onSelectContract(c)}>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">ARCHIVED</span>
+                          <span className="font-mono text-[11px] text-slate-400">#{c.num}</span>
+                          <span className="text-[13px] font-medium text-slate-800">{c.displayName}</span>
+                        </div>
+                        <div className="text-[11px] text-slate-500 mt-1">Retention complete {fmtRetDate(retentionUntil(c))} — discard-eligible · owner: <b>{owner}</b></div>
+                      </td>
+                      <td className="px-4 py-2.5 text-right w-[220px]">
+                        {pending ? (
+                          <span className="text-[12px] font-semibold text-emerald-700">✓ Disposal recorded — pending owner sign-off</span>
+                        ) : (
+                          <button
+                            onClick={(e) => { e.stopPropagation()
+                              onConfirmAction?.(`Prepare disposal sign-off`, `${c.displayName} (#${c.num})\nRetention complete: ${fmtRetDate(retentionUntil(c))}\nOwner: ${owner}\n\nDisposal of the record (digital + paper) requires the owner's written sign-off (PolicyStat #19415930 §4.4). Confirm the disposal has been logged.`, () => { onResolveFlag?.(archKey) }, true, `Disposal log entry prepared for ${owner} sign-off (${c.displayName} #${c.num}).`)
+                            }}
+                            disabled={!manageable}
+                            title={!manageable ? 'Edit / manage actions are restricted to the Legal role (demo RBAC)' : undefined}
+                            className="text-[13px] font-semibold text-white bg-slate-600 hover:bg-slate-700 rounded-md px-3.5 py-2 transition disabled:opacity-40 disabled:cursor-not-allowed">
+                            Prepare disposal →
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ) : expiryFilter === 'Retired' ? (
+        /* v45.31 — Retired docs: manually tagged "no longer in use"; out of alert scope, still in archive/retention */
+        <div className="bg-white border border-slate-300 rounded-lg overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
+            <div className="text-[13px] font-bold text-slate-700">Retired documents <span className="font-mono text-[11px] text-slate-400">({allContracts.filter((c) => retiredNums?.has(c.num)).length})</span></div>
+            <div className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+              Manually tagged <b>no longer in use</b> — filtered out of alerts, KPIs and the work queue so old flags don't confuse the user. Retention/disposal obligations still apply (they remain in the archive). Toggle in a document's detail panel.
+            </div>
+          </div>
+          <table className="w-full text-left">
+            <tbody className="divide-y divide-slate-100">
+              {allContracts.filter((c) => retiredNums?.has(c.num)).map((c) => (
+                <tr key={c.num} className="hover:bg-slate-50/70 cursor-pointer transition" onClick={() => onSelectContract(c)}>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-300 px-1.5 py-0.5 rounded">RETIRED</span>
+                      <span className="font-mono text-[11px] text-slate-400">#{c.num}</span>
+                      <span className="text-[13px] font-medium text-slate-800">{c.displayName}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-1">No longer in use — out of alert scope · open flags excluded from KPIs and work queue</div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        /* Task Table */
+        <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50">
+              {filter === 'all' && (
+                <th className="w-8 px-2 py-2.5" title="Select flag items for bulk resolve / defer">
+                  <input
+                    type="checkbox"
+                    checked={filtered.some((i) => i.id.startsWith('f-')) && filtered.filter((i) => i.id.startsWith('f-')).every((i) => wqSel.has(i.id))}
+                    onChange={() => {
+                      const flagIds = filtered.filter((i) => i.id.startsWith('f-')).map((i) => i.id)
+                      const all = flagIds.length > 0 && flagIds.every((id) => wqSel.has(id))
+                      setWqSel((prev) => { const s = new Set(prev); if (all) flagIds.forEach((id) => s.delete(id)); else flagIds.forEach((id) => s.add(id)); return s })
+                    }}
+                    className="w-3.5 h-3.5 accent-teal-600 cursor-pointer"
+                  />
+                </th>
+              )}
+              <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Issue</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Document</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Severity</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide">Item status</th>
+              <th className="px-4 py-2.5 text-[11px] font-bold text-slate-500 uppercase tracking-wide text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {(() => { const per = 15, start = (wqPage - 1) * per; const pageRows = filtered.slice(start, start + per);
+              return pageRows.map((item) => (
+              <tr key={item.id} className={`hover:bg-slate-50/70 cursor-pointer transition ${item.severity === 'critical' ? 'bg-red-50/30' : ''}`} onClick={() => onSelectContract(item.contract)}>
+                {filter === 'all' && (
+                  <td className="w-8 px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
+                    {item.id.startsWith('f-') ? (
+                      <input
+                        type="checkbox"
+                        checked={wqSel.has(item.id)}
+                        onChange={() => setWqSel((prev) => { const s = new Set(prev); if (s.has(item.id)) s.delete(item.id); else s.add(item.id); return s })}
+                        className="w-3.5 h-3.5 accent-teal-600 cursor-pointer"
+                        title="Select for bulk actions"
+                      />
+                    ) : (
+                      <span className="block w-3.5 h-3.5 text-slate-300 text-[10px] leading-3" title={item.id.startsWith('x-') ? 'Cross-ref items are processed, not resolved' : item.id.startsWith('t-') ? 'Tasks complete from Insights' : 'Expiry items are scheduled, not resolved'}>–</span>
+                    )}
+                  </td>
+                )}
+                <td className="px-4 py-2.5 text-[13px] font-medium text-slate-800 max-w-[340px] truncate" title={item.what}>{item.what}</td>
+                <td className="px-4 py-2.5 text-[13px] text-slate-700">
+                  {item.isNew && (
+                    <span className="text-[11px] font-bold bg-teal-600 text-white px-1.5 py-0.5 rounded mr-1.5 align-middle">NEW</span>
+                  )}
+                  <span className="font-mono text-[11px] text-slate-400">#{item.docNum}</span>
+                  <span className="ml-1.5">{item.docLabel}</span>
+                  {expiryFilter && expiryFilter !== 'All' && expiryFilter !== 'Archived' && expiryFilter !== 'Retired' && docChip(item.contract)}
+                </td>
+                <td className="px-4 py-2.5">
+                  <span className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded ${
+                    item.severity === 'critical' ? 'bg-red-600 text-white' :
+                    item.severity === 'high' ? 'bg-amber-500 text-white' :
+                    'bg-blue-500 text-white'
+                  }`}>{item.severity}</span>
+                </td>
+                <td className="px-4 py-2.5 text-[13px] font-medium text-slate-700">
+                  {item.status}
+                  {/* v45.33 · G2 — handoff: WHY it was deferred, so the next employee isn't guessing */}
+                  {item.deferNote && (
+                    <span className="block text-[11px] font-normal text-slate-400 mt-0.5" title={`Defer reason: ${item.deferNote}`}>
+                      ↳ {item.deferNote.length > 40 ? item.deferNote.slice(0, 40) + '…' : item.deferNote}
+                    </span>
+                  )}
+                </td>
+                <td className="px-4 py-2.5 text-right">
+                  <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                    {/* v45.31 — deferred rows: stop alerting is already in effect, offer to end it early */}
+                    {item.status.startsWith('Deferred') ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onClearDefer?.(item.id); setDeferFor(null) }}
+                        disabled={!manageable}
+                        title={deferMap?.[item.id]?.note || 'End deferral early — item reverts to open now'}
+                        className="text-[12px] font-semibold text-white rounded-md px-3 py-2 transition bg-slate-500 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Open now ↩
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (item.id.startsWith('x-') && onProcess) {
+                            const link = docLinks.find((d) => d.sourceNum === item.docNum && d.status !== 'synced' && item.id.includes(d.targetName))
+                            if (link) onProcess(link)
+                          } else if (item.action === 'Fix' || item.action === 'Review') {
+                            onConfirmAction?.(`Resolve Flag`, `"${item.what}"\n\nDocument: ${item.docLabel} (#${item.docNum})\nSeverity: ${item.severity}`, () => {
+                              onResolveFlag?.(item.id)
+                            }, true, getAIProposal(item.what, item.docLabel), () =>
+                              aiProposalDraft({
+                                flag_field: item.id.startsWith('f-') ? item.id.replace(/^f-\d+-/, '') : item.what,
+                                flag_if: item.what,
+                                doc_num: item.docNum,
+                                doc_name: item.docLabel,
+                                doc_type: item.contract.type,
+                                severity: item.severity,
+                              }))
+                          } else if (item.action === 'Renew' || item.action === 'Schedule') {
+                            onConfirmAction?.(`Schedule Renewal`, `${item.docLabel} (#${item.docNum})\nExpiry: ${item.due || 'unknown'}\n\nConfirm renewal has been scheduled with the counterparty.`, () => {
+                              onResolveFlag?.(item.id)
+                            })
+                          } else if (item.id.startsWith('t-')) {
+                            onConfirmAction?.(`Complete Task`, `"${item.what}"\n\nDocument: ${item.docLabel} (#${item.docNum})\nStatus: ${item.status}`, () => {
+                              onResolveFlag?.(item.id)
+                            })
+                          } else {
+                            onSelectContract(item.contract)
+                          }
+                        }}
+                        disabled={!manageable}
+                        title={!manageable ? 'Edit / manage actions are restricted to the Legal role (demo RBAC)' : undefined}
+                        className={`text-[13px] font-semibold text-white rounded-md px-3.5 py-2 transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                          item.action === 'Fix' || item.action === 'Review' ? 'bg-teal-600 hover:bg-teal-700' :
+                          item.action === 'Renew' || item.action === 'Schedule' ? 'bg-blue-600 hover:bg-blue-700' :
+                          'bg-slate-600 hover:bg-slate-700'
+                        }`}
+                      >
+                        {item.action} →
+                      </button>
+                    )}
+                    {/* v45.31 — Defer (in-progress remediation): pick a 30/60/90-day window; v45.33 · G2 — optional reason for the next employee */}
+                    {!item.status.startsWith('Deferred') && (item.action === 'Fix' || item.action === 'Review') && (
+                      deferFor === item.id ? (
+                        <span className="inline-flex items-center gap-1 text-[11px]">
+                          <span className="text-slate-500 font-medium">Defer</span>
+                          <input
+                            value={deferReason}
+                            onChange={(e) => setDeferReason(e.target.value)}
+                            placeholder="Reason (optional — e.g. awaiting vendor response)"
+                            title="Recorded on the item so the next employee knows WHY it was held"
+                            className="w-52 text-[11px] border border-slate-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                          />
+                          {[30, 60, 90].map((d) => (
+                            <button key={d}
+                              onClick={(e) => { e.stopPropagation(); onDefer?.(item.id, d, deferReason.trim() || undefined); setDeferFor(null); setDeferReason('') }}
+                              disabled={!manageable}
+                              title={`Stop alerting for ${d} days — auto-reverts to open when the window passes`}
+                              className="font-bold text-white bg-slate-500 hover:bg-slate-600 rounded px-2 py-1 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                            >{d}d</button>
+                          ))}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeferFor(item.id) }}
+                          disabled={!manageable}
+                          title="Remediation in progress — defer this item (stops alerting for 30/60/90 days, then auto-reverts)"
+                          className="text-[12px] font-semibold text-slate-500 border border-slate-300 rounded-md px-2.5 py-2 hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                        >⏸ Defer</button>
+                      )
+                    )}
+                  </div>
+                </td>
+              </tr>
+              ))
+            })()}
+          </tbody>
+        </table>
+        {filtered.length === 0 && (
+          <div className="text-center py-8 text-xs text-slate-400">No items in this view</div>
+        )}
+        {filtered.length > 0 && (() => { const per = 15, pages = Math.max(1, Math.ceil(filtered.length / per)), start = (wqPage - 1) * per;
+          return (
+          <div className="px-4 py-2 flex items-center justify-between border-t border-slate-100">
+            <span className="text-[11px] text-slate-500">
+              Showing {start + 1}–{Math.min(start + per, filtered.length)} of {filtered.length} work items
+            </span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setWqPage(Math.max(1, wqPage - 1))} disabled={wqPage <= 1}
+                className="text-[12px] font-semibold text-slate-600 border border-slate-200 rounded px-2.5 py-1 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed">← Prev</button>
+              <span className="text-[12px] font-bold text-slate-700">{wqPage} / {pages}</span>
+              <button onClick={() => setWqPage(Math.min(pages, wqPage + 1))} disabled={wqPage >= pages}
+                className="text-[12px] font-semibold text-slate-600 border border-slate-200 rounded px-2.5 py-1 hover:bg-slate-50 disabled:opacity-30 disabled:cursor-not-allowed">Next →</button>
+            </div>
+          </div>
+          )
+        })()}
+      </div>)}
+
+    </div>
+  )
+}
+
+// ── Smart Filing View (AI Upload + Auto-Classification + Folder Archive) ─────────
+interface UploadedDoc {
+  filed_to?: string
+  filename: string
+  document_type: string
+  risk_score: number
+  risk_level: string
+  flags_count: number
+  flags: { severity: string; field: string; flag_if: string; risk_category?: string; subcategory?: string; department?: string }[]
+  text_preview: string
+  processed_at: string
+  doc_num?: number // stable doc id assigned at upload time (so resolved-flag keys don't shift)
+}
+
+// ── Upload → live ContractDoc (so new filings cascade into Documents, Work Queue,
+//    Risk Register, KPIs and Criteria panel — not just the Smart Filing tab) ──────
+const SEV_LI: Record<string, { l: number; i: number }> = {
+  Critical: { l: 5, i: 5 }, High: { l: 4, i: 4 }, Medium: { l: 3, i: 3 }, Low: { l: 2, i: 2 },
+}
+function uploadToContractDoc(u: UploadedDoc, idx: number): ContractDoc {
+  const usedFields = new Set<string>()
+  const flags: Flag[] = (u.flags || []).map((f) => {
+    const rawSev = String(f.severity || '').trim()
+    const sev: 'Critical' | 'High' | 'Medium' | 'Low' =
+      (['Critical', 'High', 'Medium', 'Low'] as Array<'Critical' | 'High' | 'Medium' | 'Low'>).includes(rawSev as 'Critical' | 'High' | 'Medium' | 'Low')
+        ? (rawSev as 'Critical' | 'High' | 'Medium' | 'Low')
+        : 'Medium'
+    // De-duplicate field keys so per-flag ids (f-${num}-${field}) stay unique
+    let field = f.field || 'general'
+    let n = 2
+    while (usedFields.has(field)) field = `${f.field || 'general'} (${n++})`
+    usedFields.add(field)
+    const { l, i } = SEV_LI[sev]
+    return {
+      severity: sev, field,
+      flag_if: f.flag_if || 'AI review detected a potential issue',
+      likelihood: l, impact: i, risk_score: l * i,
+      compliance_type: sev === 'Critical' || sev === 'High' ? 'hard' : 'best_practice',
+      risk_category: f.risk_category || u.document_type,
+      subcategory: f.subcategory || f.risk_category || u.document_type,
+      department: f.department || 'Operations',
+      status: 'open', source: 'ai_scan',
+    }
+  })
+  const top = Math.max(0, ...flags.map((f) => f.risk_score))
+  const riskLevel = top >= 20 ? 'Critical' : top >= 12 ? 'High' : top >= 6 ? 'Medium' : 'Low'
+  return {
+    num: u.doc_num ?? 100 + idx,
+    name: u.filename, displayName: u.filename,
+    type: u.document_type || 'Other',
+    summary: u.text_preview
+      ? `${u.text_preview.slice(0, 110)}…`
+      : `Uploaded file — AI classified as ${u.document_type || 'Unknown'}`,
+    filePath: u.filed_to || `data/archive/${u.document_type || 'Uncategorized'}/auto`,
+    riskScore: top, riskLevel, flagsCount: flags.length, flags,
+    extractedFields: [],
+    jev: {
+      riskSeverity: { choice: '—', confidence: 0 }, needsHumanReview: 0,
+      isComplianceRelated: 0, shouldAlert: 0, decisionConfidence: 0,
+    },
+    textHighlights: [],
+    compliance: {
+      hardGaps: flags.filter((f) => f.compliance_type === 'hard').length,
+      bpGaps: flags.filter((f) => f.compliance_type === 'best_practice').length,
+      complianceRate: 0, topRiskField: flags[0]?.field || null,
+    },
+    department: 'Operations', expiryDate: '',
+    confidentiality: 'internal',
+    // Retention from Southlake's real records schedule (Schedule A, PolicyStat #19415930)
+    retentionYears: (RETENTION_BY_TYPE[u.document_type] || DEFAULT_RETENTION).years,
+    retentionBasis: u.document_type && RETENTION_BY_TYPE[u.document_type]
+      ? RETENTION_BY_TYPE[u.document_type].basis
+      : `New upload (classified: ${u.document_type || 'unknown'}) — ${DEFAULT_RETENTION.basis}`,
+    retentionOwner: (RETENTION_BY_TYPE[u.document_type] || DEFAULT_RETENTION).owner,
+    isUpload: true,
+  }
+}
+
+function SmartFilingView({ contracts: allContracts, uploads, onUploaded, incomingFiles, onConsumeIncoming, onFilingConfirmed }: {
+  contracts: ContractDoc[]
+  uploads: UploadedDoc[]
+  onUploaded: (docs: UploadedDoc[]) => void
+  // v45.32 — global drag-and-drop: files dropped anywhere in the app arrive here
+  incomingFiles?: { name: string; size: number; file?: File }[]
+  onConsumeIncoming?: () => void
+  onFilingConfirmed?: (label: string) => void
+}) {
+
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [dragOver, setDragOver] = useState(false)
+  const [diskTree, setDiskTree] = useState<Record<string, { files: string[]; subcategories: Record<string, string[]> }>>({})
+  const [fileDetail, setFileDetail] = useState<string | null>(null)
+  // v45.31 — "Verify filing": AI-classified uploads wait here for human confirmation
+  const [pendingFiling, setPendingFiling] = useState<{ results: UploadedDoc[]; engine: string } | null>(null)
+  const [reFiling, setReFiling] = useState<string | null>(null) // filename currently being moved on disk
+  // uploads is lifted to the app root so new filings cascade into Documents /
+  // Work Queue / Risk Register / KPIs (persisted across reloads)
+  const uploaded = uploads
+  const setUploaded = (updater: (prev: UploadedDoc[]) => UploadedDoc[]) => {
+    onUploaded(updater(uploads))
+  }
+
+  // v45.32 — consume files dragged from anywhere in the app (or the OS)
+  useEffect(() => {
+    if (incomingFiles && incomingFiles.length > 0) {
+      const withFiles = incomingFiles.filter((f) => f.file)
+      if (withFiles.length > 0) {
+        void handleUpload(withFiles.map((f) => f.file!))
+      }
+      onConsumeIncoming?.()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incomingFiles])
+
+  // Fetch real on-disk folder tree
+  useEffect(() => {
+    const fetchTree = () => {
+      fetch('/api/folder-tree')
+        .then((r) => r.json())
+        .then((d) => setDiskTree(d.categories || {}))
+        .catch(() => {})
+    }
+    fetchTree()
+  }, [])
+
+  // Upload handler
+  const handleUpload = async (files: FileList | File[]) => {
+    const fileArr = Array.from(files)
+    if (fileArr.length === 0) return
+    setUploading(true)
+    setUploadError('')
+    try {
+      const formData = new FormData()
+      fileArr.forEach((f) => formData.append('files', f))
+
+      // Try proxy first, then direct API
+      let resp: Response
+      try {
+        resp = await fetch('/api/classify-and-file', { method: 'POST', body: formData })
+        if (!resp.ok) throw new Error(`proxy ${resp.status}`)
+      } catch {
+        // Fallback: direct API call → keyword classification
+        try {
+          resp = await fetch('http://localhost:8000/api/classify-and-file', { method: 'POST', body: formData })
+          if (!resp.ok) throw new Error(`API ${resp.status}`)
+        } catch {
+          // Ultimate fallback: keyword-based (no AI needed)
+          const kw = (n: string) => {
+            // Fallback classifier: client 12-category Southlake/HIROC taxonomy (nearest keyword match)
+            const l = n.toLowerCase()
+            if (/(research|clinical|trial|study|safety|ethic)/.test(l)) return 'Research'
+            if (/(phi|phr|privacy|confidential|nda|data sharing|data_sharing|data use|data_use)/.test(l)) return 'Regulatory'
+            if (/(finance|payment|invoice|budget|cost|procurement|vendor|indemn|contract|agreement|services|service)/.test(l)) return 'Financial'
+            if (/(dr|backup|continuity|disaster|bcp|system|data|breach|information|security)/.test(l)) return 'Information Management/Technology'
+            if (/(reputation|marketing|brand|media|complaint|public)/.test(l)) return 'External Relations'
+            if (/(staff|hr|labour|recruit|injur|workplace|training)/.test(l)) return 'Human Resources'
+            if (/(facility|building|waste|hazard|plant|maintenance|space)/.test(l)) return 'Facilities'
+            if (/(emergency|response|governance|strategic|succession|merger)/.test(l)) return 'Leadership'
+            if (/(community|population|immun|prenatal|primary care|chronic|disabilit|ambulance)/.test(l)) return 'Community Health'
+            if (/(patient|medic|nurs|infection|fall|adverse|birth)/.test(l)) return 'Care'
+            return 'Uncategorized'
+          }
+          const fb: UploadedDoc[] = fileArr.map((f) => ({
+            filename: f.name, document_type: kw(f.name), risk_score: 50,
+            risk_level: 'Medium', flags_count: 0, flags: [],
+            text_preview: f.name, processed_at: new Date().toISOString(),
+            filed_to: `${kw(f.name)}/auto`, is_upload: true,
+          }))
+          // v45.31 — offline keyword fallback: still route through "Verify filing" (state-level confirm; no on-disk move available)
+          setPendingFiling({ results: fb, engine: 'keyword (AI offline)' })
+          setUploading(false)
+          return
+        }
+      }
+
+      const data = await resp.json()
+      const rawResults: any[] = Array.isArray(data) ? data : (data.results || [data])
+      const errors = rawResults.filter((r: any) => r.error)
+      const results: UploadedDoc[] = rawResults.filter((r: any) => !r.error).map((r: any) => ({
+        filename: r.filename || 'unknown',
+        document_type: r.document_type || 'Unknown',
+        risk_score: r.risk_score || 0,
+        risk_level: r.risk_level || 'Low',
+        flags_count: r.flags_count ?? r.flags?.length ?? 0,
+        flags: r.flags || [],
+        text_preview: r.text_preview || '',
+        processed_at: r.processed_at || new Date().toISOString(),
+        filed_to: r.filed_to || undefined,
+      }))
+      // v45.31 — "Verify filing": AI classification (and the on-disk filing it produced) is NOT
+      // committed until the human confirms or adjusts the category. The file already sits on disk
+      // at the AI-suggested path; an adjustment calls POST /api/re-file to move it into the
+      // chosen category, so the on-disk location always matches what the user approved.
+      if (errors.length > 0) {
+        setUploadError(errors.map((e: any) => `${e.filename}: ${e.error}`).join(' | '))
+      }
+      if (results.length > 0) {
+        setPendingFiling({ results, engine: String((data as any).engine || (results[0] as any)?.engine || 'AI') })
+        setUploading(false)
+      }
+      return
+    } catch (e: any) {
+      setUploadError(import.meta.env.DEV
+        ? `Upload failed: ${e.message || e} (dev: is the API running on port 8000? — python3 server.py)`
+        : 'Upload failed — the document service is not reachable. Please retry in a moment; if it persists, contact your system administrator.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  // v45.31 — commit a pending filing (optionally after the user adjusted the category)
+  const confirmFiling = async (u: UploadedDoc, finalCat: string | null) => {
+    let doc = u
+    const loc = filedLoc(u)
+    if (finalCat && loc && finalCat !== loc.cat) {
+      if (u.filed_to && u.filed_to.startsWith('data/')) {
+        // On-disk file: move it so the archive reflects the human's decision
+        setReFiling(u.filename)
+        try {
+          const r = await fetch('/api/re-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: u.filename, from_category: loc.cat, to_category: finalCat }),
+          })
+          const d = await r.json()
+          if (d.path) doc = { ...u, filed_to: d.path }
+        } catch {
+          /* API offline: commit at the state level; the on-disk file stays at the AI path */
+        }
+        setReFiling(null)
+      } else {
+        // Offline keyword fallback (no on-disk file yet): adjust the location at the state level
+        doc = { ...u, filed_to: `${finalCat}/${loc.sub}` }
+      }
+    }
+    setUploaded((prev) => [doc, ...prev])
+    // v45.32 — report to the global activity feed ("filed into X")
+    onFilingConfirmed?.(doc.filename)
+    // Auto-open the confirmed folder so the user immediately sees where the file landed
+    const target = doc.filed_to
+    if (target) {
+      const s = target.split('/').filter(Boolean)
+      setSelectedFolder(s.length >= 3 && target.startsWith('data/') ? s[s.length - 3] : s[0])
+    }
+    setPendingFiling((p) => (p ? { ...p, results: p.results.filter((x) => x !== u) } : p))
+    if (pendingFiling?.results.filter((x) => x !== u).length === 0) setPendingFiling(null)
+  }
+  const discardFiling = (u: UploadedDoc) => {
+    setPendingFiling((p) => {
+      if (!p) return null
+      const rest = p.results.filter((x) => x !== u)
+      return rest.length > 0 ? { ...p, results: rest } : null
+    })
+  }
+
+  // Parse 'data/archive/Financial/NDA/file.pdf' (or offline 'Financial/auto') → { cat, sub }
+  const filedLoc = (u: UploadedDoc): { cat: string; sub: string } | null => {
+    if (!u.filed_to) return null
+    const s = u.filed_to.split('/').filter(Boolean)
+    if (s.length === 0) return null
+    const cat = u.filed_to.startsWith('data/') && s.length >= 3 ? s[s.length - 3] : s[0]
+    const sub = u.filed_to.startsWith('data/') && s.length >= 3 ? s[s.length - 2] : (s[1] || 'Auto')
+    return { cat, sub }
+  }
+
+  // Build folder tree from BOTH static contracts AND uploaded docs
+  const tree: Record<string, Record<string, { docs: { label: string; num?: number; riskLevel: string; flagsCount: number; isUploaded: boolean }[] }>> = {}
+  const addToTree = (cat: string, sub: string, doc: { label: string; num?: number; riskLevel: string; flagsCount: number; isUploaded: boolean }) => {
+    if (!tree[cat]) tree[cat] = {}
+    if (!tree[cat][sub]) tree[cat][sub] = { docs: [] }
+    tree[cat][sub].docs.push(doc)
+  }
+
+  // Static contracts
+  for (const c of allContracts) {
+    const cFlags = c.flags || []
+    if (cFlags.length === 0) {
+      // Clean docs go to Clean/NoFlags folder
+      addToTree('Clean', 'NoFlags', { label: `#${c.num} ${c.displayName}`, num: c.num, riskLevel: 'Low', flagsCount: 0, isUploaded: false })
+      continue
+    }
+    // Use highest-score flag's client category + nearest risk name (Southlake/HIROC taxonomy)
+    const topFlag = cFlags.slice().sort((a, b) => piaPriority(b) - piaPriority(a))[0]
+    const h = flagHiroc(topFlag.field)
+    const cat = h.cat
+    const sub = h.riskName.replace(/\//g, '-')
+    addToTree(cat, sub, { label: `#${c.num} ${c.displayName}`, num: c.num, riskLevel: c.riskLevel, flagsCount: c.flagsCount || cFlags.length, isUploaded: false })
+  }
+
+  // Uploaded docs: category from the CONFIRMED on-disk location when available
+  // (v45.31 — "Verify filing": the tree must reflect where the human actually approved the file),
+  // falling back to the top flag's client category when there is no disk path yet
+  for (const u of uploaded) {
+    const flags = u.flags || []
+    const topFlag = flags.slice().sort((a, b) => ((a.severity === 'Critical' ? 3 : a.severity === 'High' ? 2 : 1) - (b.severity === 'Critical' ? 3 : b.severity === 'High' ? 2 : 1)) || (piaPriority(b) - piaPriority(a)))[0]
+    const loc = filedLoc(u)
+    const cat = loc ? loc.cat : (topFlag ? flagHiroc(topFlag.field).cat : (u.flags_count === 0 ? 'Clean' : 'Uncategorized'))
+    const sub = loc ? loc.sub : (u.document_type || 'Other')
+    addToTree(cat, sub, { label: u.filename, riskLevel: u.risk_level, flagsCount: u.flags_count || flags.length, isUploaded: true })
+  }
+
+  // Clean docs (no flags)
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div>
+        <h2 className="text-[13px] font-semibold text-slate-900">AI Smart Filing</h2>
+        <p className="text-xs text-slate-500 mt-0.5">Upload → AI classifies → you verify the category → file lands in the archive. The final filing decision is yours.</p>
+      </div>
+
+      {/* Upload service status */}
+      {uploadError && /port 8000|API/i.test(uploadError) && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-xs text-amber-700">
+          ⚠ <b>Upload service is not available right now.</b> Try again in a moment — if it persists, ask your system administrator to restart the document service.
+          {import.meta.env.DEV && (
+            <div className="text-[11px] text-amber-600/80 mt-1">(Dev: run <code className="bg-amber-100 px-1 rounded">python3 server.py</code> in <code className="bg-amber-100 px-1 rounded">web-dashboard/</code> — port 8000.)</div>
+          )}
+        </div>
+      )}
+
+      {/* Upload Zone */}
+      <div
+        className={`border-2 border-dashed rounded-lg p-6 text-center transition ${
+          dragOver ? 'border-teal-400 bg-teal-50' : 'border-slate-200 bg-slate-50'
+        }`}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); handleUpload(e.dataTransfer.files) }}
+      >
+        <input
+          type="file"
+          multiple
+          accept=".pdf,.png,.jpg,.jpeg,.tiff,.docx,.txt,.md"
+          style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0, pointerEvents: 'none' }}
+          id="sf-upload-input"
+          onChange={(e) => {
+            const files = e.target.files
+            if (files && files.length > 0) handleUpload(files)
+            e.target.value = '' // allow re-selecting same file
+          }}
+        />
+        <button
+          onClick={() => document.getElementById('sf-upload-input')?.click()}
+          disabled={uploading}
+          className="bg-teal-600 text-white px-5 py-3 rounded-lg text-sm font-semibold hover:bg-teal-700 disabled:opacity-50 shadow-sm"
+        >
+          {uploading ? 'Uploading…' : 'Choose files to upload'}
+        </button>
+        <p className="text-[11px] text-slate-400 mt-2">Drag & drop or click · PDF, images, DOCX, TXT, MD</p>
+        <div className="mt-2 space-y-1">
+          {uploading && <p className="text-[11px] text-teal-600 animate-pulse">AI is reading your file and filing it — takes about 15–40 s…</p>}
+          {uploadError && <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded p-1.5">⚠ {uploadError}</p>}
+          {!uploading && !uploadError && uploaded.length === 0 && !pendingFiling && <p className="text-[11px] text-slate-300">Waiting for files…</p>}
+          {!uploading && !uploadError && uploaded.length > 0 && <p className="text-[11px] text-emerald-600">✓ {uploaded.length} file(s) processed</p>}
+        </div>
+
+        {/* v45.31 — Verify filing: AI suggests, the human confirms (or adjusts the category before confirming) */}
+        {pendingFiling && pendingFiling.results.length > 0 && (
+          <div className="mt-4 text-left bg-amber-50/70 border border-amber-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[12px] font-bold text-amber-900 uppercase tracking-wide">Verify filing ({pendingFiling.results.length})</span>
+              <span className="text-[11px] text-amber-700/80">engine: {pendingFiling.engine}</span>
+            </div>
+            <p className="text-[11px] text-amber-800/80 leading-relaxed mb-3">
+              The AI classified each file and staged it in the archive. <b>You decide the final category</b> — confirm as suggested, or adjust before confirming. Files not confirmed stay out of the Documents / Work Queue views.
+            </p>
+            <div className="space-y-2">
+              {pendingFiling.results.map((u) => {
+                const loc = filedLoc(u)
+                return (
+                  <div key={u.filename} className="bg-white border border-amber-200 rounded-md px-3 py-2.5">
+                    <div className="flex items-center gap-2 text-[12px]">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${u.risk_level === 'Critical' ? 'bg-red-500' : u.risk_level === 'High' ? 'bg-orange-500' : u.risk_level === 'Medium' ? 'bg-yellow-500' : 'bg-emerald-500'}`} />
+                      <span className="font-medium text-slate-800 truncate flex-1" title={u.filename}>{u.filename}</span>
+                      <span className="text-[11px] text-slate-500 shrink-0">type: <b>{u.document_type}</b> · {u.flags_count} flag{u.flags_count === 1 ? '' : 's'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2 text-[11px] flex-wrap">
+                      <span className="text-slate-500">AI suggests:</span>
+                      <span className="font-mono text-slate-700">{loc ? `${loc.cat} › ${loc.sub}` : (u.filed_to || 'archive')}</span>
+                      <label className="ml-2 flex items-center gap-1.5 text-slate-600">
+                        Adjust to:
+                        <select
+                          defaultValue={loc?.cat || ''}
+                          onBlur={(e) => {
+                            const v = e.currentTarget.value
+                            if (v && v !== (loc?.cat || '')) confirmFiling(u, v)
+                            e.currentTarget.value = loc?.cat || ''
+                          }}
+                          className="text-[11px] border border-slate-300 rounded px-1.5 py-1 bg-white text-slate-700 max-w-[190px]"
+                          title="Pick a different category — the file is moved in the on-disk archive on confirm"
+                        >
+                          <option value="" disabled>Category…</option>
+                          {Array.from(new Set([...Object.keys(SOUTHLAKE_RISK_TAXONOMY), 'Clean', 'Uncategorized'])).map((cat) => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {reFiling === u.filename && <span className="text-teal-600 animate-pulse font-medium">moving on disk…</span>}
+                      <span className="ml-auto flex items-center gap-1.5">
+                        <button
+                          onClick={() => discardFiling(u)}
+                          className="text-[11px] font-semibold text-slate-500 border border-slate-300 rounded px-2 py-1 hover:bg-slate-50 transition"
+                          title="Don't add this file to the workspace (it remains on disk at the AI-suggested path)"
+                        >✕ Discard</button>
+                        <button
+                          onClick={() => confirmFiling(u, null)}
+                          className="text-[11px] font-bold text-white bg-teal-600 rounded px-2.5 py-1 hover:bg-teal-700 transition"
+                        >✓ Confirm filing</button>
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+        {uploaded.length > 0 && (
+          <div className="mt-3 text-left">
+            <div className="text-[11px] font-bold text-slate-500 uppercase mb-1">Uploaded ({uploaded.length})</div>
+            <div className="space-y-1 max-h-32 overflow-y-auto">
+              {uploaded.map((u, i) => {
+                const loc = filedLoc(u)
+                return (
+                  <div key={i} className="flex items-center gap-2 text-[11px]">
+                    <span className={`w-2 h-2 rounded-full ${u.risk_level === 'Critical' ? 'bg-red-500' : u.risk_level === 'High' ? 'bg-orange-500' : u.risk_level === 'Medium' ? 'bg-yellow-500' : 'bg-emerald-500'}`} />
+                    <span className="text-slate-700 truncate flex-1" title={u.filename}>{u.filename}</span>
+                    <span className="text-slate-400 shrink-0">{u.document_type}</span>
+                    <span className="text-slate-400 shrink-0">{u.flags_count} flags</span>
+                    <span className={`text-[11px] font-bold shrink-0 ${u.risk_level === 'Critical' ? 'text-red-600' : u.risk_level === 'High' ? 'text-orange-600' : 'text-emerald-600'}`}>{u.risk_level}</span>
+                    {loc ? (
+                      <button
+                        onClick={() => {
+                          setSelectedFolder(loc.cat)
+                          document.getElementById('sf-folder-tree')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                        }}
+                        title="Open this folder in the structure below"
+                        className="shrink-0 text-[11px] text-teal-700 font-medium border border-teal-200 rounded px-1.5 py-0.5 hover:bg-teal-50 transition"
+                      >
+                        {loc.cat} › {loc.sub.replace(/_/g, ' ')} — view in folder tree
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-teal-600 font-mono shrink-0">→ {u.filed_to}</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Filing status */}
+      {uploaded.length > 0 && (
+        <div className="text-xs text-emerald-600">
+          ✓ {uploaded.length} file(s) classified, confirmed by you, and saved to the archive — open a folder below (or use its “View” button) to see where each file was filed.<br />
+          <span className="text-slate-500">Newly filed documents now also appear in the Documents list, Work Queue and Risk Register — their AI-detected flags are included in the KPIs at the top.</span>
+        </div>
+      )}
+
+      {/* Folder tree - unified view from disk */}
+      <div id="sf-folder-tree" className="bg-white border border-slate-200 rounded-lg overflow-hidden scroll-mt-4">
+        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">
+          FOLDER STRUCTURE
+          <span className="font-normal text-slate-400 ml-2">
+            12 Southlake/HIROC categories · {Object.values(diskTree).reduce((a, v) => a + Object.values(v.subcategories).reduce((b, files) => b + files.length, 0), 0)} files on disk
+          </span>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {[...Object.keys(SOUTHLAKE_RISK_TAXONOMY), 'Clean'].map((cat) => {
+            const catColor: Record<string, string> = { 'Care': 'bg-teal-500', 'Human Resources': 'bg-indigo-500', 'Financial': 'bg-emerald-600', 'Leadership': 'bg-slate-700', 'Information Management/Technology': 'bg-sky-600', 'Facilities': 'bg-amber-600', 'Regulatory': 'bg-rose-600', 'External Relations': 'bg-purple-600', 'Regulation - Professional': 'bg-pink-700', 'Teaching': 'bg-cyan-700', 'Research': 'bg-violet-600', 'Community Health': 'bg-lime-700', 'Clean': 'bg-slate-400' }
+            const diskSubs = diskTree[cat]?.subcategories || {}
+            const diskSubsWithFiles = Object.entries(diskSubs).filter(([_ , files]) => files.length > 0)
+            const diskFileCount = diskSubsWithFiles.reduce((a, [_, files]) => a + files.length, 0)
+            const computedSubs = tree[cat] || {}
+            const computedDocCount = Object.values(computedSubs).reduce((a, v) => a + v.docs.length, 0)
+            const totalVisible = Math.max(diskFileCount, computedDocCount)
+            const isExpanded = selectedFolder === cat
+
+            return (
+              <div key={cat}>
+                <div
+                  className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-slate-50 transition"
+                  onClick={() => setSelectedFolder(isExpanded ? null : cat)}
+                >
+                  <span className={`text-[11px] transition ${isExpanded ? 'text-teal-600' : 'text-slate-400'}`}>{isExpanded ? '▼' : '▶'}</span>
+                  <span className={`w-2 h-2 rounded-[3px] shrink-0 ${catColor[cat]}`} />
+                  <span className="text-[13px] font-semibold text-slate-800">{cat}</span>
+                  <div className="ml-auto flex items-center gap-3">
+                    {diskFileCount > 0 && <span className="text-[11px] text-slate-400">{diskFileCount} on disk</span>}
+                    <span className={`text-[11px] font-medium ${totalVisible > 0 ? 'text-slate-600' : 'text-slate-300'}`}>
+                      {totalVisible > 0 ? `${totalVisible} docs` : 'empty'}
+                    </span>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="ml-8 space-y-2 pb-3">
+                    {diskSubsWithFiles.length > 0 && (
+                      <div>
+                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wide mb-1">Disk Files (data/archive/{cat}/)</div>
+                        {diskSubsWithFiles.map(([sub, files]) => (
+                          <div key={sub} className="ml-3 mb-1.5">
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-600 font-medium">
+                              <svg className="w-3.5 h-3.5 text-teal-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+                              <span>{sub.replace(/_/g, ' ')}</span>
+                              <span className="text-[11px] text-slate-400">({files.length})</span>
+                              {(() => { const d = SUBCAT_DEPTS[sub.replace(/_/g, ' ')]; return d ? <span className="text-[11px] text-slate-300">→ {d.slice(0,2).join(', ')}{d.length>2?` +${d.length-2}`:''}</span> : null })()}
+                            </div>
+                            <div className="ml-5 space-y-0.5">
+                              {files.map((f) => (
+                                <button key={f} onClick={(e) => { e.stopPropagation(); setFileDetail(f) }} className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded px-1 py-0.5 w-full text-left transition">
+                                  <svg className="w-3.5 h-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.41a2 2 0 00-.59-1.42l-2.42-2.42a2 2 0 00-1.41-.59H7a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                                  <span className="truncate max-w-md" title={f}>{f}</span>
+                                  <span className="text-[11px] text-slate-300 ml-auto shrink-0">→</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+
+
+                    {totalVisible === 0 && diskSubsWithFiles.length === 0 && (
+                      <div className="text-[11px] text-slate-300 ml-4 py-2">No documents in this category yet.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Filing rules */}
+      <div className="bg-slate-50 border border-slate-200 rounded p-3">
+        <div className="text-[11px] font-bold text-slate-500 uppercase mb-1.5">Filing Logic</div>
+        <ul className="text-[11px] text-slate-600 space-y-0.5 list-disc pl-4">
+          <li><b>Upload</b> → local AI reads the file (Ollama, on this machine) + rules engine</li>
+          <li><b>Category</b> → client 12-category Southlake/HIROC taxonomy, from the highest-score flag</li>
+          <li><b>Subcategory</b> → nearest risk name from the client register (dept mapping pending their scoring page)</li>
+          <li><b>Confidence</b> → 95% (0 flags) · 88% (1-2) · 72% (3-5) · 55% (6+)</li>
+          <li><b>Clean docs</b> → filed to "Clean / Unfiled" until flags appear</li>
+        </ul>
+      </div>
+
+      {/* File Detail Modal */}
+      {fileDetail && (() => { const fd = fileDetail!; return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setFileDetail(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="text-[13px] font-semibold text-slate-900 mb-2">{fd.split('/').pop()}</div>
+            <div className="text-xs text-slate-500 space-y-1.5">
+              <div><b>Full path:</b> <code className="text-teal-700 break-all">{fd}</code></div>
+              <div><b>Southlake/HIROC Category:</b> {fd.split('/').find((p) => [...Object.keys(SOUTHLAKE_RISK_TAXONOMY), 'Clean', 'Uncategorized'].includes(p)) || 'Unknown'}</div>
+              <div><b>Subcategory:</b> {fd.split('/').slice(-2, -1)[0] || 'N/A'}</div>
+              <div className="text-slate-400 mt-2">Stored at <code className="text-slate-600">data/archive/{fd}</code></div>
+            </div>
+            <button onClick={() => setFileDetail(null)} className="mt-4 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded px-3 py-1.5">✕ Close</button>
+          </div>
+        </div>
+      )})()}
+    </div>
+  )
+}
+
+
+
+// ── Risk Prevention Insights: cross-file pattern detection + actionable recommendations ──
+function InsightsView({ contracts: allContracts, onJumpToContract, onSwitchTab, resolvedFlags, completedLinks, onSetFocusFields }: { contracts: ContractDoc[]; onJumpToContract?: (c: ContractDoc) => void; onSwitchTab?: (tab: string) => void; resolvedFlags?: Set<string>; completedLinks?: Set<string>; onSetFocusFields?: (fields: string[]) => void }) {
+  void completedLinks
+  const [execSummary, setExecSummary] = useState<string | null>(null)
+  const [execBusy, setExecBusy] = useState(false)
+  const [execError, setExecError] = useState<string | null>(null)
+  const rawFlags = allContracts.flatMap((c) => c.flags.map((f) => ({ ...f, contract: c })))
+  const allFlags = rawFlags.filter((f) => {
+    if (resolvedFlags) {
+      const flagId = `f-${f.contract.num}-${f.field}`
+      if (resolvedFlags.has(flagId)) return false
+    }
+    return true
+  })
+  
+  // 1. Systemic pattern detection: group flags by field across contracts
+  const byField: Record<string, { count: number; contracts: number[]; severity: string[] }> = {}
+  for (const f of allFlags) {
+    const key = f.field
+    if (!byField[key]) byField[key] = { count: 0, contracts: [], severity: [] }
+    byField[key].count++
+    byField[key].contracts.push(f.contract.num)
+    byField[key].severity.push(f.severity)
+  }
+  
+  // 2. Identify systemic patterns (same field flagged in 3+ contracts)
+  const systemicPatterns = Object.entries(byField)
+    .filter(([_, v]) => v.contracts.length >= 3)
+    .sort((a, b) => b[1].count - a[1].count)
+    .map(([field, data]) => {
+      const hasCritical = data.severity.includes('Critical')
+      const hasHigh = data.severity.includes('High')
+      // Generate prevention recommendation
+      const recs: Record<string, string> = {
+        'signatories': 'Implement a pre-execution dual-signature verification gate. No contract should be countersigned without 2 authorized VPs. Add a mandatory fields check to the contract template.',
+        'expiry_date': 'Automate expiration tracking: 90/60/30-day alerts to contract owners. Flag contracts expiring within 90 days for renewal review.',
+        'breach_notification': 'Standardize breach notification clause to 24h (PHIPA s.33(3)). Add to all DSA templates. Require privacy officer approval for any deviation.',
+        'governing_law': 'Enforce Ontario governing law in all template contracts. Add a mandatory fields validation step before execution. Flag any non-Ontario references.',
+        'data_security': 'Mandate data security clauses (encryption, access controls, audit rights) in all contracts handling SENSITIVE data. Add to procurement checklist.',
+        'auto_renewal': 'Require explicit opt-out language in all auto-renewal clauses. Set renewal notification at T-90 days. Flag any renewal without 60+ day notice window.',
+      }
+      return {
+        field,
+        count: data.count,
+        contractNums: data.contracts,
+        hasCritical,
+        hasHigh,
+        recommendation: recs[field] || `Review and standardize "${field}" across all contracts.`,
+      }
+    })
+
+  // 3. What-If analysis: what if we fix top 3 patterns?
+  const top3 = systemicPatterns.slice(0, 3)
+  const flagsToEliminate = top3.reduce((sum, p) => sum + p.count, 0)
+  const currentCritical = allFlags.filter((f) => f.severity === 'Critical').length
+  const criticalAfterFix = Math.max(0, currentCritical - top3.filter((p) => p.hasCritical).reduce((s, p) => s + p.count, 0))
+  const currentAvgScore = allFlags.length > 0 ? allFlags.reduce((s, f) => s + f.risk_score, 0) / allFlags.length : 0
+  const avgScoreAfterFix = allFlags.length > 3 ? (allFlags.reduce((s, f) => s + f.risk_score, 0) - top3.reduce((s, p) => s + p.count * 12, 0)) / (allFlags.length - flagsToEliminate) : currentAvgScore
+
+  // 4. Portfolio health score (0-100)
+  const totalFlags = allFlags.length
+  const openFlags = allFlags.filter((f) => f.status === 'open').length
+    const criticalFlags = allFlags.filter((f) => f.severity === 'Critical').length
+  const healthScore = Math.max(0, Math.round(100 - (openFlags / Math.max(1, totalFlags)) * 40 - (totalFlags > 0 ? (criticalFlags / totalFlags) : 0) * 40 - (totalFlags > 30 ? 10 : 0)))
+
+  // 5. Risk prevention recommendations (actionable, prioritized)
+  const playbook = systemicPatterns.map((p, i) => ({
+    priority: i + 1,
+    pattern: p.field,
+    affected: p.contractNums.length,
+    contracts: p.contractNums,
+    severity: p.hasCritical ? 'Critical' : p.hasHigh ? 'High' : 'Medium',
+    action: p.recommendation,
+    impact: `Eliminates ${p.count} flags across ${p.contractNums.length} contracts`,
+  }))
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div>
+        <h2 className="text-[13px] font-semibold text-slate-900">Risk Prevention Insights</h2>
+        <p className="text-xs text-slate-500 mt-0.5">Cross-document pattern analysis across {allContracts.length} monitored contracts · {allFlags.length} total flags</p>
+      </div>
+
+      {/* AI Executive Summary — local Ollama, generated on demand */}
+      {(() => {
+        const seed = `${allContracts.length} contracts; ${allFlags.length} flags (${openFlags} open, ${criticalFlags} critical); health ${healthScore}/100; top patterns: ${systemicPatterns.slice(0, 3).map((p) => `${p.field} (${p.count})`).join(', ') || 'none'}.`
+        return (
+          <div className="bg-white border border-slate-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[13px] font-semibold text-slate-900">AI Executive Summary</span>
+              <span className="text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 rounded px-1.5 py-0.5">local Ollama · runs on this machine</span>
+              <button
+                onClick={() => {
+                  setExecSummary(null)
+                  setExecBusy(true)
+                  fetch('/api/ai-proposal', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ purpose: 'summary', flag_field: 'portfolio_summary', flag_if: seed, doc_num: 0, doc_name: 'Portfolio', doc_type: 'Insights', severity: '—' }),
+                  })
+                    .then((res) => res.json())
+                    .then((d) => {
+                      if (d.ok) setExecSummary(`${d.data.proposal}\n\nTop priority: ${d.data.rationale}`.trim())
+                      else throw new Error(d.error)
+                    })
+                    .catch((e) => setExecError(String(e).slice(0, 120)))
+                    .finally(() => setExecBusy(false))
+                }}
+                className="ml-auto text-[12px] font-semibold text-white bg-teal-600 hover:bg-teal-700 rounded-md px-3 py-1.5 transition"
+              >
+                {execSummary ? 'Regenerate' : 'Generate summary'}
+              </button>
+            </div>
+            {execBusy ? (
+              <div className="flex items-center gap-2 text-[12px] text-slate-500 py-3">
+                <span className="w-3.5 h-3.5 border-2 border-teal-200 border-t-teal-600 rounded-full animate-spin shrink-0" />
+                Local AI is writing the summary (gemma3:1b) — usually ~15–30 s…
+              </div>
+            ) : execError ? (
+              <div className="text-[12px] text-slate-500 bg-slate-50 border border-slate-200 rounded-lg p-3">
+                Local AI unavailable ({execError}). The pattern analysis below is computed from your documents in real time — no AI needed.
+              </div>
+            ) : execSummary ? (
+              <p className="text-[13px] text-slate-700 leading-relaxed whitespace-pre-line">{execSummary}</p>
+            ) : (
+              <p className="text-[12px] text-slate-400">One-click, locally generated read of the portfolio: where risk is concentrated and what to do first. Nothing leaves this machine.</p>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* Portfolio Health */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Health score */}
+        <div className="bg-white border border-slate-200 rounded-lg p-4 text-center">
+          <div className="text-[11px] font-bold text-slate-500 uppercase mb-2">Portfolio Health</div>
+          <div className="relative w-20 h-20 mx-auto">
+            <svg className="w-20 h-20 -rotate-90" viewBox="0 0 36 36">
+              <circle cx="18" cy="18" fill="none" stroke="#e2e8f0" strokeWidth="3" r="16" />
+              <circle cx="18" cy="18" fill="none" stroke={healthScore >= 70 ? '#10b981' : healthScore >= 40 ? '#f59e0b' : '#ef4444'} strokeWidth="3" r="16"
+                strokeDasharray={`${healthScore * 1.005} 100`} strokeLinecap="round" />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-xl font-bold text-slate-800">{healthScore}</span>
+            </div>
+          </div>
+          <div className="text-[11px] text-slate-400 mt-2">{healthScore >= 70 ? 'Good posture' : healthScore >= 40 ? 'Needs attention' : 'High risk exposure'}</div>
+        </div>
+
+        {/* What-If */}
+        <div className="bg-white border border-slate-200 rounded-lg p-4">
+          <div className="flex items-center gap-2">
+              <div className="text-[11px] font-bold text-slate-500 uppercase">What-If: Fix Top 3 Patterns</div>
+              {resolvedFlags && resolvedFlags.size > 0 && (
+                <span className="text-[11px] bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-bold">{resolvedFlags.size} resolved</span>
+              )}
+            </div>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-400">Critical flags:</span>
+              <span className="font-bold text-red-600">{currentCritical}</span>
+              <span className="text-slate-300">→</span>
+              <span className="font-bold text-emerald-600">{criticalAfterFix}</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-400">Avg risk score:</span>
+              <span className="font-bold text-orange-600">{currentAvgScore.toFixed(1)}</span>
+              <span className="text-slate-300">→</span>
+              <span className="font-bold text-emerald-600">{avgScoreAfterFix.toFixed(1)}</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="text-slate-400">Flags eliminated:</span>
+              <span className="font-bold text-teal-600">{flagsToEliminate}</span>
+              <span className="text-slate-400">of {allFlags.length}</span>
+            </div>
+            {resolvedFlags && resolvedFlags.size >= flagsToEliminate && (
+              <div className="mt-3 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                ✓ All top patterns resolved ({resolvedFlags.size} flags fixed)
+              </div>
+            )}
+            <button
+              onClick={() => { onSetFocusFields?.(top3.map((p) => p.field)); onSwitchTab?.('work-queue') }}
+              className="mt-3 w-full text-[11px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg py-2.5 transition"
+            >
+              Address top patterns in Work Queue →
+            </button>
+          </div>
+        </div>
+
+        {/* Expiring soon */}
+        <div className="bg-white border border-slate-200 rounded-lg p-4">
+          <div className="text-[11px] font-bold text-slate-500 uppercase mb-2">Expiring &lt; 90 Days</div>
+          {(() => {
+            const today = new Date().toISOString().slice(0, 10)
+            const in90 = allContracts.filter((c) => c.expiryDate && c.expiryDate > today && c.expiryDate < '2026-01-14')
+            if (in90.length === 0) return <div className="text-xs text-slate-400">None in 90-day window</div>
+            return in90.slice(0, 3).map((c) => (
+              <div key={c.num} className="text-xs text-slate-600 flex items-center gap-2 py-0.5">
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                #{c.num} {c.displayName}
+                <span className="text-slate-400 ml-auto">{c.expiryDate}</span>
+              </div>
+            ))
+          })()}
+        </div>
+      </div>
+
+      {/* Systemic Patterns */}
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div className="bg-slate-50 border-b border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600">
+          Systemic Patterns <span className="font-normal text-slate-400">({systemicPatterns.length} detected — same issue across 3+ contracts)</span>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {systemicPatterns.map((p) => (
+            <div key={p.field} className="px-5 py-4">
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${p.hasCritical ? 'bg-red-100 text-red-700' : p.hasHigh ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                  {p.hasCritical ? 'CRITICAL' : p.hasHigh ? 'HIGH' : 'MEDIUM'}
+                </span>
+                <span className="text-xs font-bold text-slate-800">{p.field.replace(/_/g, ' ')}</span>
+                <span className="text-[11px] text-slate-400 ml-auto">{p.count} flags · {p.contractNums.length} contracts</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-2">
+                {p.contractNums.slice(0, 6).map((n) => (
+                  <button key={n} onClick={() => { const c = allContracts.find((cc) => cc.num === n); if (c) onJumpToContract?.(c) }} className="bg-slate-100 hover:bg-teal-100 text-teal-700 rounded px-1.5 text-[11px] font-medium cursor-pointer transition">#{n}</button>
+                ))}
+                {p.contractNums.length > 6 && <span>+{p.contractNums.length - 6} more</span>}
+                <button onClick={() => onSwitchTab?.('risk-register')} className="ml-2 text-[11px] font-bold text-teal-600 hover:text-teal-800 hover:underline">View All →</button>
+              </div>
+            </div>
+          ))}
+          {systemicPatterns.length === 0 && (
+            <div className="px-4 py-6 text-center text-xs text-slate-400">No systemic patterns detected. Each flag is unique to a single contract.</div>
+          )}
+        </div>
+      </div>
+
+      {/* Prevention Playbook */}
+      <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+        <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 text-xs font-bold text-slate-600">
+          Prevention Playbook <span className="font-normal text-slate-400">(prioritized actions to prevent recurrence)</span>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {playbook.map((item) => (
+            <div key={item.priority} className="px-5 py-4 flex items-start gap-3.5">
+              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 ${
+                item.priority === 1 ? 'bg-red-100 text-red-700' : item.priority === 2 ? 'bg-orange-100 text-orange-700' : 'bg-slate-100 text-slate-600'
+              }`}>{item.priority}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-bold text-slate-800">{item.pattern.replace(/_/g, ' ')}</div>
+                <div className="text-[11px] text-slate-600 mt-0.5">{item.action}</div>
+                <div className="flex items-center gap-3 mt-1.5">
+                  <span className="text-[11px] text-teal-600 font-medium">Impact: {item.impact}</span>
+                  <span className="text-[11px] text-slate-400">Affects: {item.affected} contracts</span>
+                </div>
+                <button
+                  onClick={() => onSwitchTab?.('work-queue')}
+                  className="mt-2 text-[11px] font-medium text-teal-600 hover:text-teal-800"
+                >
+                  → Address in Work Queue
+                </button>
+              </div>
+            </div>
+          ))}
+          {playbook.length === 0 && (
+            <div className="px-4 py-6 text-center text-xs text-slate-400">No systemic issues to prevent. Maintain current controls.</div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer note */}
+      <div className="bg-teal-50 border border-teal-200 rounded p-3 text-[11px] text-teal-700">
+        <b>How this works:</b> The engine scans all {allContracts.length} monitored contracts, groups flags by field, and identifies patterns affecting 3+ documents. 
+        Systemic patterns indicate <b>process gaps</b> (not individual contract errors), so the recommendation targets the <b>control</b>, not the document. 
+        This is the difference between reactive flagging and proactive risk prevention.
+      </div>
+    </div>
+  )
+}
+
+
+
+// ── AI Resolution Proposals (simulated LLM output) ──────────────────────────
+function getAIProposal(field: string, contractName: string): string {
+  const proposals: Record<string, string> = {
+    'expiry_date': `Add explicit termination clause:\n"This agreement shall expire on [DATE] unless renewed in writing 60 days prior to expiry. Failure to renew constitutes automatic termination."\n\n[Ref: ${contractName} §8.2]`,
+    'no_phi_clause': `Insert PHI protection clause per HIPAA §164.502:\n"Neither party shall disclose, use, or permit access to protected health information except as required by law or as expressly authorized in writing by the other party."\n\n[Ref: ${contractName} - New §12]`,
+    'breach_notification': `Add data breach notification requirement:\n"In the event of a security incident or data breach, the receiving party shall notify the disclosing party within 48 hours of discovery, including nature of breach, records affected, and remediation steps taken."\n\n[Ref: ${contractName} §15.3]`,
+    'signatures': `Execute missing signature block:\n"Second signatory: [Name, Title] — to be obtained from [Department] within 5 business days.\n\n[Ref: ${contractName} signature page]`,
+    'auto_renewal': `Add auto-renewal safeguard:\n"Either party may opt out of auto-renewal by written notice no fewer than 90 days prior to the renewal date. Absent such notice, the agreement renews for successive 1-year terms."\n\n[Ref: ${contractName} §10.1]`,
+  }
+  // Match by substring
+  for (const [key, val] of Object.entries(proposals)) {
+    if (field.includes(key) || key.includes(field)) return val
+  }
+  // Generic fallback
+  return `Update ${contractName} to address: "${field}"\n\nProposed clause:\n"[To be drafted by Legal — reference HIROC category and applicable regulatory requirement]"\n\n[Ref: ${contractName} — pending legal review]`
+}
+
+// Local-LLM remediation draft (Ollama via /api/ai-proposal, server.py — runs on this machine).
+// Resolves to generated proposal text; throws when the engine is offline or output unusable,
+// in which case the modal falls back to the standard clause library (getAIProposal), labelled as such.
+function aiProposalDraft(p: { flag_field: string; flag_if?: string; doc_num: number; doc_name: string; doc_type: string; severity: string }): Promise<string> {
+  return fetch('/api/ai-proposal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) })
+    .then((res) => res.json())
+    .then((d: { ok: boolean; error?: string; data?: { proposal: string; rationale: string } }) => {
+      if (!d.ok || !d.data) throw new Error(d.error || 'AI unavailable')
+      return `${d.data.proposal}\n\nWhy it matters: ${d.data.rationale}`.trim()
+    })
+}
+
+// ── Process Wizard (standalone, used from Work Queue) ──────────────────────
+function ProcessWizardInner({ link, onDone, onComplete }: { link: DocLink; onDone: () => void; onComplete?: (linkId: string) => void }) {
+  const [step, setStep] = useState(() => {
+    const steps = ['Detected', 'Acknowledged', 'Fixing', 'Verified', 'Closed']
+    return Math.max(0, steps.indexOf(link.status || 'Detected'))
+  })
+  const STEPS = ['Detected', 'Acknowledged', 'Fixing', 'Verified', 'Closed']
+
+  return (
+    <div>
+      {/* 5 step boxes */}
+      <div className="flex items-center gap-1 mb-5">
+        {STEPS.map((s, i) => (
+          <button key={s} onClick={() => setStep(i)}
+            className={`flex-1 px-2 py-2.5 rounded-md text-[11px] font-bold text-center border transition-all ${
+              i === step ? 'bg-teal-100 text-teal-800 border-teal-300 ring-2 ring-teal-200' :
+              i < step ? 'bg-teal-50 text-teal-600 border-teal-200' :
+              'bg-white text-slate-400 border-slate-200'
+            }`}>
+            {i + 1}. {s}
+          </button>
+        ))}
+      </div>
+
+      {/* Current step detail */}
+      <div className="bg-slate-50 rounded-lg p-4 mb-4">
+        <div className="text-xs font-bold text-slate-700 mb-2">{STEPS[step]} — {link.riskIfNotUpdated}</div>
+        {step === 0 && <div className="text-xs text-slate-500">System detected a gap between <b>{link.sourceClause}</b> and <b>{link.targetName}</b>. Review the before/after below.</div>}
+        {step === 1 && <div className="text-xs text-slate-500">You acknowledge this gap exists. Proceed to fix.</div>}
+        {step === 2 && (
+          <div className="space-y-3">
+            <div>
+              <div className="text-[11px] font-bold text-red-500 uppercase mb-1">Current text (target doc)</div>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-slate-700 font-mono whitespace-pre-wrap">
+                {link.beforeText || "No prior text recorded"}
+              </div>
+            </div>
+            <div>
+              <div className="text-[11px] font-bold text-emerald-600 uppercase mb-1">Required text (after amendment)</div>
+              <textarea
+                defaultValue={link.afterText || link.changeDescription || "Update to match source clause..."}
+                rows={3}
+                className="w-full bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+              />
+            </div>
+            <div className="text-[11px] text-slate-400">Edit the required text above, then advance to Verify.</div>
+          </div>
+        )}
+        {step === 3 && <div className="text-xs text-emerald-600">Verify the fix. Both documents are now in sync.</div>}
+        {step === 4 && <div className="text-xs text-slate-500">Workflow complete. No further action needed.</div>}
+      </div>
+
+      {/* Before / After (hidden during Fixing step which has its own editor) */}
+      {step >= 1 && step !== 3 && step <= 4 && (
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+            <div className="text-[11px] font-bold text-red-600 uppercase mb-1">Before (current)</div>
+            <div className="text-[11px] text-slate-700">{link.beforeText || "No prior text"}</div>
+          </div>
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+            <div className="text-[11px] font-bold text-emerald-600 uppercase mb-1">After (required)</div>
+            <div className="text-[11px] text-slate-700">{link.afterText || "Update to match source"}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Nav buttons */}
+      <div className="flex items-center justify-between">
+        <button onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}
+          className="px-4 py-2 text-sm font-medium text-slate-600 bg-slate-100 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-200 transition">
+          ← Back
+        </button>
+        <button
+          onClick={() => { if (step < 4) setStep(step + 1); else { onComplete?.('x-' + link.sourceNum + '-' + link.targetName); onDone() } }}
+          className="px-5 py-2 text-sm font-bold text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition">
+          {step < 4 ? `${STEPS[step + 1]} →` : '✓ Complete'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function App() {
+  const { toasts, show } = useToast()
+  const [activeTab, setActiveTab] = useState<TabId>(() => {
+    // ?tab= deep-link for demo links (work-queue | risk-register | contracts | template-match | deadlines | cross-refs | smart-filing | insights)
+    const p = new URLSearchParams(window.location.search).get('tab')
+    const valid: string[] = ['work-queue', 'risk-register', 'contracts', 'template-match', 'deadlines', 'cross-refs', 'smart-filing', 'insights']
+    return p && valid.includes(p) ? (p as TabId) : 'work-queue'
+  })
+  const [selected, setSelected] = useState<ContractDoc | null>(null)
+  // When the detail panel opens, align it with the Y of the row the user clicked
+  const detailAsideRef = useRef<HTMLElement | null>(null)
+  const lastClickY = useRef(0)
+  useEffect(() => {
+    if (selected && detailAsideRef.current) {
+      // content starts below the 56px top bar + ~44px sticky panel header
+      detailAsideRef.current.scrollTop = Math.max(0, lastClickY.current - 100)
+    }
+  }, [selected])
+  // ── RBAC: active role (persisted; ?role= deep-link override for demo links) ──
+  const [roleId, setRoleId] = useState<string>(() => {
+    const saved = localStorage.getItem('sl_role')
+    if (saved) return saved
+    const p = new URLSearchParams(window.location.search).get('role')
+    return p && ROLES.some((r) => r.id === p) ? p : 'legal'
+  })
+  const role = ROLES.find((r) => r.id === roleId) ?? ROLES[0]
+  const [approvedDestruction, setApprovedDestruction] = useState<Set<string>>(() => {
+    try { const r = localStorage.getItem('sl_approved_destruction'); return r ? new Set(JSON.parse(r)) : new Set() } catch { return new Set() }
+  })
+  const [disposedPaper, setDisposedPaper] = useState<Set<string>>(() => {
+    try { const r = localStorage.getItem('sl_paper_disposed'); return r ? new Set(JSON.parse(r)) : new Set() } catch { return new Set() }
+  })
+  const setRole = (id: string) => { setRoleId(id); localStorage.setItem('sl_role', id) }
+  const [filterType, setFilterType] = useState('All')
+  const [filterRisk, setFilterRisk] = useState('All')
+  const [filterDept, setFilterDept] = useState('All')
+  const [filterExpiry, setFilterExpiry] = useState('All')
+  const [aiOpen, setAiOpen] = useState(false) // top-right AI copilot
+  // Draggable launcher icon: null = default spot in the header; otherwise a fixed chip at {x,y}
+  const [aiIconPos, setAiIconPos] = useState<{ x: number; y: number } | null>(null)
+  const aiIconRef = useRef<HTMLButtonElement>(null)
+  const aiIconDrag = useRef<{ sx: number; sy: number; x: number; y: number; w: number; h: number; moved: boolean } | null>(null)
+
+  const onAiIconMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return
+    const rect = aiIconRef.current?.getBoundingClientRect()
+    const base = aiIconPos ?? (rect ? { x: rect.left, y: rect.top } : { x: window.innerWidth - 130, y: 14 })
+    aiIconDrag.current = { sx: e.clientX, sy: e.clientY, x: base.x, y: base.y, w: rect?.width ?? 104, h: rect?.height ?? 34, moved: false }
+    const onMove = (ev: MouseEvent) => {
+      const d = aiIconDrag.current
+      if (!d) return
+      const dx = ev.clientX - d.sx
+      const dy = ev.clientY - d.sy
+      if (Math.abs(dx) + Math.abs(dy) > 4) d.moved = true
+      if (d.moved) {
+        const vx = Math.min(Math.max(8, d.x + dx), window.innerWidth - d.w - 8)
+        const vy = Math.min(Math.max(8, d.y + dy), window.innerHeight - d.h - 8)
+        setAiIconPos({ x: vx, y: vy })
+      }
+    }
+    const onUp = () => {
+      const d = aiIconDrag.current
+      aiIconDrag.current = null
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+      if (d && !d.moved) setAiOpen((v) => !v) // a clean click still toggles the panel
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [processLink, setProcessLink] = useState<DocLink | null>(null)
+  const [resolvedLog, setResolvedLog] = useState<{ id: string; label: string; time: string; type: string; who?: string }[]>(() => {
+    try { const r = localStorage.getItem('resolvedLog'); return r ? JSON.parse(r) : [] } catch { return [] }
+  })
+  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: (note?: string) => void; showNote?: boolean; defaultNote?: string; aiDraft?: () => Promise<string> } | null>(null)
+  const [focusFields, setFocusFields] = useState<string[]>([])
+  // Persisted state
+  const [resolvedFlags, setResolvedFlags] = useState<Set<string>>(() => {
+    try { const r = localStorage.getItem('resolvedFlags'); return r ? new Set(JSON.parse(r)) : new Set() } catch { return new Set() }
+  })
+  const [completedLinks, setCompletedLinks] = useState<Set<string>>(() => {
+    try { const r = localStorage.getItem('completedLinks'); return r ? new Set(JSON.parse(r)) : new Set() } catch { return new Set() }
+  })
+  const [createdTasks, setCreatedTasks] = useState<{ id: string; label: string; contractNum: number; time: string }[]>(() => {
+    try { const r = localStorage.getItem('createdTasks'); return r ? JSON.parse(r) : [] } catch { return [] }
+  })
+  const markFlagResolved = (flagId: string) => {
+    setResolvedFlags((prev) => { const next = new Set(prev); next.add(flagId); localStorage.setItem('resolvedFlags', JSON.stringify([...next])); return next })
+    const parts = flagId.split('-')
+    const fieldLabel = parts.length > 2 ? parts.slice(2).join('-').replace(/_/g, ' ') : flagId
+    const docNum = parts[1] ? '#' + parts[1] : ''
+    const now = new Date()
+    const dateTime = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    setResolvedLog((prev) => {
+      // v45.33 · G1 — record WHO resolved it (the active role's persona, not a hardcoded "You")
+      const entry = { id: flagId, label: `${fieldLabel} → ${docNum}`, who: role.user, time: dateTime, type: flagId.startsWith('x-') ? 'workflow' : 'flag' }
+      const next = [entry, ...prev]
+      localStorage.setItem('resolvedLog', JSON.stringify(next))
+      return next
+    })
+    const dn = parts[1] ? Number(parts[1]) : undefined
+    logEvent('resolve', `${fieldLabel} resolved → ${docNum || 'n/a'}`, dn)
+    // v45.33 · G4 — tell the user where the result went (the item leaves the open list but the record stays)
+    show('Flag resolved ✓ — see the green Resolved strip at the top of Work Queue', 'success')
+  }
+  const completeLink = (linkId: string) => {
+    setCompletedLinks((prev) => { const next = new Set(prev); next.add(linkId); localStorage.setItem('completedLinks', JSON.stringify([...next])); return next })
+    // v45.33 · G3 — cross-ref / workflow completions leave a handoff record too
+    // (previously only a toast, so "who verified this cross-reference" was a blank in the audit trail)
+    const now = new Date()
+    const dateTime = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    setResolvedLog((prev) => {
+      const entry = { id: linkId, label: `Cross-ref verified → #${linkId.replace(/^x-/, '')}`, who: role.user, time: dateTime, type: 'workflow' }
+      const next = [entry, ...prev]
+      localStorage.setItem('resolvedLog', JSON.stringify(next))
+      return next
+    })
+    logEvent('resolve', `Cross-reference verification completed → #${linkId.replace(/^x-/, '')}`, Number(linkId.split('-')[1]))
+    show('Cross-ref verified ✓ — recorded in the Resolved log and activity feed', 'success')
+  }
+  void setCreatedTasks
+
+  const today = new Date(DEMO_TODAY)
+  // ── Smart Filing uploads, lifted to app root: persisted and cascaded into
+  //    every view (Documents list, Work Queue, Risk Register, KPIs, criteria) ──
+  const [uploads, setUploads] = useState<UploadedDoc[]>(() => {
+    try { return JSON.parse(localStorage.getItem('ccdm_uploads') || '[]') as UploadedDoc[] } catch { return [] }
+  })
+  const addUploads = (docs: UploadedDoc[]) => {
+    setUploads((prev) => {
+      let nextNum = prev.reduce((m, d) => Math.max(m, d.doc_num || 0), 899)
+      const stamped = docs.map((d) => (d.doc_num ? d : { ...d, doc_num: ++nextNum }))
+      const next = [...stamped, ...prev]
+      localStorage.setItem('ccdm_uploads', JSON.stringify(next))
+      return next
+    })
+    docs.forEach((d) => logEvent('file', `Smart Filing: ${d.filename} classified as ${d.document_type || 'Unknown'} (verify filing to confirm)`, undefined))
+  }
+  const liveContracts = useMemo<ContractDoc[]>(
+    () => [...contracts, ...uploads.map((u, i) => uploadToContractDoc(u, i))],
+    [uploads]
+  )
+
+  // ── v45.31 · Retired control (10/30 meeting: "no longer relevant" manual tag) ──
+  // Retired docs stay in the archive (retention/disposal unaffected) but are filtered
+  // out of alerting surfaces (KPIs, Work Queue, Risk Register, Deadlines) so users
+  // aren't confused by old flags on out-of-scope documents.
+  const [retiredNums, setRetiredNums] = useState<Set<number>>(() => {
+    const s = new Set<number>(contracts.filter((c) => c.retired).map((c) => c.num))
+    try { JSON.parse(localStorage.getItem('southlake_retired') || '[]').forEach((n: number) => s.add(n)) } catch { /* demo */ }
+    return s
+  })
+  const toggleRetired = (num: number) => {
+    setRetiredNums((prev) => {
+      const s = new Set(prev)
+      if (s.has(num)) s.delete(num); else s.add(num)
+      localStorage.setItem('southlake_retired', JSON.stringify([...s]))
+      return s
+    })
+    const isRetired = retiredNums.has(num)
+    show(isRetired ? `#${num} unretired — back in alert scope` : `#${num} retired — out of scope, hidden from alerts`, 'info')
+    logEvent(isRetired ? 'unretire' : 'retire', isRetired ? `#${num} unretired — back in alert scope` : `#${num} retired — out of alert scope (kept in archive)`, num)
+  }
+
+  // ── v45.31 · Deferred "In Progress" control (10/30 meeting) ──
+  // A flagged item in active remediation can be deferred 30/60/90 days: it stops
+  // alerting (excluded from counts) but stays visible under the "Deferred" filter,
+  // and auto-reverts to open when the window passes.
+  const [deferMap, setDeferMap] = useState<Record<string, { until: string; note?: string }>>(() => {
+    const m: Record<string, { until: string; note?: string }> = {}
+    const day = 86400000
+    for (const [id, d] of Object.entries(SEED_DEFERRED)) m[id] = { until: new Date(Date.now() + d.days * day).toISOString(), note: d.note }
+    try { Object.assign(m, JSON.parse(localStorage.getItem('southlake_defers') || '{}')) } catch { /* demo */ }
+    return m
+  })
+  const deferItem = (id: string, days: number, note?: string) => {
+    setDeferMap((prev) => {
+      const m = { ...prev, [id]: { until: new Date(Date.now() + days * 86400000).toISOString(), note: note || `Deferred ${days} days — remediation in progress` } }
+      localStorage.setItem('southlake_defers', JSON.stringify(m))
+      return m
+    })
+    show('Item deferred — stops alerting until the window closes, then auto-reverts to open', 'info')
+    const dn = Number(id.split('-')[1])
+    logEvent('defer', `${id.split('-').slice(2).join('-').replace(/_/g, ' ')} deferred ${days}d → #${dn || '?'}${note ? ` · reason: ${note}` : ''}`, id.startsWith('f-') ? dn : undefined)
+  }
+  const clearDefer = (id: string) => {
+    setDeferMap((prev) => {
+      const m = { ...prev }
+      delete m[id]
+      localStorage.setItem('southlake_defers', JSON.stringify(m))
+      return m
+    })
+    show('Deferral cleared — item is open again', 'info')
+    const dn = Number(id.split('-')[1])
+    logEvent('defer-clear', `${id.split('-').slice(2).join('-').replace(/_/g, ' ')} deferral cleared → #${dn || '?'} open again`, id.startsWith('f-') ? dn : undefined)
+  }
+  // ── v45.32 · paperless-inspired batch: Notes & Activity · Bulk actions ·
+  //    Saved views · Drag-anywhere filing · Archive health check ─────────────
+  // Activity feed: every action the system/user took on the portfolio (persisted, newest first, capped)
+  const [events, setEvents] = useState<{ ts: string; text: string; kind: string; docNum?: number; who?: string }[]>(() => {
+    try { return JSON.parse(localStorage.getItem('ccdm_activity') || '[]') } catch { return [] }
+  })
+  const logEvent = (kind: string, text: string, docNum?: number) => {
+    setEvents((prev) => {
+      const now = new Date()
+      // v45.33 · G1 — handoff record: every activity entry carries WHO acted (role persona), not just when
+      const entry = { ts: now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), text, kind, docNum, who: role.user }
+      const next = [entry, ...prev].slice(0, 80)
+      localStorage.setItem('ccdm_activity', JSON.stringify(next))
+      return next
+    })
+  }
+  // Per-document notes (legal margin annotations)
+  const [notes, setNotes] = useState<Record<number, { ts: string; text: string; who: string }[]>>(() => {
+    try { return JSON.parse(localStorage.getItem('ccdm_notes') || '{}') } catch { return {} }
+  })
+  const addNote = (num: number, text: string, silent = false) => {
+    setNotes((prev) => {
+      const now = new Date()
+      const entry = { ts: now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), text, who: role.user || 'You' }
+      const next = { ...prev, [num]: [entry, ...(prev[num] || [])] }
+      localStorage.setItem('ccdm_notes', JSON.stringify(next))
+      return next
+    })
+    logEvent('note', `Note added to #${num} — “${text.slice(0, 48)}${text.length > 48 ? '…' : ''}”`, num)
+    if (!silent) show(`Note added to #${num}`, 'success')
+  }
+
+  // Bulk selection + bulk operations on the Documents tab (paperless-style multi-select)
+  const [bulkSel, setBulkSel] = useState<Set<number>>(new Set())
+  const bulkToggle = (n: number) => setBulkSel((prev) => { const s = new Set(prev); if (s.has(n)) s.delete(n); else s.add(n); return s })
+  const markFlagResolvedSilent = (id: string) => {
+    setResolvedFlags((prev) => { const next = new Set(prev); next.add(id); localStorage.setItem('resolvedFlags', JSON.stringify([...next])); return next })
+    const parts = id.split('-')
+    const fieldLabel = parts.length > 2 ? parts.slice(2).join('-').replace(/_/g, ' ') : id
+    const docNum = parts[1] ? '#' + parts[1] : ''
+    const now = new Date()
+    setResolvedLog((prev) => {
+      const entry = { id, label: `${fieldLabel} → ${docNum}`, who: 'You (bulk)', time: now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), type: 'flag' }
+      const next = [entry, ...prev]
+      localStorage.setItem('resolvedLog', JSON.stringify(next))
+      return next
+    })
+  }
+  const bulkResolve = () => {
+    const ids: string[] = []
+    for (const c of bulkDocs) for (const f of c.flags) if (f.status === 'open' && !resolvedFlags.has(`f-${c.num}-${f.field}`)) ids.push(`f-${c.num}-${f.field}`)
+    if (ids.length === 0) { show('No open flags on the selected documents — nothing to resolve', 'info'); setBulkSel(new Set()); return }
+    ids.forEach((id) => { markFlagResolvedSilent(id); logEvent('resolve', `${id.split('-').slice(2).join('-').replace(/_/g, ' ')} resolved → #${id.split('-')[1]} (bulk)`, Number(id.split('-')[1])) })
+    show(`Resolved ${ids.length} flag${ids.length > 1 ? 's' : ''} across ${bulkDocs.length} document${bulkDocs.length > 1 ? 's' : ''} ✓ — recorded in the green Resolved strip (Work Queue)`, 'success')
+    setBulkSel(new Set())
+  }
+  const bulkRefile = async (toCat: string) => {
+    if (!toCat) return
+    let moved = 0
+    let skipped = 0
+    for (const c of bulkDocs) {
+      const filename = c.isUpload ? c.name : (c.filePath ? String(c.filePath).split('/').pop() : '')
+      if (!filename) { skipped++; continue }
+      const segs = String(c.filePath || '').split('/').filter(Boolean)
+      const fromCat = c.isUpload && c.filePath?.startsWith('data/') ? segs[segs.length - 3] : segs[0] || 'Unknown'
+      try {
+        const r = await fetch('/api/re-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, from_category: fromCat, to_category: toCat }),
+        })
+        const d = await r.json()
+        if (d.path || d.status === 'filed') {
+          moved++
+          if (c.isUpload && d.path) setUploads((prev) => prev.map((u) => (u.filename === filename ? { ...u, filed_to: d.path } : u)))
+          logEvent('file', `#${c.num} re-filed to ${toCat} (bulk)`, c.num)
+        } else skipped++
+      } catch { skipped++ }
+    }
+    if (moved > 0) show(`Re-filed ${moved} document${moved > 1 ? 's' : ''} to ${toCat} ✓${skipped ? ` · ${skipped} skipped (no on-disk file or offline)` : ''}`, 'success')
+    else if (skipped > 0) show('No on-disk files to move — archive service offline or the selected documents have no filed file', 'warn')
+    setBulkSel(new Set())
+  }
+  const bulkNote = (text: string) => {
+    if (!text.trim() || bulkDocs.length === 0) return
+    bulkDocs.forEach((c) => addNote(c.num, text.trim(), true))
+    show(`Note added to ${bulkDocs.length} document${bulkDocs.length > 1 ? 's' : ''} ✓`, 'success')
+    setBulkSel(new Set())
+    setBulkNoteText('')
+  }
+  const [bulkNoteText, setBulkNoteText] = useState('')
+  // v45.32 — bulk defer of Work Queue flag items (per-item 30/60/90d windows, each auto-reverts)
+  const bulkDefer = (ids: string[], days: number, note?: string) => {
+    ids.forEach((id) => deferItem(id, days, note))
+    show(`${ids.length} item${ids.length > 1 ? 's' : ''} deferred for ${days} days${note ? ` — reason recorded: “${note}”` : ''} (alerting paused, auto-reverts to open after the window)`, 'success')
+  }
+
+  // Saved views (paperless-style "save the current filter combo"): docs tab = the 4 sidebar filters,
+  // WQ = active summary-tile filter + document-level expiry filter. Stored in localStorage, applied from the sidebar.
+  type SavedView = { id: string; name: string; kind: 'docs' | 'wq'; filters: Record<string, string> }
+  const [savedViews, setSavedViews] = useState<SavedView[]>(() => {
+    try { return JSON.parse(localStorage.getItem('ccdm_savedviews') || '[]') } catch { return [] }
+  })
+  const upsertView = (v: SavedView) => {
+    setSavedViews((prev) => { const next = [...prev, v]; localStorage.setItem('ccdm_savedviews', JSON.stringify(next)); return next })
+    show(`View “${v.name}” saved — find it in the sidebar`, 'success')
+  }
+  const applySavedView = (v: SavedView) => {
+    if (v.kind === 'docs') {
+      setFilterType(v.filters.type || 'All'); setFilterRisk(v.filters.risk || 'All'); setFilterDept(v.filters.dept || 'All'); setFilterExpiry(v.filters.expiry || 'All')
+      setActiveTab('contracts')
+    } else {
+      setFilterExpiry(v.filters.expiry || 'All')
+      setWqViewReq({ filter: v.filters.tile || 'all', ts: Date.now() })
+      setActiveTab('work-queue')
+    }
+    show(`View “${v.name}” applied`, 'info')
+  }
+  const deleteSavedView = (id: string) => setSavedViews((prev) => { const next = prev.filter((x) => x.id !== id); localStorage.setItem('ccdm_savedviews', JSON.stringify(next)); return next })
+  const [savingView, setSavingView] = useState<'docs' | 'wq' | null>(null)
+  const [viewName, setViewName] = useState('')
+  // WQ's internal tile-filter value, kept reachable for "save view" without lifting the state
+  const wqViewTileRef = { current: 'all' as string }
+  const setWqViewTile = (v: string) => { wqViewTileRef.current = v }
+  const [wqViewReq, setWqViewReq] = useState<{ filter: string; ts: number } | null>(null)
+  const commitViewName = (kind: 'docs' | 'wq') => {
+    const name = viewName.trim() || (kind === 'docs' ? `Docs · ${filterType}/${filterExpiry}` : `WQ · ${wqViewTileRef.current}`)
+    if (kind === 'docs') upsertView({ id: 'v' + Date.now(), name, kind, filters: { type: filterType, risk: filterRisk, dept: filterDept, expiry: filterExpiry } })
+    else upsertView({ id: 'v' + Date.now(), name, kind, filters: { tile: wqViewTileRef.current, expiry: filterExpiry } })
+    setSavingView(null); setViewName('')
+  }
+  // v45.32 — WQ supplies its own name + tile; upsert under both keys
+  const commitWqView = (name: string, tile: string) => upsertView({ id: 'v' + Date.now(), name, kind: 'wq', filters: { tile, expiry: filterExpiry } })
+
+  // Drag files anywhere on screen → stage them into Smart Filing (one clear upload path)
+  const [dragging, setDragging] = useState(false)
+  const [incomingFiles, setIncomingFiles] = useState<File[] | null>(null)
+  useEffect(() => {
+    let depth = 0
+    const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types || []).includes('Files')
+    const enter = (e: DragEvent) => { if (!hasFiles(e)) return; e.preventDefault(); depth++; setDragging(true) }
+    const leave = (e: DragEvent) => { if (!hasFiles(e)) return; depth = Math.max(0, depth - 1); if (depth === 0) setDragging(false) }
+    const over = (e: DragEvent) => { if (hasFiles(e)) e.preventDefault() }
+    const drop = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      depth = 0; setDragging(false)
+      const files = Array.from(e.dataTransfer?.files || [])
+      if (files.length > 0) {
+        setIncomingFiles(files)
+        setActiveTab('smart-filing')
+        show(`${files.length} file${files.length > 1 ? 's' : ''} staged in Smart Filing — verify the category to file it`, 'info')
+      }
+    }
+    window.addEventListener('dragenter', enter)
+    window.addEventListener('dragleave', leave)
+    window.addEventListener('dragover', over)
+    window.addEventListener('drop', drop)
+    return () => {
+      window.removeEventListener('dragenter', enter)
+      window.removeEventListener('dragleave', leave)
+      window.removeEventListener('dragover', over)
+      window.removeEventListener('drop', drop)
+    }
+  }, [])
+
+  // Archive health check (paperless-style sanity checker, verified from disk via /api/archive-check)
+  const [archCheck, setArchCheck] = useState<{ loading: boolean; data: null | { total_files: number; total_size_mb: number; healthy: boolean; categories: Record<string, number>; problems: string[]; quarantined: string[]; reasons: string[] } }>({ loading: false, data: null })
+  const runArchiveCheck = () => {
+    setArchCheck({ loading: true, data: null })
+    fetch('/api/archive-check')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d) => setArchCheck({ loading: false, data: d }))
+      .catch(() => { setArchCheck({ loading: false, data: null }); show('Archive check offline — start the API server (port 8000)', 'warn') })
+  }
+
+  // ── v45.33 · G5 — shared handoff record on the hospital server ("把数据放到服务器里") ──
+  // Resolutions / cross-ref completions / defers (+ reasons) / notes / activity feed sync
+  // to one server-side file so the next employee — different browser or machine — opens
+  // the system to the same record. localStorage stays the fast offline path; the server
+  // is the system of record when reachable (dev: vite proxies /api → :8000; the static
+  // GH-Pages build has no backend and degrades to local-only, shown honestly in the UI).
+  const [syncState, setSyncState] = useState<'idle' | 'synced' | 'offline'>('idle')
+  const [hydrated, setHydrated] = useState(false) // v45.33 · G5 — upsync must not fire before the server record has been read
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/state')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((s) => {
+        if (cancelled) return
+        // merge server into local (union for sets, server-wins per key for maps, dedupe for logs)
+        setResolvedFlags((prev) => { const next = new Set([...prev, ...(s.resolvedFlags || [])]); localStorage.setItem('resolvedFlags', JSON.stringify([...next])); return next })
+        setCompletedLinks((prev) => { const next = new Set([...prev, ...(s.completedLinks || [])]); localStorage.setItem('completedLinks', JSON.stringify([...next])); return next })
+        setDeferMap((prev) => { const next = { ...prev, ...(s.defers || {}) }; localStorage.setItem('southlake_defers', JSON.stringify(next)); return next })
+        setNotes((prev) => { const next = { ...prev, ...(s.notes || {}) }; localStorage.setItem('ccdm_notes', JSON.stringify(next)); return next })
+        setEvents((prev) => {
+          const seen = new Set(prev.map((e) => e.ts + '|' + e.text))
+          const merged = [...(s.activity || []).filter((e: { ts: string; text: string }) => !seen.has(e.ts + '|' + e.text)), ...prev].slice(0, 80)
+          localStorage.setItem('ccdm_activity', JSON.stringify(merged))
+          return merged
+        })
+        setResolvedLog((prev) => {
+          const ids = new Set(prev.map((e) => e.id))
+          const merged = [...(s.resolvedLog || []).filter((e: { id: string }) => !ids.has(e.id)), ...prev]
+          localStorage.setItem('resolvedLog', JSON.stringify(merged))
+          return merged
+        })
+        setHydrated(true)
+      })
+      .catch(() => { if (!cancelled) { setSyncState('offline'); setHydrated(true) } })
+    return () => { cancelled = true }
+    // hydrate once on mount only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // debounced upsync: every handoff-relevant write lands on the server ~700ms after settling
+  useEffect(() => {
+    if (!hydrated) return
+    const t = setTimeout(() => {
+      fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resolvedFlags: [...resolvedFlags],
+          completedLinks: [...completedLinks],
+          defers: deferMap,
+          notes,
+          activity: events,
+          resolvedLog,
+        }),
+      })
+        .then((r) => setSyncState(r.ok ? 'synced' : 'offline'))
+        .catch(() => setSyncState('offline'))
+    }, 700)
+    return () => clearTimeout(t)
+  }, [hydrated, resolvedFlags, completedLinks, deferMap, notes, events, resolvedLog])
+  // G5 — "Reset all" also clears the shared server record so a fresh demo starts clean
+  const resetAllShared = () => {
+    fetch('/api/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resolvedFlags: [], completedLinks: [], defers: {}, notes: {}, activity: [], resolvedLog: [] }),
+    }).catch(() => {})
+  }
+
+  const filtered = liveContracts.filter((c) => {
+    if (filterType !== 'All' && c.type !== filterType) return false
+    if (filterRisk !== 'All' && c.riskLevel !== filterRisk) return false
+    if (filterDept !== 'All' && c.department !== filterDept) return false
+    // v45.31 — Retired: manual "no longer in use" tag; independent of expiry date
+    if (filterExpiry === 'Retired') return retiredNums.has(c.num)
+    if (filterExpiry !== 'All' && c.expiryDate) {
+      const exp = new Date(c.expiryDate)
+      const days = Math.ceil((exp.getTime() - today.getTime()) / 86400000)
+      if (filterExpiry === 'Expired' && days >= 0) return false
+      if (filterExpiry === '< 30d' && (days < 0 || days > 30)) return false
+      if (filterExpiry === '< 90d' && (days < 0 || days > 90)) return false
+      if (filterExpiry === '> 90d' && days <= 90) return false
+      if (filterExpiry === 'Archived' && retentionState(c).status !== 'elapsed') return false
+    }
+    return true
+  })
+
+  // ── RBAC: documents visible to the active role ──
+  const visible = filtered.filter((c) => canView(role, c))
+  const hiddenCount = filtered.length - visible.length
+  // v45.31 — alert-scope: visible docs minus retired (out of scope); alerts/KPIs use this,
+  // the Documents list keeps showing retired docs (greyed, filterable) so nothing disappears from the archive
+  const activeVisible = visible.filter((c) => !retiredNums.has(c.num))
+  const manageable = !!role && canManage(role)
+  // v45.32 — the currently selected documents for bulk operations (evaluated after `visible` exists)
+  const bulkDocs = visible.filter((c) => bulkSel.has(c.num))
+  // Demo resolution overlay: a flag resolved in Work Queue no longer counts as open
+  const visibleFlags2 = activeVisible.flatMap((c) => c.flags.map((f) => ({ f, num: c.num })))
+  const openFlagsCount = visibleFlags2.filter(({ f, num }) => f.status === 'open' && !resolvedFlags.has(`f-${num}-${f.field}`)).length
+  const criticalOpenCount = visibleFlags2.filter(({ f, num }) => f.severity === 'Critical' && f.status === 'open' && !resolvedFlags.has(`f-${num}-${f.field}`)).length
+  const remediatedCount = visibleFlags2.filter(({ f, num }) => f.status === 'remediated' || resolvedFlags.has(`f-${num}-${f.field}`)).length
+  const docCriteriaMet = (c: ContractDoc): number | null => {
+    const n = (CRITERIA_BY_TYPE[c.type] || []).length
+    if (n === 0) return null // no criteria checklist for this type (e.g. new uploads) → excluded from the average
+    const open = c.flags.filter((f) => f.status === 'open' && !resolvedFlags.has(`f-${c.num}-${f.field}`)).length
+    return Math.max(0, Math.min(1, 1 - open / n))
+  }
+  const critVals = visible.map(docCriteriaMet).filter((v): v is number => v !== null)
+  const avgCompliance = critVals.length > 0
+    ? Math.round(critVals.reduce((a, b) => a + b, 0) / critVals.length * 100)
+    : 0
+  const retentionAlertCount = activeVisible.filter((c) => retentionState(c).status !== 'retained').length
+  // v45.31 — deferral counts (for the KPI footnote): open flags currently inside a deferral window
+  const deferNow = new Date().getTime()
+  const deferredOpenCount = visibleFlags2.filter(({ f, num }) => {
+    const d = deferMap[`f-${num}-${f.field}`]
+    return f.status === 'open' && !resolvedFlags.has(`f-${num}-${f.field}`) && d && new Date(d.until).getTime() > deferNow
+  }).length
+  const retiredOpenCount = visible.flatMap((c) => c.flags.map((f) => ({ f, num: c.num }))).filter(({ f, num }) => retiredNums.has(num) && f.status === 'open' && !resolvedFlags.has(`f-${num}-${f.field}`)).length
+
+  // RBAC-aware RAG: withhold archive paths that belong to documents this role cannot view
+  const hiddenDocs = filtered.filter((c) => !canView(role, c))
+  const excludedPaths = Array.from(new Set(hiddenDocs.map((c) => String(c.filePath || c.type).split('/').slice(0, 2).join('/')))).map((p) => p.toLowerCase())
+
+  // ── Live context snapshot for the AI copilot (sent to /api/ai-chat, answered locally) ──
+  const botContext = (() => {
+    const lines = [
+      `Today (demo reference date): ${DEMO_TODAY}. Active role: ${role?.label || 'n/a'} — ${visible.length} of ${filtered.length} documents visible (${hiddenCount} hidden by role access).`,
+      `KPIs: ${openFlagsCount} open flags, ${criticalOpenCount} critical, ${remediatedCount} remediated, ${retentionAlertCount} retention alerts, criteria-met average ${avgCompliance}%.`,
+      hiddenCount > 0 ? `${hiddenCount} document(s) are HIDDEN from this role (restricted / PHI). If asked about them, state that the content is not viewable under '${role?.label}' (only the Legal role sees everything) — do not describe the content.` : 'All documents are viewable under this role.',
+      'Retention policy (PolicyStat #19415930 Schedule A): C21 contracts/MOU/NDA/procurement = life of agreement + 7 years (Legal Services); R12 research data-sharing = project expiry year + 7 years (Director of Research); R1/R7 clinical trials = completion + 15 years; litigation/FOI/PHI access holds (R1) block disposal until the matter closes; expired-but-in-retention documents may NOT be deleted yet.',
+    ]
+    for (const c of visible) {
+      const rs = retentionState(c)
+      const label = rs.status === 'elapsed' ? 'ARCHIVED — retention complete, discard-eligible'
+        : rs.status === 'hold' ? `EXPIRED but IN RETENTION — deletion not allowed yet, keep until ${rs.until}`
+        : c.expiryDate ? `ACTIVE — expires ${c.expiryDate}` : 'ACTIVE — no expiry date on file'
+      const open = c.flags.filter((f) => f.status === 'open' && !resolvedFlags.has(`f-${c.num}-${f.field}`))
+      const top = [...open].sort((a, b) => piaPriority(b) - piaPriority(a))[0]
+      lines.push(`#${c.num} ${c.displayName} [${c.type}] ${label} · ${open.length} open flag${open.length === 1 ? '' : 's'}${top ? ` (top: ${top.field} — ${String(top.flag_if).slice(0, 80)})` : ''}`)
+    }
+    return lines.join('\n')
+  })()
+
+  // Retention: approve discard (with confirmation) → persist
+  const approveDestruction = (c: ContractDoc) => {
+    const until = retentionState(c).until
+    setConfirmState({
+      title: `Approve discard of #${c.num} ${c.displayName}?`,
+      message: `Retention deadline (${until}) has passed. Approving routes this document to Records Management for destruction. This action is logged.`,
+      onConfirm: () => {
+        setApprovedDestruction((prev) => {
+          const next = new Set(prev)
+          next.add(String(c.num))
+          localStorage.setItem('sl_approved_destruction', JSON.stringify([...next]))
+          return next
+        })
+        show(`#${c.num} discard approved — routed to ${c.retentionOwner} (Records Management)`, 'success')
+        logEvent('dispose', `#${c.num} discard approved — routed to ${c.retentionOwner} (Records Management)`, c.num)
+      },
+      showNote: true,
+      defaultNote: 'Approved for discard per records schedule.',
+    })
+  }
+
+  // Paper disposal (item 4): destroy physical copies after digital discard is approved
+  const disposePaper = (c: ContractDoc) => {
+    const n = c.paper?.copies ?? 0
+    setConfirmState({
+      title: `Dispose ${n} paper ${n > 1 ? 'copies' : 'copy'} of #${c.num} ${c.displayName}?`,
+      message: `Location: ${c.paper?.location}. The digital record remains in the archive as an audit trail. Confirm physical destruction of all ${n} ${n > 1 ? 'copies' : 'copy'}. This action is logged.`,
+      onConfirm: () => {
+        setDisposedPaper((prev) => {
+          const next = new Set(prev)
+          next.add(String(c.num))
+          localStorage.setItem('sl_paper_disposed', JSON.stringify([...next]))
+          return next
+        })
+        show(`#${c.num} paper copies disposed (${n}) — digital audit record retained`, 'success')
+        logEvent('dispose', `#${c.num} ${n} paper copy/copies disposed — digital audit record retained`, c.num)
+      },
+      showNote: true,
+      defaultNote: 'Paper disposal verified against the location log.',
+    })
+  }
+
+  const [logged_in, setLoggedIn] = useState(() => localStorage.getItem('sl_auth') === '1' || new URLSearchParams(window.location.search).has('demo'))
+  // ?demo=1 (demo links): persist the session so tab-switching/navigation keeps it
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('demo')) localStorage.setItem('sl_auth', '1')
+  }, [])
+  const [loginId, setLoginId] = useState('')
+  const [loginPw, setLoginPw] = useState('')
+  const [loginError, setLoginError] = useState('')
+  const handleLogin = () => {
+    if (loginId.trim() === 'SL1123' && loginPw === '123123') {
+      localStorage.setItem('sl_auth', '1')
+      setLoggedIn(true)
+    } else {
+      setLoginError('Invalid credentials. Try ID: SL1123 / PW: 123123')
+    }
+  }
+  const handleLogout = () => {
+    localStorage.removeItem('sl_auth')
+    setLoggedIn(false)
+  }
+
+  if (!logged_in) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-6">
+            <div className="w-12 h-12 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center mx-auto mb-3">
+              <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v6M9 11h6" />
+              </svg>
+            </div>
+            <h1 className="text-white text-lg font-bold">Document Risk Management</h1>
+            <p className="text-slate-400 text-xs mt-1">Southlake Health · Pilot</p>
+          </div>
+          <div className="bg-white rounded-xl p-6 shadow-2xl">
+            <h2 className="text-sm font-bold text-slate-700 mb-4">Sign in</h2>
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] font-medium text-slate-500 block mb-1">Employee ID / Email</label>
+                <input value={loginId} onChange={(e) => setLoginId(e.target.value)} placeholder="e.g. SL1123" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+              </div>
+              <div>
+                <label className="text-[11px] font-medium text-slate-500 block mb-1">Password</label>
+                <input type="password" value={loginPw} onChange={(e) => setLoginPw(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleLogin()} placeholder="••••••" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+              </div>
+              {loginError && <p className="text-[11px] text-red-500">{loginError}</p>}
+              <button onClick={handleLogin} className="w-full bg-teal-600 hover:bg-teal-700 text-white text-sm font-medium py-2.5 rounded-lg transition">
+                Sign in
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-4 text-center">PHI is not transmitted. All data stays on-site.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800">
+      {/* ── Top Bar ─────────────────────────────────────────────────────────── */}
+      <header className="bg-white border-b border-slate-200">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center shrink-0">
+              <svg className="w-4.5 h-4.5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v6M9 11h6" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                Document Risk Management
+                <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5 uppercase tracking-wide">Pilot</span>
+              </h1>
+              <p className="text-[11px] text-slate-400">Southlake Health</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            {/* Global search (paperless-style): works from any tab, relevance-sorted, live on-disk snippets */}
+            <GlobalSearch contracts={visible} role={role} onPick={(c) => { setSelected(c); setActiveTab('contracts') }} />
+            <span className="text-[11px] text-slate-400 hidden xl:block">{visible.length} contracts · {openFlagsCount} open flags · {avgCompliance}% criteria met</span>
+            {/* ── RBAC role switcher ── */}
+            <div className="flex items-center gap-1.5" title="Role-based access control — switch the active role to see which documents your role can access">
+              <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v2h8z" />
+              </svg>
+              <select
+                value={roleId}
+                onChange={(e) => setRole(e.target.value)}
+                className="text-[11px] font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
+              >
+                {ROLES.map((r) => (
+                  <option key={r.id} value={r.id}>{r.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-medium text-slate-500 bg-slate-100 border border-slate-200 rounded px-2 py-0.5">{role.user}</span>
+              <button onClick={handleLogout} className="text-[11px] text-slate-400 hover:text-slate-600 transition">Sign out</button>
+            </div>
+            <button
+              ref={aiIconRef}
+              onMouseDown={onAiIconMouseDown}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition shadow-sm select-none cursor-grab active:cursor-grabbing ${aiIconPos ? 'opacity-0 pointer-events-none' : ''} ${aiOpen ? 'bg-slate-800 hover:bg-slate-900 text-white' : 'bg-teal-600 hover:bg-teal-700 text-white'}`}
+              title="CCDM AI — local copilot (Ollama on this machine). Click to open, or drag me anywhere on screen."
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8m-8 4h5m-9 6l-2-2v-9a2 2 0 012-2h14a2 2 0 012 2v7a2 2 0 01-2 2h-9l-5 5z" />
+              </svg>
+              <span className="text-[12px] font-bold">CCDM AI</span>
+            </button>
+            {aiIconPos && (
+              <button
+                onMouseDown={onAiIconMouseDown}
+                className={`fixed z-[96] flex items-center gap-1.5 rounded-lg px-3 py-1.5 shadow-lg select-none cursor-grab active:cursor-grabbing ${aiOpen ? 'bg-slate-800 text-white ring-2 ring-teal-400' : 'bg-teal-600 hover:bg-teal-700 text-white'}`}
+                style={{ left: aiIconPos.x, top: aiIconPos.y }}
+                title="CCDM AI — drag me anywhere; the panel opens beside me"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8m-8 4h5m-9 6l-2-2v-9a2 2 0 012-2h14a2 2 0 012 2v7a2 2 0 01-2 2h-9l-5 5z" />
+                </svg>
+                <span className="text-[12px] font-bold">CCDM AI</span>
+              </button>
+            )}
+            {/* Mobile sidebar toggle */}
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="lg:hidden p-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                {sidebarOpen
+                  ? <path strokeLinecap="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  : <path strokeLinecap="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
+              </svg>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* ── KPI Row ────────────────────────────────────────────────────────── */}
+      <div className="px-4 sm:px-6 py-5">
+        <div className="max-w-screen-2xl mx-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <KpiCard label="Documents" value={visible.length} onClick={() => setActiveTab('contracts')} icon={<KpiIcon d={KPI_ICONS.docs} />} />
+          <KpiCard label="Critical Flags" value={criticalOpenCount} valueClass="text-red-600" onClick={() => setActiveTab('risk-register')} icon={<KpiIcon d={KPI_ICONS.alert} />} />
+          <KpiCard label="Open Flags" value={openFlagsCount} valueClass="text-orange-600" onClick={() => setActiveTab('risk-register')} icon={<KpiIcon d={KPI_ICONS.flag} />} />
+          <KpiCard label="Remediated" value={remediatedCount} valueClass="text-emerald-600" onClick={() => setActiveTab('risk-register')} icon={<KpiIcon d={KPI_ICONS.check} />} />
+          <KpiCard label="Criteria Met (avg)" value={`${avgCompliance}%`} valueClass="text-teal-600" onClick={() => setActiveTab('insights')} title="Portfolio-level, not per-document: for each visible contract with a criteria checklist, 100% − (open flags ÷ criteria applicable to that document type). Averaged across your visible contracts. Live — it rises as you resolve flags in Work Queue. Newly uploaded files without a defined checklist are excluded until one is mapped." icon={<KpiIcon d={KPI_ICONS.gauge} />} />
+          <KpiCard label="Retention Alerts" value={retentionAlertCount} valueClass={retentionAlertCount > 0 ? 'text-amber-600' : 'text-emerald-600'} onClick={() => setActiveTab('deadlines')} icon={<KpiIcon d={KPI_ICONS.clock} />} />
+        </div>
+        {(deferredOpenCount > 0 || retiredOpenCount > 0) && (
+          <div className="mt-2 text-[11px] text-slate-400">
+            {deferredOpenCount > 0 && <>⏸ {deferredOpenCount} open flag{deferredOpenCount === 1 ? '' : 's'} deferred (in-progress remediation — auto-revert on due date)</>}
+            {deferredOpenCount > 0 && retiredOpenCount > 0 && ' · '}
+            {retiredOpenCount > 0 && <>▣ {retiredOpenCount} open flag{retiredOpenCount === 1 ? '' : 's'} on {retiredNums.size} retired doc{retiredNums.size === 1 ? '' : 's'} hidden from alerts (still in the archive)</>}
+          </div>
+        )}
+
+        {/* RBAC banner */}
+        {hiddenCount > 0 && (
+          <div className="mt-3 flex items-center gap-2 text-[11px] bg-amber-50 border border-amber-200 text-amber-800 rounded-lg px-3 py-2">
+            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v2h8z" />
+            </svg>
+            <span><b>{hiddenCount} document{hiddenCount > 1 ? 's' : ''}</b> hidden by role-based access control (role: {role.label}). Switch role in the top bar to change visibility.</span>
+          </div>
+        )}
+        </div>
+
+      </div>
+
+      {/* ── Tab Bar ───────────────────────────────────────────────────────── */}
+      <div className="px-4 sm:px-6 pb-0">
+        <div className="max-w-screen-2xl mx-auto">
+          <TabBar active={activeTab} onChange={(t) => { setActiveTab(t); setSelected(null) }} />
+        </div>
+      </div>
+
+      {/* ── Sidebar + Content ─────────────────────────────────────────────── */}
+      <div className="px-4 sm:px-6 py-6" onPointerDownCapture={(e) => { lastClickY.current = e.clientY }}>
+        <div className="max-w-screen-2xl mx-auto flex gap-6">
+          {/* Sidebar */}
+          <aside
+            className={`
+              fixed inset-y-0 left-0 z-40 bg-white border-r border-slate-200 p-5 overflow-y-auto
+              transform transition-all duration-200
+              lg:relative lg:inset-auto lg:translate-x-0 lg:shrink-0
+              ${sidebarCollapsed ? 'lg:w-10 lg:p-2' : 'lg:w-64'}
+              ${sidebarOpen ? 'translate-x-0 shadow-2xl w-72' : '-translate-x-full lg:translate-x-0'}
+              top-14 bottom-0
+            `}
+          >
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden absolute top-3 right-3 p-1 rounded text-slate-400 hover:text-slate-600"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Desktop collapse toggle */}
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="hidden lg:block w-7 h-7 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 hover:text-teal-600 hover:border-teal-300 transition text-xs font-bold mb-4"
+              title={sidebarCollapsed ? "展开 Settings" : "收起 Settings"}
+            >
+              {sidebarCollapsed ? '»' : '«'}
+            </button>
+
+            {sidebarCollapsed ? (
+              <div className="hidden lg:block text-center text-[11px] text-slate-400 mt-2">Settings</div>
+            ) : (
+              <>
+                {/* Contract-level filters apply to the list views; Risk Register has its own flag filters and Filing manages the tree — one panel per screen */}
+                {['work-queue', 'contracts', 'template-match', 'deadlines', 'insights'].includes(activeTab) ? (
+                  <SettingsSidebar
+                    selectedType={filterType} onSelectType={setFilterType}
+                    selectedRisk={filterRisk} onSelectRisk={setFilterRisk}
+                    selectedDept={filterDept} onSelectDept={setFilterDept}
+                    selectedExpiry={filterExpiry} onSelectExpiry={setFilterExpiry}
+                    onGoToSmartFiling={() => { setActiveTab('smart-filing'); setSelected(null) }}
+                    savedViews={savedViews} onApplyView={applySavedView} onDeleteView={deleteSavedView}
+                  />
+                ) : (
+                  <div className="text-[11px] text-slate-500 leading-relaxed">
+                    <p className="font-semibold text-slate-500 uppercase tracking-wide mb-2">This view</p>
+                    {activeTab === 'risk-register'
+                      ? <p><b className="text-slate-700">{openFlagsCount} open flags</b> are plotted on the L × I matrix. Click any cell to open its documents; filters are above the register.</p>
+                      : <p>Files you upload are read locally, classified into one of the 12 categories, and saved to the archive. The “files on disk” count in the tree is <b className="text-slate-700">live</b> — it updates after every upload.</p>}
+                  </div>
+                )}
+              </>
+            )}
+          </aside>
+
+          {/* Mobile backdrop */}
+          {sidebarOpen && (
+            <div className="fixed inset-0 z-30 bg-black/20 lg:hidden" onClick={() => setSidebarOpen(false)} />
+          )}
+
+          {/* Main Content + Detail Panel */}
+          <main className="flex-1 min-w-0 overflow-x-auto flex">
+            <div className="flex-1 min-w-0">
+              <>
+                {activeTab === 'work-queue' && (
+                  <WorkQueueView contracts={visible} onSelectContract={(c) => setSelected(c)}
+                    onProcess={(link) => { setProcessLink(link); setSelected(null) }}
+                    resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} onResolveFlag={(id) => markFlagResolved(id)}
+                    manageable={!!role && canManage(role)} resolvedLog={resolvedLog}
+                    focusFields={focusFields} expiryFilter={filterExpiry} onClearExpiry={() => setFilterExpiry('All')}
+                    retiredNums={retiredNums} deferMap={deferMap} onDefer={deferItem} onClearDefer={clearDefer}
+                    onBulkResolve={bulkResolve} onBulkDefer={bulkDefer}
+                    viewRequest={wqViewReq} onSaveWqView={commitWqView} onReportWqTile={setWqViewTile}
+                    onConfirmAction={(title, msg, action, showNote, defaultNote, aiDraft) => setConfirmState({ title, message: msg, onConfirm: action, showNote, defaultNote, aiDraft })} />
+                )}
+                {activeTab === 'risk-register' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-slate-400">Showing {activeVisible.length} contracts · {openFlagsCount} open flags{retiredNums.size > 0 ? ` · ${retiredNums.size} retired doc${retiredNums.size === 1 ? '' : 's'} out of scope` : ''}</span>
+                      <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); localStorage.removeItem('ccdm_uploads'); localStorage.removeItem('southlake_retired'); localStorage.removeItem('southlake_defers'); localStorage.removeItem('ccdm_notes'); localStorage.removeItem('ccdm_activity'); localStorage.removeItem('ccdm_savedviews'); localStorage.removeItem('resolvedLog'); resetAllShared(); window.location.reload() }} className="text-[11px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
+                    </div>
+                    <RiskMatrixView contracts={activeVisible} onSelectContract={(c) => { setSelected(c); }} resolvedFlags={resolvedFlags} />
+                    <RiskRegisterTable
+                    contracts={activeVisible}
+                    onSelectContract={(c) => { setSelected(c); }}
+                    onSwitchTab={(tab) => setActiveTab(tab)}
+                    onFix={(flagId) => markFlagResolved(flagId)}
+                    onConfirmAction={(title, msg, action, showNote, defaultNote, aiDraft) => setConfirmState({ title, message: msg, onConfirm: action, showNote, defaultNote, aiDraft })}
+                    resolvedFlags={resolvedFlags}
+                    />
+                  </div>
+                )}
+                {activeTab === 'contracts' && (
+                  <div className="space-y-4">
+                    {/* v45.32 — bulk actions bar: select documents in the list below, act on all of them */}
+                    {bulkSel.size > 0 && (
+                      <div className="bg-slate-900 text-white rounded-lg px-4 py-2.5 flex items-center gap-3 flex-wrap">
+                        <span className="text-[12px] font-bold">{bulkSel.size} document{bulkSel.size > 1 ? 's' : ''} selected</span>
+                        <button onClick={bulkResolve} disabled={!manageable}
+                          className="text-[12px] font-semibold bg-emerald-500 hover:bg-emerald-600 rounded-md px-3 py-1.5 transition disabled:opacity-40">
+                          Mark open issues resolved
+                        </button>
+                        <input
+                          value={bulkNoteText}
+                          onChange={(e) => setBulkNoteText(e.target.value)}
+                          placeholder="Add a note to all selected…"
+                          className="text-[12px] bg-slate-800 border border-slate-600 rounded-md px-2.5 py-1.5 w-56 text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400"
+                        />
+                        <button onClick={() => bulkNote(bulkNoteText)} disabled={!bulkNoteText.trim()} className="text-[12px] font-semibold bg-teal-600 hover:bg-teal-500 rounded-md px-3 py-1.5 transition disabled:opacity-40">Add note</button>
+                        <select
+                          defaultValue=""
+                          onChange={(e) => { if (e.target.value) { bulkRefile(e.target.value); e.target.value = '' } }}
+                          disabled={!manageable}
+                          title="Move the on-disk archive file of every selected document into a different category"
+                          className="text-[12px] bg-slate-800 border border-slate-600 rounded-md px-2 py-1.5 text-white focus:outline-none focus:ring-2 focus:ring-teal-400 disabled:opacity-40"
+                        >
+                          <option value="" disabled>Re-file to category…</option>
+                          {Object.keys(SOUTHLAKE_RISK_TAXONOMY).map((cat) => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                        <button onClick={() => setBulkSel(new Set())} className="ml-auto text-[12px] text-slate-300 hover:text-white transition">✕ Clear</button>
+                      </div>
+                    )}
+
+                    {/* v45.32 — save the current 4-filter combination as a named view */}
+                    {(filterType !== 'All' || filterRisk !== 'All' || filterDept !== 'All' || filterExpiry !== 'All') && (
+                      savingView === 'docs' ? (
+                        <div className="flex items-center gap-2 bg-white border border-teal-300 rounded-lg px-3 py-2">
+                          <input
+                            autoFocus
+                            value={viewName}
+                            onChange={(e) => setViewName(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter') commitViewName('docs'); if (e.key === 'Escape') setSavingView(null) }}
+                            placeholder={`“Docs · ${filterType}/${filterExpiry}”`}
+                            className="text-[12px] border border-slate-300 rounded px-2 py-1.5 flex-1 max-w-xs focus:outline-none focus:ring-2 focus:ring-teal-300"
+                          />
+                          <button onClick={() => commitViewName('docs')} className="text-[12px] font-semibold text-white bg-teal-600 rounded-md px-3 py-1.5">Save view</button>
+                          <button onClick={() => setSavingView(null)} className="text-[12px] text-slate-400 hover:text-slate-600">Cancel</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setSavingView('docs')} className="text-[12px] font-medium px-3 py-1.5 rounded-lg border border-dashed border-slate-300 text-slate-500 hover:border-teal-400 hover:text-teal-600 transition"
+                          title="Save the current type / risk / department / expiry combination as a one-click view in the sidebar">
+                          💾 Save current filters as view
+                        </button>
+                      )
+                    )}
+
+                    {/* v45.32 — archive health check (verified from disk via /api/archive-check) */}
+                    <div className="bg-white border border-slate-200 rounded-lg p-4">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <div className="flex-1 min-w-[220px]">
+                          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Archive Health Check</h3>
+                          <p className="text-[11px] text-slate-400 mt-0.5">Reads the real on-disk archive — counts per category, quarantine backlog, zero-byte / unreadable files, empty folders.</p>
+                        </div>
+                        <button onClick={runArchiveCheck} disabled={archCheck.loading}
+                          className="text-[12px] font-semibold text-white bg-slate-700 hover:bg-slate-800 rounded-lg px-3.5 py-2 transition disabled:opacity-50">
+                          {archCheck.loading ? 'Checking…' : 'Run check'}
+                        </button>
+                      </div>
+                      {archCheck.data && (
+                        <div className={`mt-3 rounded-lg border px-3.5 py-3 ${archCheck.data.healthy ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[13px] font-bold text-slate-800">
+                              {archCheck.data.healthy ? '✓ Archive healthy' : '⚠ Attention needed'}
+                            </span>
+                            <span className="text-[12px] text-slate-500">{archCheck.data.total_files} files on disk · {archCheck.data.total_size_mb} MB</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {Object.entries(archCheck.data.categories).map(([cat, n]) => (
+                              <span key={cat} className="text-[11px] font-mono bg-white border border-slate-200 rounded px-2 py-0.5 text-slate-600">{cat}: {n}</span>
+                            ))}
+                          </div>
+                          {archCheck.data.reasons.length > 0 && (
+                            <ul className="mt-2 space-y-1">
+                              {archCheck.data.reasons.map((r, i) => (
+                                <li key={i} className="text-[12px] text-red-700 flex items-start gap-1.5"><span className="font-bold">!</span>{r}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Full-text search (demo docs + on-disk archive) */}
+                    <DocSearch contracts={visible} role={role} onSelect={(c) => { setSelected(c); }} />
+
+                    {/* Criteria-based compliance panel (F) */}
+                    <CriteriaPanel contracts={visible} resolvedFlags={resolvedFlags} />
+
+                    <ContractList
+                      contracts={filtered}
+                      selectedNum={selected?.num ?? null}
+                      onSelect={(c) => setSelected(c)}
+                      role={role}
+                      resolvedFlags={resolvedFlags}
+                      retiredNums={retiredNums}
+                      bulkSelected={activeTab === 'contracts' ? bulkSel : undefined}
+                      onBulkToggle={(n) => bulkToggle(n)}
+                      onBulkAll={() => setBulkSel(new Set(filtered.map((c) => c.num)))}
+                    />
+
+                    {/* v45.32 — activity feed: the record of what happened across the portfolio (resolves, filings, deferrals, notes) */}
+                    <div className="bg-white border border-slate-200 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Recent Activity</h3>
+                        <span className="text-[11px] text-slate-400">{events.length} event{events.length === 1 ? '' : 's'} recorded</span>
+                        {/* v45.33 · G5 — shared record: where this handoff data actually lives */}
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${syncState === 'offline' ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'}`}
+                          title={syncState === 'offline'
+                            ? 'The document service (API on port 8000) is not reachable — records are stored in this browser only. Start the service (python3 server.py) to share them on the server.'
+                            : 'Resolutions, defers, notes and this feed sync to the shared server record (data/state/handoff.json), so the next employee sees the same state.'}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${syncState === 'offline' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                          {syncState === 'offline' ? 'Local only · server offline' : 'Shared on server ✓'}
+                        </span>
+                        {events.length > 0 && (
+                          <button
+                            onClick={() => { setEvents([]); localStorage.removeItem('ccdm_activity'); resetAllShared() }}
+                            className="ml-auto text-[11px] text-slate-400 hover:text-slate-600 transition"
+                          >Clear feed</button>
+                        )}
+                      </div>
+                      {events.length === 0 ? (
+                        <p className="text-[12px] text-slate-400">No recorded activity yet — resolutions, deferrals, retirements, disposals, filings and notes will appear here with timestamps.</p>
+                      ) : (
+                        <div className="max-h-64 overflow-y-auto pr-1 space-y-1">
+                          {events.map((e, i) => (
+                            <div key={i} className="flex items-start gap-2.5 text-[12px] bg-slate-50 rounded-lg px-3 py-2">
+                              <span className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${
+                                e.kind === 'resolve' ? 'bg-emerald-500'
+                                : e.kind === 'file' ? 'bg-teal-500'
+                                : e.kind === 'note' ? 'bg-amber-400'
+                                : e.kind === 'defer' || e.kind === 'defer-clear' ? 'bg-slate-400'
+                                : e.kind === 'retire' || e.kind === 'unretire' ? 'bg-purple-400'
+                                : 'bg-red-400'}`} />
+                              <span className="text-slate-700 flex-1 leading-snug">{e.text}{e.who ? <span className="text-slate-400"> · by {e.who}</span> : null}</span>
+                              <span className="text-slate-400 shrink-0 text-[11px] font-mono">{e.ts}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {activeTab === 'template-match' && (
+                  <TemplateMatchView allContracts={contracts} role={role} />
+                )}
+                {activeTab === 'deadlines' && (
+                  <div>
+                    <DeadlinesTimeline contracts={activeVisible} onSelectContract={(c) => { setSelected(c); }} />
+                    <DeadlinesTable contracts={activeVisible} onSelectContract={(c) => { setSelected(c); }} />
+                    <RetentionBoard contracts={visible} approved={approvedDestruction} onApprove={approveDestruction}
+  manageable={!!role && canManage(role)} disposed={disposedPaper} onDispose={disposePaper} />
+                  </div>
+                )}
+                {activeTab === 'cross-refs' && (
+                  <CrossRefsView contracts={activeVisible} />
+                )}
+                {activeTab === 'smart-filing' && (
+                  <SmartFilingView contracts={visible} uploads={uploads} onUploaded={addUploads}
+                    incomingFiles={activeTab === 'smart-filing' ? (incomingFiles ? incomingFiles.map((f) => ({ name: f.name, size: f.size, file: f })) : undefined) : undefined} onConsumeIncoming={() => setIncomingFiles(null)}
+                    onFilingConfirmed={(label) => logEvent('file', `${label} filed into the archive`, undefined)} />
+                )}
+                {activeTab === 'insights' && (
+                  <InsightsView contracts={activeVisible} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} resolvedFlags={resolvedFlags} completedLinks={completedLinks} onSetFocusFields={setFocusFields} />
+                )}
+              </>
+            </div>
+            {/* Right-side detail panel — opens scrolled to the Y of the row you clicked, not always at the top */}
+            {selected && (
+              <aside ref={detailAsideRef} className="w-[440px] shrink-0 border-l-2 border-slate-300 bg-slate-50 overflow-y-auto max-h-[calc(100vh-56px)] shadow-[-8px_0_24px_rgba(0,0,0,0.06)]">
+                <div className="sticky top-0 bg-slate-50 border-b border-slate-200 px-5 py-3 flex items-center justify-between z-10">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Contract Detail</span>
+                  <button onClick={() => setSelected(null)} className="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition text-sm">✕</button>
+                </div>
+                <div className="px-5 py-4">
+                  {canView(role, selected)
+                    ? <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} onStatusOverride={(flagId) => { markFlagResolved(flagId) }} resolvedFlags={resolvedFlags}
+                      retired={retiredNums.has(selected.num)} onToggleRetired={manageable ? () => toggleRetired(selected.num) : undefined}
+                      notesFor={notes[selected.num] || []} eventsFor={(events.filter((e) => e.docNum === selected.num)).slice().reverse()}
+                      onAddNote={(text) => addNote(selected.num, text)} manageable={manageable} />
+                    : <RestrictedAccessPanel doc={selected} role={role} />}
+                </div>
+              </aside>
+            )}
+          </main>
+        </div>
+      </div>
+
+      <ToastContainer toasts={toasts} />
+
+      {/* v45.32 — drag files anywhere → drop to file: whole-app drop target with visible feedback */}
+      {dragging && (
+        <div className="fixed inset-0 z-50 bg-teal-900/40 backdrop-blur-[2px] flex items-center justify-center pointer-events-none">
+          <div className="bg-white border-4 border-dashed border-teal-500 rounded-2xl px-10 py-8 text-center shadow-2xl">
+            <div className="text-4xl mb-2">📥</div>
+            <div className="text-lg font-bold text-slate-800">Drop to file</div>
+            <div className="text-[13px] text-slate-500 mt-1">Releasing opens Smart Filing — the AI classifies it, then you confirm the category</div>
+          </div>
+        </div>
+      )}
+
+      {/* AI copilot (local Ollama, role-scoped) */}
+      <AiBot open={aiOpen} onOpenChange={setAiOpen} context={botContext} roleLabel={role?.label || 'n/a'} role={role?.id || 'n/a'} excludedPaths={excludedPaths} anchor={aiIconPos} />
+
+      {/* Confirm Modal */}
+      {confirmState && (
+        <ConfirmModal
+          title={confirmState.title}
+          message={confirmState.message}
+          onConfirm={(note) => { confirmState.onConfirm(note); setConfirmState(null) }}
+          onCancel={() => setConfirmState(null)}
+          showNote={confirmState.showNote}
+          defaultNote={confirmState.defaultNote || ''}
+          aiDraft={confirmState.aiDraft}
+          confirmLabel="Confirm"
+        />
+      )}
+
+      {/* Cross-Ref Workflow Wizard (from Work Queue) */}
+      {processLink && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setProcessLink(null)} />
+          <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="text-lg font-bold text-slate-900">Cross-Ref Workflow</div>
+                <div className="text-xs text-slate-500 mt-0.5">{processLink.sourceClause} → {processLink.targetName}</div>
+              </div>
+              <button onClick={() => setProcessLink(null)} className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 text-lg">✕</button>
+            </div>
+            <ProcessWizardInner link={processLink} onDone={() => setProcessLink(null)} onComplete={completeLink} />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default App
