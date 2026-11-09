@@ -4,7 +4,7 @@ import { contracts, docLinks, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type Co
   ROLES, canView, canManage, archiveFileConf, contractToTemplateRef, DEMO_TODAY, CONF_LABEL, CONF_BADGE, retentionState, retentionUntil, type Role,
   TEMPLATE_LIBRARY, matchTemplate, classifyType, RISK_FRAMEWORK,
   SOUTHLAKE_RISK_TAXONOMY, flagHiroc, CRITERIA_BY_TYPE, RETENTION_BY_TYPE, DEFAULT_RETENTION, LITIGATION_HOLD_NOTE,
-  PIA_MATRIX, PIA_LIKELIHOOD_LABELS, PIA_IMPACT_LABELS, flagVelocity, piaPriority, piaBand, PRIORITY_BANDS } from './data'
+  PIA_MATRIX, PIA_LIKELIHOOD_LABELS, PIA_IMPACT_LABELS, flagVelocity, piaPriority, piaBand, PRIORITY_BANDS, SEED_DEFERRED } from './data'
 
 
 // ── Toast Notification System ──────────────────────────────────────────────
@@ -838,12 +838,14 @@ function ContractList({
   onSelect,
   role,
   resolvedFlags,
+  retiredNums,
 }: {
   contracts: ContractDoc[]
   selectedNum: number | null
   onSelect: (c: ContractDoc) => void
   role?: Role
   resolvedFlags?: Set<string>
+  retiredNums?: Set<number>
 }) {
   return (
     <div className="bg-white border border-slate-200 rounded-lg overflow-hidden divide-y divide-slate-100">
@@ -896,6 +898,9 @@ function ContractList({
                     <p className="text-[13px] text-slate-500 truncate" title={c.summary}>{c.summary}</p>
                     {/* Repository row: status · storage location · related documents */}
                     <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-1">
+                      {retiredNums?.has(c.num) && (
+                        <span className="font-bold text-slate-600 bg-slate-100 border border-slate-300 px-1.5 py-0.5 rounded" title="Manually tagged no longer in use — out of alert scope (KPIs / Work Queue / Risk Register); retention and disposal obligations still apply">RETIRED</span>
+                      )}
                       {(() => { const rs = retentionState(c);
                         if (rs.status === 'elapsed') return <span className="font-bold text-slate-500" title={`Retention period complete (${retentionUntil(c)}) — eligible for disposal`}>ARCHIVED</span>
                         if (rs.status === 'hold') return <span className="font-bold text-amber-600" title={`Deletion not allowed yet — keep until ${retentionUntil(c)} (Schedule A)`}>EXPIRED · IN RETENTION</span>
@@ -2523,12 +2528,16 @@ function ContractDetail({
   docLinks: allDocLinks,
   onStatusOverride,
   resolvedFlags,
+  retired,
+  onToggleRetired,
 }: {
   selected: ContractDoc
   onBack?: () => void
   docLinks: DocLink[]
   onStatusOverride?: (flagId: string) => void
   resolvedFlags?: Set<string>
+  retired?: boolean
+  onToggleRetired?: () => void
 }) {
   const s = selected
   void onStatusOverride
@@ -2538,6 +2547,25 @@ function ContractDetail({
     <div>
       {/* Title */}
       <div className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3">Contract #{s.num}</div>
+
+      {/* v45.31 — Retired control (manual "no longer in use" tag) */}
+      {retired && (
+        <div className="mb-4 flex items-start justify-between gap-3 bg-slate-100 border border-slate-300 rounded-lg px-3 py-2.5">
+          <div className="text-[12px] text-slate-600 leading-relaxed">
+            <b className="text-slate-800">RETIRED — no longer in use.</b> Excluded from alerts, KPIs and the work queue.<br />
+            <span className="text-[11px] text-slate-500">Retention and disposal obligations still apply — the document stays in the archive.</span>
+          </div>
+        </div>
+      )}
+      {onToggleRetired && (
+        <button
+          onClick={onToggleRetired}
+          className={`w-full mb-4 text-[13px] font-semibold rounded-lg px-4 py-2.5 transition border ${retired ? 'bg-white border-teal-300 text-teal-700 hover:bg-teal-50' : 'bg-slate-50 border-slate-300 text-slate-600 hover:bg-slate-100'}`}
+          title="Toggle the manual retired tag (out-of-scope documents are hidden from alerts but kept in the archive for retention/disposal)"
+        >
+          {retired ? '↩ Unretire — back in alert scope' : '▣ Retire this document (no longer in use)'}
+        </button>
+      )}
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
@@ -2740,7 +2768,7 @@ function SettingsSidebar({
   const types = ['All', ...Array.from(new Set(contracts.map((c) => c.type)))]
   const risks = ['All', 'Low', 'Critical']
   const departments = ['All', ...SOUTHDEPARTMENTS]
-  const expiries = ['All', 'Expired', '< 30d', '< 90d', '> 90d', 'Archived']
+  const expiries = ['All', 'Expired', '< 30d', '< 90d', '> 90d', 'Archived', 'Retired']
   const [showAllDepts, setShowAllDepts] = useState(false)
   const deptOptions = showAllDepts ? departments : ['All', ...departments.slice(1, 5)]
 
@@ -2805,11 +2833,12 @@ function SettingsSidebar({
 
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
-function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields, manageable, expiryFilter, onClearExpiry }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string, aiDraft?: () => Promise<string>) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[]; manageable?: boolean; expiryFilter?: string; onClearExpiry?: () => void }) {
-  const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref' | 'resolved'>('all')
+function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields, manageable, expiryFilter, onClearExpiry, retiredNums, deferMap, onDefer, onClearDefer }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string, aiDraft?: () => Promise<string>) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[]; manageable?: boolean; expiryFilter?: string; onClearExpiry?: () => void; retiredNums?: Set<number>; deferMap?: Record<string, { until: string; note?: string }>; onDefer?: (id: string, days: number) => void; onClearDefer?: (id: string) => void }) {
+  const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref' | 'resolved' | 'deferred'>('all')
   const [wqPage, setWqPage] = useState(1) // task-table pagination (15 per page)
   const [showResolved, setShowResolved] = useState(false)
   const [search, setSearch] = useState('')
+  const [deferFor, setDeferFor] = useState<string | null>(null) // v45.31 — which row is showing the defer-duration picker
 
   // Compute work items
   type WorkItem = {
@@ -2831,8 +2860,11 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
 
   // Critical flags
   for (const c of allContracts) {
+    if (retiredNums?.has(c.num)) continue // v45.31 — retired (out-of-scope) docs don't generate work items
     for (const f of c.flags) {
       if (f.severity === 'Critical' && f.status === 'open') {
+        const def = deferMap?.[`f-${c.num}-${f.field}`]
+        const defActive = def && new Date(def.until).getTime() > now
         items.push({
           id: `f-${c.num}-${f.field}`,
           what: f.flag_if,
@@ -2840,12 +2872,14 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           docNum: c.num,
           contract: c,
           severity: 'critical',
-          status: f.status,
+          status: defActive ? `Deferred · until ${new Date(def!.until).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : f.status,
           action: 'Fix',
           isNew: c.isUpload === true,
           pri: piaPriority(f),
         })
       } else if (f.severity === 'High' && f.status === 'open') {
+        const def = deferMap?.[`f-${c.num}-${f.field}`]
+        const defActive = def && new Date(def.until).getTime() > now
         items.push({
           id: `f-${c.num}-${f.field}`,
           what: f.flag_if,
@@ -2853,7 +2887,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           docNum: c.num,
           contract: c,
           severity: 'high',
-          status: f.status,
+          status: defActive ? `Deferred · until ${new Date(def!.until).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : f.status,
           action: 'Review',
           isNew: c.isUpload === true,
           pri: piaPriority(f),
@@ -2883,6 +2917,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
 
   // Expiring
   for (const c of allContracts) {
+    if (retiredNums?.has(c.num)) continue // v45.31 — retired docs are out of scope: no renewal work items
     if (c.expiryDate) {
       const days = Math.ceil((new Date(c.expiryDate).getTime() - now) / (24 * 3600 * 1000))
       if (days <= 90) {
@@ -2902,9 +2937,16 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
   }
 
   // Filter out resolved flags and completed cross-refs
+  // v45.31 — items inside a deferral window ("Deferred") stop alerting: hidden from every
+  // view except the "Deferred" filter; when the window passes the status auto-reverts to open
+  const defActiveIds = new Set(items.filter((i) => {
+    const d = deferMap?.[i.id]
+    return i.id.startsWith('f-') && d && new Date(d.until).getTime() > now
+  }).map((i) => i.id))
   const active = items.filter((i) => {
     if (resolvedFlags.has(i.id)) return false
     if (completedLinks.has(i.id)) return false
+    if (defActiveIds.has(i.id) && filter !== 'deferred') return false
     // If focusFields is set (from Insights), only show matching flags
     if (focusFields && focusFields.length > 0 && i.id.startsWith('f-')) {
       const field = i.id.split('-').slice(2).join('-')
@@ -2957,6 +2999,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
     if (filter === 'high') return i.severity === 'high'
     if (filter === 'expiring') return i.id.startsWith('e-')
     if (filter === 'crossref') return i.id.startsWith('x-')
+    if (filter === 'deferred') return defActiveIds.has(i.id)
     return true
   })
 
@@ -2966,13 +3009,14 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
     high: allItems.filter((i) => i.severity === 'high').length,
     expiring: allItems.filter((i) => i.id.startsWith('e-')).length,
     crossref: allItems.filter((i) => i.id.startsWith('x-')).length,
+    deferred: defActiveIds.size,
   }
   const totalResolved = (resolvedFlags?.size || 0) + (completedLinks?.size || 0)
 
   return (
     <div>
       {/* Summary Tiles */}
-      <div className="grid grid-cols-5 gap-3 mb-5">
+      <div className="grid grid-cols-6 gap-3 mb-5">
         <button onClick={() => setFilter('critical')} className={`text-left p-3 rounded-lg border transition ${filter === 'critical' ? 'border-red-300 bg-red-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
           <div className="text-2xl font-bold text-red-600">{counts.critical}</div>
           <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Critical</div>
@@ -2988,6 +3032,10 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
         <button onClick={() => setFilter('expiring')} className={`text-left p-3 rounded-lg border transition ${filter === 'expiring' ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
           <div className="text-2xl font-bold text-blue-600">{counts.expiring}</div>
           <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Expiring</div>
+        </button>
+        <button onClick={() => setFilter('deferred')} className={`text-left p-3 rounded-lg border transition ${filter === 'deferred' ? 'border-slate-400 bg-slate-100 ring-2 ring-slate-300' : 'border-slate-200 bg-slate-50 hover:border-slate-400'}`}>
+          <div className="text-2xl font-bold text-slate-500">{counts.deferred}</div>
+          <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">Deferred</div>
         </button>
         <button onClick={() => setFilter('resolved')} className={`text-left p-3 rounded-lg border transition ${filter === 'resolved' ? 'border-emerald-400 bg-emerald-100 ring-2 ring-emerald-200' : 'border-emerald-200 bg-emerald-50 hover:border-emerald-400'}`}>
           <div className="text-2xl font-bold text-emerald-600">{totalResolved}</div>
@@ -3014,7 +3062,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
         <div className="mb-4 flex items-center justify-between gap-3 bg-teal-50 border border-teal-200 rounded-lg px-4 py-2.5">
           <span className="text-[13px] text-teal-800">
             Active filter: <b className="font-bold">{expiryFilter.toUpperCase()}</b> — showing items from {allContracts.length} document{allContracts.length === 1 ? '' : 's'}
-            {expiryFilter !== 'Archived' && <span className="text-teal-700/80"> · document-level filter — rows are that document's <b>work items</b> ("open" = not yet resolved; "Past due" = renewal deadline passed), the chip shows the <b>document</b> status</span>}
+            {expiryFilter !== 'Archived' && expiryFilter !== 'Retired' && <span className="text-teal-700/80"> · document-level filter — rows are that document's <b>work items</b> ("open" = not yet resolved; "Past due" = renewal deadline passed), the chip shows the <b>document</b> status</span>}
           </span>
           <button onClick={onClearExpiry} className="text-[12px] font-semibold text-teal-700 hover:underline shrink-0">Clear filter</button>
         </div>
@@ -3137,6 +3185,32 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
             </table>
           )}
         </div>
+      ) : expiryFilter === 'Retired' ? (
+        /* v45.31 — Retired docs: manually tagged "no longer in use"; out of alert scope, still in archive/retention */
+        <div className="bg-white border border-slate-300 rounded-lg overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200 bg-slate-50">
+            <div className="text-[13px] font-bold text-slate-700">Retired documents <span className="font-mono text-[11px] text-slate-400">({allContracts.filter((c) => retiredNums?.has(c.num)).length})</span></div>
+            <div className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+              Manually tagged <b>no longer in use</b> — filtered out of alerts, KPIs and the work queue so old flags don't confuse the user. Retention/disposal obligations still apply (they remain in the archive). Toggle in a document's detail panel.
+            </div>
+          </div>
+          <table className="w-full text-left">
+            <tbody className="divide-y divide-slate-100">
+              {allContracts.filter((c) => retiredNums?.has(c.num)).map((c) => (
+                <tr key={c.num} className="hover:bg-slate-50/70 cursor-pointer transition" onClick={() => onSelectContract(c)}>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-slate-600 bg-slate-100 border border-slate-300 px-1.5 py-0.5 rounded">RETIRED</span>
+                      <span className="font-mono text-[11px] text-slate-400">#{c.num}</span>
+                      <span className="text-[13px] font-medium text-slate-800">{c.displayName}</span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-1">No longer in use — out of alert scope · open flags excluded from KPIs and work queue</div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
         /* Task Table */
         <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
@@ -3161,7 +3235,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                   )}
                   <span className="font-mono text-[11px] text-slate-400">#{item.docNum}</span>
                   <span className="ml-1.5">{item.docLabel}</span>
-                  {expiryFilter && expiryFilter !== 'All' && expiryFilter !== 'Archived' && docChip(item.contract)}
+                  {expiryFilter && expiryFilter !== 'All' && expiryFilter !== 'Archived' && expiryFilter !== 'Retired' && docChip(item.contract)}
                 </td>
                 <td className="px-4 py-2.5">
                   <span className={`text-[11px] font-bold uppercase px-2 py-0.5 rounded ${
@@ -3172,46 +3246,83 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                 </td>
                 <td className="px-4 py-2.5 text-[13px] font-medium text-slate-700">{item.status}</td>
                 <td className="px-4 py-2.5 text-right">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (item.id.startsWith('x-') && onProcess) {
-                        const link = docLinks.find((d) => d.sourceNum === item.docNum && d.status !== 'synced' && item.id.includes(d.targetName))
-                        if (link) onProcess(link)
-                      } else if (item.action === 'Fix' || item.action === 'Review') {
-                        onConfirmAction?.(`Resolve Flag`, `"${item.what}"\n\nDocument: ${item.docLabel} (#${item.docNum})\nSeverity: ${item.severity}`, () => {
-                          onResolveFlag?.(item.id)
-                        }, true, getAIProposal(item.what, item.docLabel), () =>
-                          aiProposalDraft({
-                            flag_field: item.id.startsWith('f-') ? item.id.replace(/^f-\d+-/, '') : item.what,
-                            flag_if: item.what,
-                            doc_num: item.docNum,
-                            doc_name: item.docLabel,
-                            doc_type: item.contract.type,
-                            severity: item.severity,
-                          }))
-                      } else if (item.action === 'Renew' || item.action === 'Schedule') {
-                        onConfirmAction?.(`Schedule Renewal`, `${item.docLabel} (#${item.docNum})\nExpiry: ${item.due || 'unknown'}\n\nConfirm renewal has been scheduled with the counterparty.`, () => {
-                          onResolveFlag?.(item.id)
-                        })
-                      } else if (item.id.startsWith('t-')) {
-                        onConfirmAction?.(`Complete Task`, `"${item.what}"\n\nDocument: ${item.docLabel} (#${item.docNum})\nStatus: ${item.status}`, () => {
-                          onResolveFlag?.(item.id)
-                        })
-                      } else {
-                        onSelectContract(item.contract)
-                      }
-                    }}
-                    disabled={!manageable}
-                    title={!manageable ? 'Edit / manage actions are restricted to the Legal role (demo RBAC)' : undefined}
-                    className={`text-[13px] font-semibold text-white rounded-md px-3.5 py-2 transition disabled:opacity-40 disabled:cursor-not-allowed ${
-                      item.action === 'Fix' || item.action === 'Review' ? 'bg-teal-600 hover:bg-teal-700' :
-                      item.action === 'Renew' || item.action === 'Schedule' ? 'bg-blue-600 hover:bg-blue-700' :
-                      'bg-slate-600 hover:bg-slate-700'
-                    }`}
-                  >
-                    {item.action} →
-                  </button>
+                  <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                    {/* v45.31 — deferred rows: stop alerting is already in effect, offer to end it early */}
+                    {item.status.startsWith('Deferred') ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onClearDefer?.(item.id); setDeferFor(null) }}
+                        disabled={!manageable}
+                        title={deferMap?.[item.id]?.note || 'End deferral early — item reverts to open now'}
+                        className="text-[12px] font-semibold text-white rounded-md px-3 py-2 transition bg-slate-500 hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Open now ↩
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (item.id.startsWith('x-') && onProcess) {
+                            const link = docLinks.find((d) => d.sourceNum === item.docNum && d.status !== 'synced' && item.id.includes(d.targetName))
+                            if (link) onProcess(link)
+                          } else if (item.action === 'Fix' || item.action === 'Review') {
+                            onConfirmAction?.(`Resolve Flag`, `"${item.what}"\n\nDocument: ${item.docLabel} (#${item.docNum})\nSeverity: ${item.severity}`, () => {
+                              onResolveFlag?.(item.id)
+                            }, true, getAIProposal(item.what, item.docLabel), () =>
+                              aiProposalDraft({
+                                flag_field: item.id.startsWith('f-') ? item.id.replace(/^f-\d+-/, '') : item.what,
+                                flag_if: item.what,
+                                doc_num: item.docNum,
+                                doc_name: item.docLabel,
+                                doc_type: item.contract.type,
+                                severity: item.severity,
+                              }))
+                          } else if (item.action === 'Renew' || item.action === 'Schedule') {
+                            onConfirmAction?.(`Schedule Renewal`, `${item.docLabel} (#${item.docNum})\nExpiry: ${item.due || 'unknown'}\n\nConfirm renewal has been scheduled with the counterparty.`, () => {
+                              onResolveFlag?.(item.id)
+                            })
+                          } else if (item.id.startsWith('t-')) {
+                            onConfirmAction?.(`Complete Task`, `"${item.what}"\n\nDocument: ${item.docLabel} (#${item.docNum})\nStatus: ${item.status}`, () => {
+                              onResolveFlag?.(item.id)
+                            })
+                          } else {
+                            onSelectContract(item.contract)
+                          }
+                        }}
+                        disabled={!manageable}
+                        title={!manageable ? 'Edit / manage actions are restricted to the Legal role (demo RBAC)' : undefined}
+                        className={`text-[13px] font-semibold text-white rounded-md px-3.5 py-2 transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                          item.action === 'Fix' || item.action === 'Review' ? 'bg-teal-600 hover:bg-teal-700' :
+                          item.action === 'Renew' || item.action === 'Schedule' ? 'bg-blue-600 hover:bg-blue-700' :
+                          'bg-slate-600 hover:bg-slate-700'
+                        }`}
+                      >
+                        {item.action} →
+                      </button>
+                    )}
+                    {/* v45.31 — Defer (in-progress remediation): pick a 30/60/90-day window */}
+                    {!item.status.startsWith('Deferred') && (item.action === 'Fix' || item.action === 'Review') && (
+                      deferFor === item.id ? (
+                        <span className="inline-flex items-center gap-1 text-[11px]">
+                          <span className="text-slate-500 font-medium">Defer</span>
+                          {[30, 60, 90].map((d) => (
+                            <button key={d}
+                              onClick={(e) => { e.stopPropagation(); onDefer?.(item.id, d); setDeferFor(null) }}
+                              disabled={!manageable}
+                              title={`Stop alerting for ${d} days — auto-reverts to open when the window passes`}
+                              className="font-bold text-white bg-slate-500 hover:bg-slate-600 rounded px-2 py-1 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                            >{d}d</button>
+                          ))}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeferFor(item.id) }}
+                          disabled={!manageable}
+                          title="Remediation in progress — defer this item (stops alerting for 30/60/90 days, then auto-reverts)"
+                          className="text-[12px] font-semibold text-slate-500 border border-slate-300 rounded-md px-2.5 py-2 hover:bg-slate-50 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                        >⏸ Defer</button>
+                      )
+                    )}
+                  </div>
                 </td>
               </tr>
               ))
@@ -3329,6 +3440,9 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
   const [dragOver, setDragOver] = useState(false)
   const [diskTree, setDiskTree] = useState<Record<string, { files: string[]; subcategories: Record<string, string[]> }>>({})
   const [fileDetail, setFileDetail] = useState<string | null>(null)
+  // v45.31 — "Verify filing": AI-classified uploads wait here for human confirmation
+  const [pendingFiling, setPendingFiling] = useState<{ results: UploadedDoc[]; engine: string } | null>(null)
+  const [reFiling, setReFiling] = useState<string | null>(null) // filename currently being moved on disk
   // uploads is lifted to the app root so new filings cascade into Documents /
   // Work Queue / Risk Register / KPIs (persisted across reloads)
   const uploaded = uploads
@@ -3390,7 +3504,8 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
             text_preview: f.name, processed_at: new Date().toISOString(),
             filed_to: `${kw(f.name)}/auto`, is_upload: true,
           }))
-          setUploaded((p) => [...fb, ...p])
+          // v45.31 — offline keyword fallback: still route through "Verify filing" (state-level confirm; no on-disk move available)
+          setPendingFiling({ results: fb, engine: 'keyword (AI offline)' })
           setUploading(false)
           return
         }
@@ -3410,16 +3525,18 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
         processed_at: r.processed_at || new Date().toISOString(),
         filed_to: r.filed_to || undefined,
       }))
-      setUploaded((prev) => [...prev, ...results])
-      // Auto-open the target folder so the user immediately sees where their file landed
-      const firstFileTo = results.map((r) => r.filed_to).find(Boolean)
-      if (firstFileTo) {
-        const s = firstFileTo.split('/').filter(Boolean)
-        setSelectedFolder(s.length >= 3 && firstFileTo.startsWith('data/') ? s[s.length - 3] : s[0])
-      }
+      // v45.31 — "Verify filing": AI classification (and the on-disk filing it produced) is NOT
+      // committed until the human confirms or adjusts the category. The file already sits on disk
+      // at the AI-suggested path; an adjustment calls POST /api/re-file to move it into the
+      // chosen category, so the on-disk location always matches what the user approved.
       if (errors.length > 0) {
         setUploadError(errors.map((e: any) => `${e.filename}: ${e.error}`).join(' | '))
       }
+      if (results.length > 0) {
+        setPendingFiling({ results, engine: String((data as any).engine || (results[0] as any)?.engine || 'AI') })
+        setUploading(false)
+      }
+      return
     } catch (e: any) {
       setUploadError(import.meta.env.DEV
         ? `Upload failed: ${e.message || e} (dev: is the API running on port 8000? — python3 server.py)`
@@ -3427,6 +3544,49 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
     } finally {
       setUploading(false)
     }
+  }
+
+  // v45.31 — commit a pending filing (optionally after the user adjusted the category)
+  const confirmFiling = async (u: UploadedDoc, finalCat: string | null) => {
+    let doc = u
+    const loc = filedLoc(u)
+    if (finalCat && loc && finalCat !== loc.cat) {
+      if (u.filed_to && u.filed_to.startsWith('data/')) {
+        // On-disk file: move it so the archive reflects the human's decision
+        setReFiling(u.filename)
+        try {
+          const r = await fetch('/api/re-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: u.filename, from_category: loc.cat, to_category: finalCat }),
+          })
+          const d = await r.json()
+          if (d.path) doc = { ...u, filed_to: d.path }
+        } catch {
+          /* API offline: commit at the state level; the on-disk file stays at the AI path */
+        }
+        setReFiling(null)
+      } else {
+        // Offline keyword fallback (no on-disk file yet): adjust the location at the state level
+        doc = { ...u, filed_to: `${finalCat}/${loc.sub}` }
+      }
+    }
+    setUploaded((prev) => [doc, ...prev])
+    // Auto-open the confirmed folder so the user immediately sees where the file landed
+    const target = doc.filed_to
+    if (target) {
+      const s = target.split('/').filter(Boolean)
+      setSelectedFolder(s.length >= 3 && target.startsWith('data/') ? s[s.length - 3] : s[0])
+    }
+    setPendingFiling((p) => (p ? { ...p, results: p.results.filter((x) => x !== u) } : p))
+    if (pendingFiling?.results.filter((x) => x !== u).length === 0) setPendingFiling(null)
+  }
+  const discardFiling = (u: UploadedDoc) => {
+    setPendingFiling((p) => {
+      if (!p) return null
+      const rest = p.results.filter((x) => x !== u)
+      return rest.length > 0 ? { ...p, results: rest } : null
+    })
   }
 
   // Parse 'data/archive/Financial/NDA/file.pdf' (or offline 'Financial/auto') → { cat, sub }
@@ -3463,12 +3623,15 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
     addToTree(cat, sub, { label: `#${c.num} ${c.displayName}`, num: c.num, riskLevel: c.riskLevel, flagsCount: c.flagsCount || cFlags.length, isUploaded: false })
   }
 
-  // Uploaded docs: client category (from top flag) + document type (as sub-folder)
+  // Uploaded docs: category from the CONFIRMED on-disk location when available
+  // (v45.31 — "Verify filing": the tree must reflect where the human actually approved the file),
+  // falling back to the top flag's client category when there is no disk path yet
   for (const u of uploaded) {
     const flags = u.flags || []
     const topFlag = flags.slice().sort((a, b) => ((a.severity === 'Critical' ? 3 : a.severity === 'High' ? 2 : 1) - (b.severity === 'Critical' ? 3 : b.severity === 'High' ? 2 : 1)) || (piaPriority(b) - piaPriority(a)))[0]
-    const cat = topFlag ? flagHiroc(topFlag.field).cat : (u.flags_count === 0 ? 'Clean' : 'Uncategorized')
-    const sub = u.document_type || 'Other'
+    const loc = filedLoc(u)
+    const cat = loc ? loc.cat : (topFlag ? flagHiroc(topFlag.field).cat : (u.flags_count === 0 ? 'Clean' : 'Uncategorized'))
+    const sub = loc ? loc.sub : (u.document_type || 'Other')
     addToTree(cat, sub, { label: u.filename, riskLevel: u.risk_level, flagsCount: u.flags_count || flags.length, isUploaded: true })
   }
 
@@ -3479,7 +3642,7 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
       {/* Header */}
       <div>
         <h2 className="text-[13px] font-semibold text-slate-900">AI Smart Filing</h2>
-        <p className="text-xs text-slate-500 mt-0.5">Upload → AI classifies → auto-files to HIROC folders. No manual step needed.</p>
+        <p className="text-xs text-slate-500 mt-0.5">Upload → AI classifies → you verify the category → file lands in the archive. The final filing decision is yours.</p>
       </div>
 
       {/* Upload service status */}
@@ -3524,9 +3687,70 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
         <div className="mt-2 space-y-1">
           {uploading && <p className="text-[11px] text-teal-600 animate-pulse">AI is reading your file and filing it — takes about 15–40 s…</p>}
           {uploadError && <p className="text-[11px] text-red-600 bg-red-50 border border-red-200 rounded p-1.5">⚠ {uploadError}</p>}
-          {!uploading && !uploadError && uploaded.length === 0 && <p className="text-[11px] text-slate-300">Waiting for files…</p>}
+          {!uploading && !uploadError && uploaded.length === 0 && !pendingFiling && <p className="text-[11px] text-slate-300">Waiting for files…</p>}
           {!uploading && !uploadError && uploaded.length > 0 && <p className="text-[11px] text-emerald-600">✓ {uploaded.length} file(s) processed</p>}
         </div>
+
+        {/* v45.31 — Verify filing: AI suggests, the human confirms (or adjusts the category before confirming) */}
+        {pendingFiling && pendingFiling.results.length > 0 && (
+          <div className="mt-4 text-left bg-amber-50/70 border border-amber-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[12px] font-bold text-amber-900 uppercase tracking-wide">Verify filing ({pendingFiling.results.length})</span>
+              <span className="text-[11px] text-amber-700/80">engine: {pendingFiling.engine}</span>
+            </div>
+            <p className="text-[11px] text-amber-800/80 leading-relaxed mb-3">
+              The AI classified each file and staged it in the archive. <b>You decide the final category</b> — confirm as suggested, or adjust before confirming. Files not confirmed stay out of the Documents / Work Queue views.
+            </p>
+            <div className="space-y-2">
+              {pendingFiling.results.map((u) => {
+                const loc = filedLoc(u)
+                return (
+                  <div key={u.filename} className="bg-white border border-amber-200 rounded-md px-3 py-2.5">
+                    <div className="flex items-center gap-2 text-[12px]">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${u.risk_level === 'Critical' ? 'bg-red-500' : u.risk_level === 'High' ? 'bg-orange-500' : u.risk_level === 'Medium' ? 'bg-yellow-500' : 'bg-emerald-500'}`} />
+                      <span className="font-medium text-slate-800 truncate flex-1" title={u.filename}>{u.filename}</span>
+                      <span className="text-[11px] text-slate-500 shrink-0">type: <b>{u.document_type}</b> · {u.flags_count} flag{u.flags_count === 1 ? '' : 's'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2 text-[11px] flex-wrap">
+                      <span className="text-slate-500">AI suggests:</span>
+                      <span className="font-mono text-slate-700">{loc ? `${loc.cat} › ${loc.sub}` : (u.filed_to || 'archive')}</span>
+                      <label className="ml-2 flex items-center gap-1.5 text-slate-600">
+                        Adjust to:
+                        <select
+                          defaultValue={loc?.cat || ''}
+                          onBlur={(e) => {
+                            const v = e.currentTarget.value
+                            if (v && v !== (loc?.cat || '')) confirmFiling(u, v)
+                            e.currentTarget.value = loc?.cat || ''
+                          }}
+                          className="text-[11px] border border-slate-300 rounded px-1.5 py-1 bg-white text-slate-700 max-w-[190px]"
+                          title="Pick a different category — the file is moved in the on-disk archive on confirm"
+                        >
+                          <option value="" disabled>Category…</option>
+                          {Array.from(new Set([...Object.keys(SOUTHLAKE_RISK_TAXONOMY), 'Clean', 'Uncategorized'])).map((cat) => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {reFiling === u.filename && <span className="text-teal-600 animate-pulse font-medium">moving on disk…</span>}
+                      <span className="ml-auto flex items-center gap-1.5">
+                        <button
+                          onClick={() => discardFiling(u)}
+                          className="text-[11px] font-semibold text-slate-500 border border-slate-300 rounded px-2 py-1 hover:bg-slate-50 transition"
+                          title="Don't add this file to the workspace (it remains on disk at the AI-suggested path)"
+                        >✕ Discard</button>
+                        <button
+                          onClick={() => confirmFiling(u, null)}
+                          className="text-[11px] font-bold text-white bg-teal-600 rounded px-2.5 py-1 hover:bg-teal-700 transition"
+                        >✓ Confirm filing</button>
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
         {uploaded.length > 0 && (
           <div className="mt-3 text-left">
             <div className="text-[11px] font-bold text-slate-500 uppercase mb-1">Uploaded ({uploaded.length})</div>
@@ -3565,7 +3789,7 @@ function SmartFilingView({ contracts: allContracts, uploads, onUploaded }: { con
       {/* Filing status */}
       {uploaded.length > 0 && (
         <div className="text-xs text-emerald-600">
-          ✓ {uploaded.length} file(s) auto-classified and saved to the archive — open a folder below (or use its “View” button) to see where each file was filed.<br />
+          ✓ {uploaded.length} file(s) classified, confirmed by you, and saved to the archive — open a folder below (or use its “View” button) to see where each file was filed.<br />
           <span className="text-slate-500">Newly filed documents now also appear in the Documents list, Work Queue and Risk Register — their AI-detected flags are included in the KPIs at the top.</span>
         </div>
       )}
@@ -4201,10 +4425,60 @@ function App() {
     () => [...contracts, ...uploads.map((u, i) => uploadToContractDoc(u, i))],
     [uploads]
   )
+
+  // ── v45.31 · Retired control (10/30 meeting: "no longer relevant" manual tag) ──
+  // Retired docs stay in the archive (retention/disposal unaffected) but are filtered
+  // out of alerting surfaces (KPIs, Work Queue, Risk Register, Deadlines) so users
+  // aren't confused by old flags on out-of-scope documents.
+  const [retiredNums, setRetiredNums] = useState<Set<number>>(() => {
+    const s = new Set<number>(contracts.filter((c) => c.retired).map((c) => c.num))
+    try { JSON.parse(localStorage.getItem('southlake_retired') || '[]').forEach((n: number) => s.add(n)) } catch { /* demo */ }
+    return s
+  })
+  const toggleRetired = (num: number) => {
+    setRetiredNums((prev) => {
+      const s = new Set(prev)
+      if (s.has(num)) s.delete(num); else s.add(num)
+      localStorage.setItem('southlake_retired', JSON.stringify([...s]))
+      return s
+    })
+    show(retiredNums.has(num) ? `#${num} unretired — back in alert scope` : `#${num} retired — out of scope, hidden from alerts`, 'info')
+  }
+
+  // ── v45.31 · Deferred "In Progress" control (10/30 meeting) ──
+  // A flagged item in active remediation can be deferred 30/60/90 days: it stops
+  // alerting (excluded from counts) but stays visible under the "Deferred" filter,
+  // and auto-reverts to open when the window passes.
+  const [deferMap, setDeferMap] = useState<Record<string, { until: string; note?: string }>>(() => {
+    const m: Record<string, { until: string; note?: string }> = {}
+    const day = 86400000
+    for (const [id, d] of Object.entries(SEED_DEFERRED)) m[id] = { until: new Date(Date.now() + d.days * day).toISOString(), note: d.note }
+    try { Object.assign(m, JSON.parse(localStorage.getItem('southlake_defers') || '{}')) } catch { /* demo */ }
+    return m
+  })
+  const deferItem = (id: string, days: number, note?: string) => {
+    setDeferMap((prev) => {
+      const m = { ...prev, [id]: { until: new Date(Date.now() + days * 86400000).toISOString(), note: note || `Deferred ${days} days — remediation in progress` } }
+      localStorage.setItem('southlake_defers', JSON.stringify(m))
+      return m
+    })
+    show('Item deferred — stops alerting until the window closes, then auto-reverts to open', 'info')
+  }
+  const clearDefer = (id: string) => {
+    setDeferMap((prev) => {
+      const m = { ...prev }
+      delete m[id]
+      localStorage.setItem('southlake_defers', JSON.stringify(m))
+      return m
+    })
+    show('Deferral cleared — item is open again', 'info')
+  }
   const filtered = liveContracts.filter((c) => {
     if (filterType !== 'All' && c.type !== filterType) return false
     if (filterRisk !== 'All' && c.riskLevel !== filterRisk) return false
     if (filterDept !== 'All' && c.department !== filterDept) return false
+    // v45.31 — Retired: manual "no longer in use" tag; independent of expiry date
+    if (filterExpiry === 'Retired') return retiredNums.has(c.num)
     if (filterExpiry !== 'All' && c.expiryDate) {
       const exp = new Date(c.expiryDate)
       const days = Math.ceil((exp.getTime() - today.getTime()) / 86400000)
@@ -4220,8 +4494,11 @@ function App() {
   // ── RBAC: documents visible to the active role ──
   const visible = filtered.filter((c) => canView(role, c))
   const hiddenCount = filtered.length - visible.length
+  // v45.31 — alert-scope: visible docs minus retired (out of scope); alerts/KPIs use this,
+  // the Documents list keeps showing retired docs (greyed, filterable) so nothing disappears from the archive
+  const activeVisible = visible.filter((c) => !retiredNums.has(c.num))
   // Demo resolution overlay: a flag resolved in Work Queue no longer counts as open
-  const visibleFlags2 = visible.flatMap((c) => c.flags.map((f) => ({ f, num: c.num })))
+  const visibleFlags2 = activeVisible.flatMap((c) => c.flags.map((f) => ({ f, num: c.num })))
   const openFlagsCount = visibleFlags2.filter(({ f, num }) => f.status === 'open' && !resolvedFlags.has(`f-${num}-${f.field}`)).length
   const criticalOpenCount = visibleFlags2.filter(({ f, num }) => f.severity === 'Critical' && f.status === 'open' && !resolvedFlags.has(`f-${num}-${f.field}`)).length
   const remediatedCount = visibleFlags2.filter(({ f, num }) => f.status === 'remediated' || resolvedFlags.has(`f-${num}-${f.field}`)).length
@@ -4235,7 +4512,14 @@ function App() {
   const avgCompliance = critVals.length > 0
     ? Math.round(critVals.reduce((a, b) => a + b, 0) / critVals.length * 100)
     : 0
-  const retentionAlertCount = visible.filter((c) => retentionState(c).status !== 'retained').length
+  const retentionAlertCount = activeVisible.filter((c) => retentionState(c).status !== 'retained').length
+  // v45.31 — deferral counts (for the KPI footnote): open flags currently inside a deferral window
+  const deferNow = new Date().getTime()
+  const deferredOpenCount = visibleFlags2.filter(({ f, num }) => {
+    const d = deferMap[`f-${num}-${f.field}`]
+    return f.status === 'open' && !resolvedFlags.has(`f-${num}-${f.field}`) && d && new Date(d.until).getTime() > deferNow
+  }).length
+  const retiredOpenCount = visible.flatMap((c) => c.flags.map((f) => ({ f, num: c.num }))).filter(({ f, num }) => retiredNums.has(num) && f.status === 'open' && !resolvedFlags.has(`f-${num}-${f.field}`)).length
 
   // RBAC-aware RAG: withhold archive paths that belong to documents this role cannot view
   const hiddenDocs = filtered.filter((c) => !canView(role, c))
@@ -4450,6 +4734,13 @@ function App() {
           <KpiCard label="Criteria Met (avg)" value={`${avgCompliance}%`} valueClass="text-teal-600" onClick={() => setActiveTab('insights')} title="Portfolio-level, not per-document: for each visible contract with a criteria checklist, 100% − (open flags ÷ criteria applicable to that document type). Averaged across your visible contracts. Live — it rises as you resolve flags in Work Queue. Newly uploaded files without a defined checklist are excluded until one is mapped." icon={<KpiIcon d={KPI_ICONS.gauge} />} />
           <KpiCard label="Retention Alerts" value={retentionAlertCount} valueClass={retentionAlertCount > 0 ? 'text-amber-600' : 'text-emerald-600'} onClick={() => setActiveTab('deadlines')} icon={<KpiIcon d={KPI_ICONS.clock} />} />
         </div>
+        {(deferredOpenCount > 0 || retiredOpenCount > 0) && (
+          <div className="mt-2 text-[11px] text-slate-400">
+            {deferredOpenCount > 0 && <>⏸ {deferredOpenCount} open flag{deferredOpenCount === 1 ? '' : 's'} deferred (in-progress remediation — auto-revert on due date)</>}
+            {deferredOpenCount > 0 && retiredOpenCount > 0 && ' · '}
+            {retiredOpenCount > 0 && <>▣ {retiredOpenCount} open flag{retiredOpenCount === 1 ? '' : 's'} on {retiredNums.size} retired doc{retiredNums.size === 1 ? '' : 's'} hidden from alerts (still in the archive)</>}
+          </div>
+        )}
 
         {/* RBAC banner */}
         {hiddenCount > 0 && (
@@ -4543,17 +4834,18 @@ function App() {
                     resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} onResolveFlag={(id) => markFlagResolved(id)}
                     manageable={!!role && canManage(role)} resolvedLog={resolvedLog}
                     focusFields={focusFields} expiryFilter={filterExpiry} onClearExpiry={() => setFilterExpiry('All')}
+                    retiredNums={retiredNums} deferMap={deferMap} onDefer={deferItem} onClearDefer={clearDefer}
                     onConfirmAction={(title, msg, action, showNote, defaultNote, aiDraft) => setConfirmState({ title, message: msg, onConfirm: action, showNote, defaultNote, aiDraft })} />
                 )}
                 {activeTab === 'risk-register' && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-slate-400">Showing {visible.length} contracts · {openFlagsCount} open flags</span>
-                      <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); localStorage.removeItem('ccdm_uploads'); window.location.reload() }} className="text-[11px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
+                      <span className="text-[11px] text-slate-400">Showing {activeVisible.length} contracts · {openFlagsCount} open flags{retiredNums.size > 0 ? ` · ${retiredNums.size} retired doc${retiredNums.size === 1 ? '' : 's'} out of scope` : ''}</span>
+                      <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); localStorage.removeItem('ccdm_uploads'); localStorage.removeItem('southlake_retired'); localStorage.removeItem('southlake_defers'); window.location.reload() }} className="text-[11px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
                     </div>
-                    <RiskMatrixView contracts={visible} onSelectContract={(c) => { setSelected(c); }} resolvedFlags={resolvedFlags} />
+                    <RiskMatrixView contracts={activeVisible} onSelectContract={(c) => { setSelected(c); }} resolvedFlags={resolvedFlags} />
                     <RiskRegisterTable
-                    contracts={visible}
+                    contracts={activeVisible}
                     onSelectContract={(c) => { setSelected(c); }}
                     onSwitchTab={(tab) => setActiveTab(tab)}
                     onFix={(flagId) => markFlagResolved(flagId)}
@@ -4576,6 +4868,7 @@ function App() {
                       onSelect={(c) => setSelected(c)}
                       role={role}
                       resolvedFlags={resolvedFlags}
+                      retiredNums={retiredNums}
                     />
                   </div>
                 )}
@@ -4584,20 +4877,20 @@ function App() {
                 )}
                 {activeTab === 'deadlines' && (
                   <div>
-                    <DeadlinesTimeline contracts={visible} onSelectContract={(c) => { setSelected(c); }} />
-                    <DeadlinesTable contracts={visible} onSelectContract={(c) => { setSelected(c); }} />
+                    <DeadlinesTimeline contracts={activeVisible} onSelectContract={(c) => { setSelected(c); }} />
+                    <DeadlinesTable contracts={activeVisible} onSelectContract={(c) => { setSelected(c); }} />
                     <RetentionBoard contracts={visible} approved={approvedDestruction} onApprove={approveDestruction}
   manageable={!!role && canManage(role)} disposed={disposedPaper} onDispose={disposePaper} />
                   </div>
                 )}
                 {activeTab === 'cross-refs' && (
-                  <CrossRefsView contracts={visible} />
+                  <CrossRefsView contracts={activeVisible} />
                 )}
                 {activeTab === 'smart-filing' && (
                   <SmartFilingView contracts={visible} uploads={uploads} onUploaded={addUploads} />
                 )}
                 {activeTab === 'insights' && (
-                  <InsightsView contracts={visible} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} resolvedFlags={resolvedFlags} completedLinks={completedLinks} onSetFocusFields={setFocusFields} />
+                  <InsightsView contracts={activeVisible} onJumpToContract={(c) => { setSelected(c); }} onSwitchTab={(tab) => setActiveTab(tab as TabId)} resolvedFlags={resolvedFlags} completedLinks={completedLinks} onSetFocusFields={setFocusFields} />
                 )}
               </>
             </div>
@@ -4610,7 +4903,8 @@ function App() {
                 </div>
                 <div className="px-5 py-4">
                   {canView(role, selected)
-                    ? <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} onStatusOverride={(flagId) => { markFlagResolved(flagId) }} resolvedFlags={resolvedFlags} />
+                    ? <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} onStatusOverride={(flagId) => { markFlagResolved(flagId) }} resolvedFlags={resolvedFlags}
+                      retired={retiredNums.has(selected.num)} onToggleRetired={!!role && canManage(role) ? () => toggleRetired(selected.num) : undefined} />
                     : <RestrictedAccessPanel doc={selected} role={role} />}
                 </div>
               </aside>

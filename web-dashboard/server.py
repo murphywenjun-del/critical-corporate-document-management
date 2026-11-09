@@ -498,6 +498,45 @@ def file_doc(filename: str, category: str, subcategory: str = "General"):
         "path": f"data/archive/{category}/{subcategory}/{found.name}",
     }
 
+@app.post("/api/re-file")
+async def re_file(payload: dict):
+    """v45.31 — human-confirmed re-filing: move an already-archived file into a
+    user-adjusted category (the "Verify filing" step: AI suggests, human decides)."""
+    filename = str(payload.get("filename", ""))
+    from_cat = str(payload.get("from_category", ""))
+    to_cat = str(payload.get("to_category", ""))
+    if not filename or not to_cat:
+        return {"error": "filename and to_category are required"}
+    import shutil
+    # Locate the file: under data/archive/<from_cat>/** first, then uploads/
+    found = None
+    if from_cat:
+        matches = list((ARCHIVE_DIR / from_cat).rglob(filename)) if (ARCHIVE_DIR / from_cat).exists() else []
+        matches = matches or list(ARCHIVE_DIR.rglob(filename))
+        if matches:
+            found = matches[0]
+    if not found:
+        uploads_dir = BASE_DIR / "web-dashboard" / "uploads"
+        cands = list(uploads_dir.glob(f"*{re.sub(r'[^\\w\\-.]', '_', filename)}")) if uploads_dir.exists() else []
+        found = cands[0] if cands else None
+    if not found:
+        return {"error": f"File not found in archive: {filename}"}
+    sub = found.parent.name if found.parent != (BASE_DIR / "web-dashboard" / "uploads") else "General"
+    target_dir = ARCHIVE_DIR / to_cat / sub
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target = target_dir / found.name
+    if target.exists() and target.resolve() != found.resolve():
+        target.unlink()
+    shutil.move(str(found), str(target))
+    return {
+        "status": "refiled",
+        "filename": found.name,
+        "from_category": from_cat or "(unknown)",
+        "to_category": to_cat,
+        "subcategory": sub,
+        "path": f"data/archive/{to_cat}/{sub}/{found.name}",
+    }
+
 # Field → (client category, risk name). Mirrors FLAG_TO_HIROC in src/data.ts — keep in sync.
 SOUTHLAKE_FLAG_MAP = {
     "signatories": ("Leadership", "Governance"),

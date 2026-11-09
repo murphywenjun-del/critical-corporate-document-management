@@ -83,6 +83,7 @@ export interface ContractDoc {
   retentionOwner: string      // Who gets notified at the retention deadline
   paper?: { copies: number; location: string } // Paper copies to track through disposal
   isUpload?: boolean // true when the doc came from a Smart Filing upload (live, this session)
+  retired?: boolean // v45.31 — manual "no longer relevant / in use" tag (10/30 meeting: filter legacy docs so users aren't confused by old flags)
 }
 
 export interface JevData {
@@ -234,6 +235,13 @@ export const VELOCITY_BY_FIELD: Record<string, number> = {
 }
 export const flagVelocity = (f: { field: string }): number => VELOCITY_BY_FIELD[f.field] ?? 3
 export const piaPriority = (f: { risk_score?: number; field: string }): number => (f.risk_score || 0) + flagVelocity(f)
+// v45.31 — Deferred work items (10/30 meeting: "In Progress" status with a defined deferral period;
+// deferred items don't keep alerting but stay visible until the window expires, then auto-revert to open).
+// Seeded example: doc #9's conflicting-amounts flag is under review with the counterparty → deferred 60 days.
+export const SEED_DEFERRED: Record<string, { days: number; note: string }> = {
+  'f-9-conflicting_finance': { days: 60, note: 'Amount mismatch under review with counterparty — in progress' },
+}
+
 export const PRIORITY_BANDS = { critical: 22, high: 14, medium: 7 }
 export const piaBand = (p: number): 'Critical' | 'High' | 'Medium' | 'Low' =>
   p >= PRIORITY_BANDS.critical ? 'Critical' : p >= PRIORITY_BANDS.high ? 'High' : p >= PRIORITY_BANDS.medium ? 'Medium' : 'Low'
@@ -1218,6 +1226,8 @@ export const contracts: ContractDoc[] = [
     jev: { riskSeverity: { choice: "high", confidence: 0.86 }, needsHumanReview: 0.90, isComplianceRelated: 0.86, shouldAlert: 0.91, decisionConfidence: 0.0 },
     compliance: { hardGaps: 4, bpGaps: 2, complianceRate: 0.33, topRiskField: "signatories" },
     department: "IT / Info Systems", expiryDate: "2022-03-01",
+    retired: true, // v45.31 — 2019 legacy license, out of scope since the IT MSA (doc #9) took over; kept in archive for retention only
+
     confidentiality: "confidential", retentionYears: 3, retentionBasis: "Pre-schedule legacy 2019 license — 3-year legacy retention cycle (complete 2025-03-01, discard-eligible; policy §1.1 discretion). Schedule A C21 applies to agreements signed from 2023 on.", retentionOwner: "Legal Services (with IT archive)", paper: { copies: 3, location: "Records archive — 2019 originals + scans" },
   },
   // ── NEW Contract 9: IT Master Services Agreement (from Exelon/NSW template structure) ──
