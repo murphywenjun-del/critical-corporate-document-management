@@ -5,7 +5,7 @@
 - **File Name**: DSA_Provider_Data_Sharing_2024.pdf
 - **Risk Score**: 3.0 / 5.0 (Medium)
 - **Rules Flags Count**: 0
-- **Expected Outcome**: PHIPA严重缺失 · Zero PHIPA compliance, no breach notification, no VP signatures
+- **Expected Outcome**: Zero PHIPA compliance, no breach notification, no VP signatures
 
 ---
 

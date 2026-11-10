@@ -5,7 +5,7 @@
 - **File Name**: NDA_Old_Vendor_2022.pdf
 - **Risk Score**: 5.0 / 5.0 (Critical)
 - **Rules Flags Count**: 0
-- **Expected Outcome**: 已过期未处理 · Expired ~956 days, no PHIPA, no return/destruction clause
+- **Expected Outcome**: Expired ~956 days, no PHIPA, no return/destruction clause
 
 ---
 

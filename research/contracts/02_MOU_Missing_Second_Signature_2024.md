@@ -5,7 +5,7 @@
 - **File Name**: MOU_Missing_Second_Signature_2024.pdf
 - **Risk Score**: 1.0 / 5.0 (Low)
 - **Rules Flags Count**: 0
-- **Expected Outcome**: 缺少第二个VP签字 · Missing VP signatories, mixed binding language
+- **Expected Outcome**: Missing VP signatories, mixed binding language
 
 ---
 

@@ -5,7 +5,7 @@
 - **File Name**: Procurement_HealthIT_Service_Agreement_2023.pdf
 - **Risk Score**: 4.0 / 5.0 (High)
 - **Rules Flags Count**: 0
-- **Expected Outcome**: 多风险采购合同 · Unlimited indemnity, auto-increasing fees, 90-day termination
+- **Expected Outcome**: Unlimited indemnity, auto-increasing fees, 90-day termination
 
 ---
 
