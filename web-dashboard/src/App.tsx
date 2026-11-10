@@ -3210,6 +3210,421 @@ function AmendmentsView({ contracts: allContracts, onSelect, resolvedFlags }: { 
 
 // ── ContractDoc Detail Panel ────────────────────────────────────────────────────
 
+// ────────────────────────────────────────────────────────────────
+// v45.36 — document collaboration (PingCode/Confluence-inspired):
+// share + follow + comments & annotations + notification inbox with
+// Email / Teams / Message channel simulation. Everything persists in
+// the G5 shared record (handoff.json + localStorage) so the next
+// employee sees the same threads.
+// ────────────────────────────────────────────────────────────────
+type NotifChannel = 'email' | 'teams' | 'message'
+type Notif = {
+  id: string
+  ts: string
+  kind: 'shared' | 'comment' | 'annotation' | 'follow' | 'resolved'
+  docNum: number
+  text: string
+  by: string
+  channels: NotifChannel[]
+  read: boolean
+}
+type DocComment = {
+  id: string
+  ts: string
+  docNum: number
+  scope: string // 'doc' | a flag field | 'text'
+  anchorQuote?: string // for scope 'text': the selected passage the annotation attaches to
+  text: string
+  by: string
+}
+type ShareEvent = {
+  id: string
+  ts: string
+  docNum: number
+  recipients: string[]
+  note?: string
+  channels: NotifChannel[]
+  by: string
+}
+type FollowMap = Record<number, { persona: string; ts: string; by: string }>
+
+const NOTIFY_DEFAULT_EMAIL = 'wteng.msc2026@ivey.ca'
+const CHANNEL_LABEL: Record<NotifChannel, string> = { email: 'Email', teams: 'Microsoft Teams', message: 'Text / SMS' }
+
+function NotificationCenter({ notifs, unread, onOpenDoc, onMarkAllRead, onToggleRead }: {
+  notifs: Notif[]
+  unread: number
+  onOpenDoc: (num: number) => void
+  onMarkAllRead: () => void
+  onToggleRead: (id: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [chan, setChan] = useState<'all' | NotifChannel>('all')
+  const [testOpen, setTestOpen] = useState(false)
+  const [toEmail, setToEmail] = useState<string>(() => localStorage.getItem('ccdm_notify_email') || NOTIFY_DEFAULT_EMAIL)
+  const shown = notifs.filter((n) => chan === 'all' || n.channels.includes(chan)).slice(0, 40)
+  const kindDot: Record<Notif['kind'], string> = { shared: 'bg-teal-500', comment: 'bg-sky-500', annotation: 'bg-amber-500', follow: 'bg-violet-500', resolved: 'bg-emerald-500' }
+  // honest delivery copy — the pilot never leaves this machine
+  const simNote = 'Simulated delivery — in the pilot, no message leaves this machine. Wire SMTP / a Teams webhook to send for real.'
+  const mailto = `mailto:${toEmail}?subject=${encodeURIComponent('CCDM Pilot — document update')}&body=${encodeURIComponent(shown.slice(0, 3).map((n) => `• [${n.kind.toUpperCase()}] Document #${n.docNum}: ${n.text} (by ${n.by})`).join('\n') || '• No new notifications — inbox is clear.')}`
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className={`relative flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition shadow-sm ${open ? 'bg-slate-800 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+        title="Notifications — share / follow / comment / annotation alerts (Email · Teams · Message)"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4a2 2 0 01-.6-1.4V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+        </svg>
+        <span className="text-[12px] font-bold">Updates</span>
+        {unread > 0 && <span className="text-[10px] font-bold text-white bg-red-500 rounded-full px-1.5 py-0.5 leading-none">{unread}</span>}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[80]" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-2 w-[420px] max-w-[92vw] z-[81] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+              <div className="text-[13px] font-bold text-slate-800">Notification Center <span className="text-slate-400 font-normal text-[11px]">· shared via</span></div>
+              <div className="flex items-center gap-1">
+                {(['all', 'email', 'teams', 'message'] as const).map((c) => (
+                  <button key={c} onClick={() => setChan(c)} className={`text-[11px] font-semibold rounded-full px-2 py-0.5 transition ${chan === c ? 'bg-slate-800 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                    {c === 'all' ? 'All' : CHANNEL_LABEL[c]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="max-h-[380px] overflow-y-auto">
+              {shown.length === 0 && (
+                <div className="p-6 text-center text-[12px] text-slate-400">
+                  No notifications {chan !== 'all' ? `via ${CHANNEL_LABEL[chan]}` : 'yet'} — share a document, follow it, or add a comment, and alerts land here.
+                </div>
+              )}
+              {shown.map((n) => (
+                <button
+                  key={n.id}
+                  onClick={() => { onToggleRead(n.id); onOpenDoc(n.docNum); setOpen(false) }}
+                  className={`w-full text-left px-4 py-2.5 border-b border-slate-50 hover:bg-slate-50 transition ${!n.read ? 'bg-sky-50/50' : ''}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${kindDot[n.kind]}`} />
+                    <span className="text-[12px] font-semibold text-slate-800">Document #{n.docNum}</span>
+                    <span className="text-[10px] text-slate-400">{n.ts}</span>
+                    <span className="ml-auto flex items-center gap-1">
+                      {n.channels.map((c) => (
+                        <span key={c} className="text-[9px] font-bold uppercase tracking-wide text-slate-500 bg-slate-100 rounded px-1 py-0.5">{c === 'teams' ? 'Teams' : c}</span>
+                      ))}
+                    </span>
+                  </div>
+                  <div className="text-[12px] text-slate-600 mt-0.5 leading-snug">{n.text} <span className="text-slate-400">— by {n.by}</span></div>
+                </button>
+              ))}
+            </div>
+            <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center gap-2">
+              <button onClick={onMarkAllRead} className="text-[11px] font-semibold text-slate-600 hover:text-slate-900">Mark all read</button>
+              <button onClick={() => setTestOpen(true)} className="ml-auto text-[11px] font-bold text-white bg-slate-800 hover:bg-slate-700 rounded-md px-2.5 py-1.5">Test delivery</button>
+            </div>
+            {testOpen && (
+              <div className="border-t border-slate-200 bg-slate-50 p-4 space-y-3">
+                <div>
+                  <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Test recipient</label>
+                  <input
+                    value={toEmail}
+                    onChange={(e) => { setToEmail(e.target.value); localStorage.setItem('ccdm_notify_email', e.target.value) }}
+                    className="w-full mt-1 text-[12px] font-mono border border-slate-300 rounded px-2 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-teal-300"
+                  />
+                  <div className="text-[10px] text-slate-500 mt-1">Your own address is fine for testing — previews below show exactly what each channel delivers.</div>
+                </div>
+                {/* Email channel */}
+                <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="px-3 py-1.5 bg-slate-100 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wide flex justify-between"><span>📧 Email</span><span className="normal-case font-normal text-slate-400">simulated</span></div>
+                  <div className="p-3 text-[12px] text-slate-700 space-y-1 font-mono">
+                    <div><b>From:</b> ccdm-alerts@southlake-health.example</div>
+                    <div><b>To:</b> {toEmail || '—'}</div>
+                    <div><b>Subject:</b> CCDM Pilot — document update ({shown.length} entr{shown.length === 1 ? 'y' : 'ies'})</div>
+                    <div className="pt-1 leading-relaxed whitespace-pre-wrap">{shown.slice(0, 3).map((n) => `• [#${n.docNum}] ${n.text} (by ${n.by})`).join('\n') || 'Your CCDM inbox is clear — no pending updates.'}</div>
+                  </div>
+                  <div className="px-3 pb-2.5 flex items-center gap-2">
+                    <a href={mailto} className="text-[11px] font-bold text-sky-700 bg-sky-50 border border-sky-200 rounded-md px-2.5 py-1.5 hover:bg-sky-100">Open in your mail client</a>
+                    <span className="text-[10px] text-amber-700">⚠ {simNote}</span>
+                  </div>
+                </div>
+                {/* Microsoft Teams channel */}
+                <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="px-3 py-1.5 bg-[#6264A7] text-white text-[10px] font-bold uppercase tracking-wide flex justify-between"><span>⚡ Microsoft Teams</span><span className="normal-case font-normal opacity-80">simulated card</span></div>
+                  <div className="p-3">
+                    <div className="border-l-4 border-[#6264A7] pl-3">
+                      <div className="text-[13px] font-bold text-slate-900">CCDM Pilot · Document update</div>
+                      {shown.slice(0, 2).map((n) => (
+                        <div key={n.id} className="text-[12px] text-slate-600 mt-1.5 leading-snug">
+                          <b>#{n.docNum}</b> — {n.text} <span className="text-slate-400">by {n.by} · {n.ts}</span>
+                        </div>
+                      ))}
+                      {shown.length === 0 && <div className="text-[12px] text-slate-500 mt-1.5">No pending updates — inbox is clear.</div>}
+                      <button onClick={() => { if (shown[0]) { onOpenDoc(shown[0].docNum); setOpen(false); setTestOpen(false) } }} className="mt-2 text-[11px] font-bold text-white bg-[#6264A7] hover:opacity-90 rounded px-2.5 py-1.5">Open document →</button>
+                    </div>
+                  </div>
+                  <div className="px-3 pb-2.5"><span className="text-[10px] text-amber-700">⚠ {simNote}</span></div>
+                </div>
+                {/* Message channel */}
+                <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="px-3 py-1.5 bg-slate-100 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wide flex justify-between"><span>💬 Text / SMS</span><span className="normal-case font-normal text-slate-400">simulated</span></div>
+                  <div className="p-3">
+                    <div className="inline-block max-w-[90%] bg-slate-800 text-white text-[12px] rounded-2xl rounded-tl-sm px-3 py-2 leading-snug">
+                      CCDM: {shown.length === 0 ? 'Your document inbox is clear.' : `New on #${shown[0].docNum}: ${shown[0].text.slice(0, 90)}${shown[0].text.length > 90 ? '…' : ''} — by ${shown[0].by}`}
+                    </div>
+                    <div className="text-[10px] text-slate-400 mt-1.5">To {toEmail || '—'} · {new Date().toLocaleTimeString()}</div>
+                  </div>
+                  <div className="px-3 pb-2.5"><span className="text-[10px] text-amber-700">⚠ {simNote}</span></div>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function ShareModal({ open, onClose, docNum, docLabel, by, manageable, onShare }: {
+  open: boolean
+  onClose: () => void
+  docNum: number
+  docLabel: string
+  by: string
+  manageable: boolean
+  onShare: (recipients: string[], note: string, channels: NotifChannel[]) => void
+}) {
+  const [sel, setSel] = useState<Set<string>>(new Set(['Legal Counsel', 'Clinical Operations']))
+  const [extra, setExtra] = useState('')
+  const [note, setNote] = useState('')
+  const [chans, setChans] = useState<NotifChannel[]>(['email', 'teams'])
+  if (!open) return null
+  const personas = ['Legal Counsel', 'Clinical Operations', 'Finance & Procurement', 'General Staff (Read-only)']
+  const toggle = (v: string) => setSel((p) => { const n = new Set(p); if (n.has(v)) n.delete(v); else n.add(v); return n })
+  const toggleCh = (c: NotifChannel) => setChans((p) => (p.includes(c) ? p.filter((x) => x !== c) : [...p, c]))
+  const send = () => {
+    const recips = [...sel, ...extra.split(/[,;\s]+/).map((x) => x.trim()).filter((x) => x.length > 3)].filter(Boolean)
+    if (recips.length === 0 || chans.length === 0) return
+    onShare(recips, note.trim(), chans)
+    setSel(new Set()); setExtra(''); setNote('')
+  }
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center">
+      <div className="absolute inset-0 bg-slate-900/40" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-2xl w-[460px] max-w-[94vw] p-5">
+        <div className="text-[15px] font-bold text-slate-900">Share document #{docNum} <span className="text-slate-400 font-normal text-[12px]">· {docLabel}</span></div>
+        <div className="text-[11px] text-slate-500 mt-0.5 mb-3">Recipients get an alert via the channels you pick — plus a copy of your note. (PingCode-style task sharing.)</div>
+        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">Share with</div>
+        <div className="flex flex-wrap gap-1.5 mb-2">
+          {personas.map((p) => (
+            <button key={p} onClick={() => toggle(p)} className={`text-[12px] rounded-full border px-2.5 py-1 transition ${sel.has(p) ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-300 text-slate-600 hover:border-teal-400'}`}>
+              {sel.has(p) ? '✓ ' : ''}{p}
+            </button>
+          ))}
+        </div>
+        <input
+          value={extra}
+          onChange={(e) => setExtra(e.target.value)}
+          placeholder="Add email addresses (comma-separated)…"
+          className="w-full text-[12px] border border-slate-300 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-teal-300"
+        />
+        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mt-3 mb-1.5">Alert channels</div>
+        <div className="flex gap-1.5 mb-3">
+          {(['email', 'teams', 'message'] as NotifChannel[]).map((c) => (
+            <button key={c} onClick={() => toggleCh(c)} className={`text-[12px] rounded-md border px-2.5 py-1 transition ${chans.includes(c) ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-slate-300 text-slate-600 hover:border-slate-400'}`}>
+              {chans.includes(c) ? '✓ ' : ''}{CHANNEL_LABEL[c]}
+            </button>
+          ))}
+        </div>
+        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">Note (optional)</div>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={2}
+          placeholder={`e.g. "Reviewing the ${docLabel} ahead of the 11/11 walkthrough — comments welcome on the flagged clauses."`}
+          className="w-full text-[12px] border border-slate-300 rounded-md px-2.5 py-1.5 resize-y focus:outline-none focus:ring-2 focus:ring-teal-300"
+        />
+        <div className="flex items-center gap-2 mt-4">
+          <div className="text-[10px] text-slate-400">Shared by {by}</div>
+          <button onClick={onClose} className="ml-auto text-[12px] font-semibold text-slate-500 hover:text-slate-800">Cancel</button>
+          <button onClick={send} disabled={!manageable} className="text-[13px] font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-40 rounded-lg px-4 py-2 transition">
+            Share →
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CollabComposer({ docNum, flags, manageable, byPersona, onPost }: {
+  docNum: number
+  flags: ContractDoc['flags']
+  manageable: boolean
+  byPersona: string
+  onPost: (scope: string, text: string, quote?: string) => void
+}) {
+  const [scope, setScope] = useState('doc')
+  const [text, setText] = useState('')
+  const [posted, setPosted] = useState(false)
+  void docNum
+  const post = () => {
+    if (!text.trim()) return
+    onPost(scope, text.trim())
+    setText('')
+    setPosted(true)
+    setTimeout(() => setPosted(false), 2500)
+  }
+  return (
+    <div>
+      <div className="flex gap-2 items-start">
+        <select
+          value={scope}
+          onChange={(e) => setScope(e.target.value)}
+          id="collab-scope"
+          className="text-[11px] font-semibold border border-slate-300 rounded-md px-2 py-1.5 bg-white text-slate-600 focus:outline-none focus:ring-2 focus:ring-teal-300 shrink-0"
+          title="What this comment attaches to: the whole document, one risk flag, or an inline text selection (pick text in the document body below)"
+        >
+          <option value="doc">Document</option>
+          {flags.map((f) => (
+            <option key={f.field} value={f.field}>Flag · {f.field.replace(/_/g, ' ')}</option>
+          ))}
+          <option value="text">Inline text (select a passage in the document body)</option>
+        </select>
+        <textarea
+          id="collab-input"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={2}
+          disabled={!manageable}
+          placeholder={manageable ? 'Add a comment for the team… (visible to the next employee on any machine — stored in the shared record)' : 'Commenting requires the Legal role (demo RBAC)'}
+          className="flex-1 text-[12px] border border-slate-300 rounded-md px-2.5 py-1.5 resize-y focus:outline-none focus:ring-2 focus:ring-teal-300 disabled:opacity-50"
+        />
+      </div>
+      {scope === 'text' && (
+        <div className="text-[10px] text-amber-700 mt-1">Tip: select a passage in the “Document text” section below — an “Annotate selection” button appears where you select.</div>
+      )}
+      <div className="flex items-center gap-2 mt-1.5">
+        <button
+          id="collab-post"
+          onClick={post}
+          disabled={!manageable || !text.trim()}
+          className="text-[11px] font-bold text-white bg-slate-800 hover:bg-slate-700 disabled:opacity-40 rounded-md px-2.5 py-1.5 transition"
+        >
+          {posted ? '✓ Posted to the thread' : 'Post comment'}
+        </button>
+        <span className="text-[10px] text-slate-400">posted as {byPersona}</span>
+      </div>
+    </div>
+  )
+}
+
+function AnnotableDocText({ doc, onAnnotate }: {
+  doc: ContractDoc
+  onAnnotate: (quote: string, note?: string) => void
+}) {
+  const [text, setText] = useState<string | null>(null)
+  const [status, setStatus] = useState<'idle' | 'loading' | 'ok' | 'missing'>('idle')
+  const [annQuote, setAnnQuote] = useState<string | null>(null) // passage under annotation
+  const [annOpen, setAnnOpen] = useState<string | null>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
+  const [draft, setDraft] = useState('')
+
+  useEffect(() => {
+    setText(null); setStatus('idle'); setAnnQuote(null); setAnnOpen(null); setDraft('')
+    if (doc.isUpload || !doc.filePath) { setStatus('missing'); return }
+    setStatus('loading')
+    fetch(`${import.meta.env.BASE_URL}${doc.filePath}`)
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+      .then((t) => {
+        const head = t.slice(0, 300).toLowerCase()
+        if (head.includes('<!doctype') || head.includes('<html')) { setStatus('missing'); return }
+        setText(t); setStatus('ok')
+      })
+      .catch(() => setStatus('missing'))
+  }, [doc.num]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onmouseup = () => {
+    const sel = window.getSelection()
+    const quote = sel?.toString().trim()
+    if (!boxRef.current || !quote || quote.length < 8 || quote.length > 300) return
+    // only count selections made inside this block
+    if (!boxRef.current.contains(sel?.anchorNode ?? null)) return
+    setAnnQuote(quote)
+  }
+  const submitAnn = () => {
+    if (annQuote && draft.trim()) {
+      onAnnotate(annQuote, draft.trim())
+      setAnnQuote(null)
+      setDraft('')
+    } else setAnnQuote(null)
+  }
+  // highlight known quotes (from existing inline annotations, passed via closure of nothing — keep it light: highlight the last selected one)
+  const highlight = (line: string) => {
+    if (!annQuote) return <span>{line}</span>
+    const i = line.indexOf(annQuote)
+    if (i < 0) return <span>{line}</span>
+    return (
+      <span>
+        {line.slice(0, i)}
+        <mark id="annot-hl" className="bg-amber-100 text-amber-900 rounded px-0.5 cursor-pointer" style={{ borderBottom: '2px dotted #f59e0b' }} onMouseEnter={() => setAnnOpen(annQuote)} onMouseLeave={() => setAnnOpen(null)}>
+          {annQuote}
+        </mark>
+        {line.slice(i + annQuote.length)}
+      </span>
+    )
+  }
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg p-4 mb-5">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Document text <span className="text-slate-400 normal-case font-mono text-[10px]">{doc.filePath || ''}</span></h3>
+        <span className="text-[10px] text-slate-400">select any passage → “Annotate selection” (Confluence-style inline comment)</span>
+      </div>
+      {status === 'loading' && <div className="text-[12px] text-slate-400 py-6 text-center">Loading document text…</div>}
+      {status === 'missing' && (
+        <div className="text-[12px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2.5">
+          No full text on file for this document yet (uploads keep their summary instead of a scanned body) — comments and annotations still work in the panel above.
+        </div>
+      )}
+      {status === 'ok' && text && (
+        <div
+          id="annotable-doc"
+          ref={boxRef}
+          onMouseUp={onmouseup}
+          className="relative text-[12px] font-mono leading-5 text-slate-700 bg-slate-50 border border-slate-100 rounded-md p-3 max-h-[420px] overflow-y-auto whitespace-pre-wrap select-text"
+        >
+          {text.split('\n').map((line, i) => (
+            <div key={i}>{highlight(line)}</div>
+          ))}
+          {annQuote && (
+            <div id="annot-pop" className="absolute left-3 right-3 bottom-3 z-10 bg-white border-2 border-amber-400 rounded-lg shadow-lg p-2.5">
+              <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wide mb-1">Annotate: “{annQuote.slice(0, 70)}{annQuote.length > 70 ? '…' : ''}”</div>
+              <input
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && submitAnn()}
+                placeholder="Your annotation for this passage…"
+                className="w-full text-[12px] border border-amber-300 rounded px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+              <div className="flex items-center gap-2 mt-1.5">
+                <button onClick={submitAnn} disabled={!draft.trim()} className="text-[11px] font-bold text-white bg-amber-500 hover:bg-amber-600 disabled:opacity-40 rounded px-2 py-1">Annotate →</button>
+                <button onClick={() => { setAnnQuote(null); setDraft('') }} className="text-[11px] text-slate-500 hover:text-slate-800">Cancel</button>
+              </div>
+            </div>
+          )}
+          {annOpen && (
+            <div className="absolute top-2 left-2 right-2 z-10 bg-amber-50 border border-amber-300 rounded-md px-3 py-2 text-[11px] text-amber-900">
+              <b>Inline annotation target:</b> “{annOpen.slice(0, 100)}{annOpen.length > 100 ? '…' : ''}” — select it and click Annotate to attach a comment.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ContractDetail({
   selected,
   docLinks: allDocLinks,
@@ -3221,6 +3636,14 @@ function ContractDetail({
   eventsFor,
   onAddNote,
   manageable,
+  // v45.36 — collaboration
+  isFollowing,
+  onToggleFollow,
+  collabComments,
+  onPostComment,
+  shareCount,
+  onOpenShare,
+  byPersona,
 }: {
   selected: ContractDoc
   onBack?: () => void
@@ -3233,6 +3656,13 @@ function ContractDetail({
   eventsFor?: { ts: string; text: string; kind: string; docNum?: number; who?: string }[]
   onAddNote?: (text: string) => void
   manageable?: boolean
+  isFollowing?: boolean
+  onToggleFollow?: () => void
+  collabComments?: DocComment[]
+  onPostComment?: (scope: string, text: string, anchorQuote?: string) => void
+  shareCount?: number
+  onOpenShare?: () => void
+  byPersona?: string
 }) {
   const s = selected
   void onStatusOverride
@@ -3260,6 +3690,31 @@ function ContractDetail({
         >
           {retired ? '↩ Unretire — back in alert scope' : '▣ Retire this document (no longer in use)'}
         </button>
+      )}
+
+      {/* v45.36 — collaboration controls: follow this document + share it (PingCode/Confluence-style) */}
+      {(onToggleFollow || onOpenShare) && (
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
+          <button
+            id="follow-btn"
+            onClick={onToggleFollow}
+            disabled={!manageable}
+            title={manageable ? (isFollowing ? 'Following — you will be alerted (Updates bell) when this document changes' : 'Follow this document — get share/comment/annotation alerts in Updates') : 'Following requires the Legal role (demo RBAC)'}
+            className={`text-[13px] font-semibold rounded-lg px-4 py-2 transition border disabled:opacity-40 ${isFollowing ? 'bg-amber-50 border-amber-300 text-amber-700' : 'bg-white border-slate-300 text-slate-600 hover:border-amber-300 hover:text-amber-700'}`}
+          >
+            {isFollowing ? '★ Following' : '☆ Follow'}
+          </button>
+          <button
+            id="share-btn"
+            onClick={onOpenShare}
+            disabled={!manageable}
+            title={manageable ? 'Share this document — pick recipients and alert channels' : 'Sharing requires the Legal role (demo RBAC)'}
+            className="text-[13px] font-semibold rounded-lg px-4 py-2 transition bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-40"
+          >
+            ⇄ Share{(shareCount || 0) > 0 ? ` · ${shareCount} shares` : ''}
+          </button>
+          <span className="text-[11px] text-slate-400">Follow + Share alerts land in the Updates bell (Email · Teams · Message channels)</span>
+        </div>
       )}
 
       {/* Header */}
@@ -3407,6 +3862,42 @@ function ContractDetail({
           <AmendmentTimeline amendments={s.amendments} />
         </section>
       )}
+
+      {/* v45.36 — Comments & Annotations (Confluence-style threads + text-anchored inline annotations) */}
+      {onPostComment && (
+        <div id="collab-panel" className="bg-white border border-slate-200 rounded-lg p-4 mb-5">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Comments &amp; Annotations <span className="text-slate-400 normal-case">({(collabComments || []).length})</span></h3>
+            <span className="text-[10px] text-slate-400">shared across employees via the server record · G5</span>
+          </div>
+          {(collabComments || []).length > 0 && (
+            <div className="space-y-2 mb-3 max-h-[260px] overflow-y-auto pr-1">
+              {(collabComments || []).map((cm) => (
+                <div key={cm.id} className={`text-[12px] rounded-md border px-3 py-2 ${cm.scope === 'text' ? 'border-amber-200 bg-amber-50/50' : 'border-slate-100 bg-slate-50'}`}>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      {cm.scope === 'doc' ? 'Document' : cm.scope === 'text' ? 'Inline annotation' : `Flag · ${cm.scope.replace(/_/g, ' ')}`}
+                    </span>
+                    {cm.anchorQuote && <span className="text-[11px] text-amber-800 italic font-mono truncate max-w-[260px]" title={cm.anchorQuote}>“{cm.anchorQuote.slice(0, 60)}{cm.anchorQuote.length > 60 ? '…' : ''}”</span>}
+                    <span className="ml-auto text-[10px] text-slate-400">{cm.by} · {cm.ts}</span>
+                  </div>
+                  <div className="text-slate-700 mt-1 leading-snug">{cm.text}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <CollabComposer
+            docNum={s.num}
+            flags={s.flags}
+            manageable={!!manageable}
+            byPersona={byPersona || 'Legal Counsel'}
+            onPost={(scope, text, quote) => onPostComment(scope, text, quote)}
+          />
+        </div>
+      )}
+
+      {/* v45.36 — Document text with select-to-annotate (Confluence inline comment pattern) */}
+      <AnnotableDocText doc={s} onAnnotate={(quote, note) => onPostComment?.('text', note || '', quote)} />
 
       {/* v45.32 — Notes & Activity (paperless-style): margin annotations + the record of what happened to this document */}
       {(notesFor || eventsFor || onAddNote) && (
@@ -3946,7 +4437,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
             <span className="text-[13px] font-semibold text-emerald-800">Resolved log ({totalResolved})</span>
             {totalResolved > 0 && (
               <button
-                onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); localStorage.removeItem('ccdm_uploads'); localStorage.removeItem('southlake_retired'); localStorage.removeItem('southlake_defers'); localStorage.removeItem('ccdm_notes'); localStorage.removeItem('ccdm_activity'); localStorage.removeItem('ccdm_savedviews'); localStorage.removeItem('resolvedLog'); fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resolvedFlags: [], completedLinks: [], defers: {}, notes: {}, activity: [], resolvedLog: [] }) }).catch(() => {}); window.location.reload() }}
+                onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); localStorage.removeItem('ccdm_uploads'); localStorage.removeItem('southlake_retired'); localStorage.removeItem('southlake_defers'); localStorage.removeItem('ccdm_notes'); localStorage.removeItem('ccdm_activity'); localStorage.removeItem('ccdm_savedviews'); localStorage.removeItem('southlake_follows'); localStorage.removeItem('ccdm_comments'); localStorage.removeItem('ccdm_shares'); localStorage.removeItem('ccdm_notifications'); localStorage.removeItem('resolvedLog'); fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resolvedFlags: [], completedLinks: [], defers: {}, notes: {}, activity: [], resolvedLog: [], follows: {}, comments: [], shares: [], notifications: [] }) }).catch(() => {}); window.location.reload() }}
                 className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-800 hover:underline"
               >
                 Reset all
@@ -5255,6 +5746,7 @@ function App() {
   const [filterDept, setFilterDept] = useState('All')
   const [filterExpiry, setFilterExpiry] = useState('All')
   const [aiOpen, setAiOpen] = useState(false) // top-right AI copilot
+  const [shareFor, setShareFor] = useState<number | null>(null) // v45.36 — share modal target document
   // Draggable launcher icon: null = default spot in the header; otherwise a fixed chip at {x,y}
   const [aiIconPos, setAiIconPos] = useState<{ x: number; y: number } | null>(null)
   const aiIconRef = useRef<HTMLButtonElement>(null)
@@ -5492,6 +5984,74 @@ function App() {
     if (!silent) show(`Note added to #${num}`, 'success')
   }
 
+  // ── v45.36 — collaboration layer: follows / comments & annotations / shares / notifications ──
+  const nowTs = () => new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const [follows, setFollows] = useState<FollowMap>(() => {
+    try { return JSON.parse(localStorage.getItem('southlake_follows') || '{}') } catch { return {} }
+  })
+  const [collabComments, setCollabComments] = useState<DocComment[]>(() => {
+    try { return JSON.parse(localStorage.getItem('ccdm_comments') || '[]') } catch { return [] }
+  })
+  const [shareEvents, setShareEvents] = useState<ShareEvent[]>(() => {
+    try { return JSON.parse(localStorage.getItem('ccdm_shares') || '[]') } catch { return [] }
+  })
+  const [notifs, setNotifs] = useState<Notif[]>(() => {
+    try { return JSON.parse(localStorage.getItem('ccdm_notifications') || '[]') } catch { return [] }
+  })
+  const pushNotif = (n: Omit<Notif, 'id' | 'ts' | 'read'>) => {
+    setNotifs((prev) => {
+      const next: Notif[] = [{ ...n, id: `nt-${Date.now()}-${Math.floor(Math.random() * 1000)}`, ts: nowTs(), read: false }, ...prev].slice(0, 200)
+      localStorage.setItem('ccdm_notifications', JSON.stringify(next))
+      return next
+    })
+  }
+  const toggleFollow = (num: number) => {
+    const following = !!follows[num]
+    const next = { ...follows }
+    if (following) {
+      delete next[num]
+      logEvent('follow-off', `Stopped following #${num}`, num)
+    } else {
+      next[num] = { persona: role?.user || 'Legal Counsel', ts: nowTs(), by: role?.user || 'Legal Counsel' }
+      logEvent('follow', `Now following #${num} — update alerts on`, num)
+      pushNotif({ kind: 'follow', docNum: num, text: `You are now following document #${num} — shares, comments and annotations on it will alert you`, by: role?.user || 'Legal Counsel', channels: ['email', 'teams', 'message'] })
+    }
+    setFollows(next)
+    localStorage.setItem('southlake_follows', JSON.stringify(next))
+  }
+  const postCollabComment = (num: number, scope: string, text: string, anchorQuote?: string) => {
+    const entry: DocComment = { id: `cm-${Date.now()}-${Math.floor(Math.random() * 1000)}`, ts: nowTs(), docNum: num, scope, anchorQuote, text: text || (anchorQuote ? 'Inline annotation on the selected passage' : ''), by: role?.user || 'Legal Counsel' }
+    setCollabComments((prev) => {
+      const next = [entry, ...prev].slice(0, 300)
+      localStorage.setItem('ccdm_comments', JSON.stringify(next))
+      return next
+    })
+    const isText = scope === 'text'
+    logEvent(isText ? 'annotation' : 'comment', isText ? `Inline annotation on #${num} — “${(anchorQuote || '').slice(0, 48)}${(anchorQuote || '').length > 48 ? '…' : ''}”` : `Comment on #${num} (${scope === 'doc' ? 'document' : 'flag ' + scope.replace(/_/g, ' ')})`, num)
+    const followers = Object.entries(follows).filter(([n]) => Number(n) === num).length
+    const alertText = isText
+      ? `Inline annotation added to #${num} on “${(anchorQuote || '').slice(0, 60)}${(anchorQuote || '').length > 60 ? '…' : ''}”`
+      : `New comment on #${num} (${scope === 'doc' ? 'document' : 'flag ' + scope.replace(/_/g, ' ')}): “${text.slice(0, 70)}${text.length > 70 ? '…' : ''}”`
+    if (followers > 0) pushNotif({ kind: isText ? 'annotation' : 'comment', docNum: num, text: `${alertText}${followers} follow${followers === 1 ? 'er' : 'ers'} alerted via ${'Email · Teams · Message'}`, by: role?.user || 'Legal Counsel', channels: ['email', 'teams', 'message'] })
+  }
+  const shareDocument = (num: number, recipients: string[], note: string, channels: NotifChannel[]) => {
+    const entry: ShareEvent = { id: `sh-${Date.now()}`, ts: nowTs(), docNum: num, recipients, note, channels, by: role?.user || 'Legal Counsel' }
+    setShareEvents((prev) => {
+      const next = [entry, ...prev].slice(0, 200)
+      localStorage.setItem('ccdm_shares', JSON.stringify(next))
+      return next
+    })
+    logEvent('share', `Document #${num} shared with ${recipients.length} recipient${recipients.length === 1 ? '' : 's'} via ${channels.map((c) => CHANNEL_LABEL[c]).join(' + ')}`, num)
+    pushNotif({ kind: 'shared', docNum: num, text: `Document #${num} was shared with ${recipients.slice(0, 3).join(', ')}${recipients.length > 3 ? ` +${recipients.length - 3} more` : ''}${note ? ` — “${note.slice(0, 60)}${note.length > 60 ? '…' : ''}”` : ''}`, by: role?.user || 'Legal Counsel', channels })
+  }
+  const unreadNotifs = notifs.filter((n) => !n.read).length
+  const markNotifsRead = () => {
+    setNotifs((prev) => { const next = prev.map((n) => ({ ...n, read: true })); localStorage.setItem('ccdm_notifications', JSON.stringify(next)); return next })
+  }
+  const toggleNotifRead = (id: string) => {
+    setNotifs((prev) => { const next = prev.map((n) => (n.id === id ? { ...n, read: !n.read } : n)); localStorage.setItem('ccdm_notifications', JSON.stringify(next)); return next })
+  }
+
   // Bulk selection + bulk operations on the Documents tab (paperless-style multi-select)
   const [bulkSel, setBulkSel] = useState<Set<number>>(new Set())
   const bulkToggle = (n: number) => setBulkSel((prev) => { const s = new Set(prev); if (s.has(n)) s.delete(n); else s.add(n); return s })
@@ -5680,6 +6240,26 @@ function App() {
           localStorage.setItem('resolvedLog', JSON.stringify(merged))
           return merged
         })
+        // v45.36 — collaboration layer hydrate (server-wins merge by id, like notes/defers)
+        setFollows((prev) => { const next = { ...prev, ...(s.follows || {}) }; localStorage.setItem('southlake_follows', JSON.stringify(next)); return next })
+        setCollabComments((prev) => {
+          const ids = new Set(prev.map((e) => e.id))
+          const merged = [...(s.comments || []).filter((e: { id: string }) => !ids.has(e.id)), ...prev].slice(0, 300)
+          localStorage.setItem('ccdm_comments', JSON.stringify(merged))
+          return merged
+        })
+        setShareEvents((prev) => {
+          const ids = new Set(prev.map((e) => e.id))
+          const merged = [...(s.shares || []).filter((e: { id: string }) => !ids.has(e.id)), ...prev].slice(0, 200)
+          localStorage.setItem('ccdm_shares', JSON.stringify(merged))
+          return merged
+        })
+        setNotifs((prev) => {
+          const ids = new Set(prev.map((e) => e.id))
+          const merged = [...(s.notifications || []).filter((e: { id: string }) => !ids.has(e.id)), ...prev].slice(0, 200)
+          localStorage.setItem('ccdm_notifications', JSON.stringify(merged))
+          return merged
+        })
         setHydrated(true)
       })
       .catch(() => { if (!cancelled) { setSyncState('offline'); setHydrated(true) } })
@@ -5701,19 +6281,23 @@ function App() {
           notes,
           activity: events,
           resolvedLog,
+          follows,
+          comments: collabComments,
+          shares: shareEvents,
+          notifications: notifs,
         }),
       })
         .then((r) => setSyncState(r.ok ? 'synced' : 'offline'))
         .catch(() => setSyncState('offline'))
     }, 700)
     return () => clearTimeout(t)
-  }, [hydrated, resolvedFlags, completedLinks, deferMap, notes, events, resolvedLog])
+  }, [hydrated, resolvedFlags, completedLinks, deferMap, notes, events, resolvedLog, follows, collabComments, shareEvents, notifs])
   // G5 — "Reset all" also clears the shared server record so a fresh demo starts clean
   const resetAllShared = () => {
     fetch('/api/state', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ resolvedFlags: [], completedLinks: [], defers: {}, notes: {}, activity: [], resolvedLog: [] }),
+      body: JSON.stringify({ resolvedFlags: [], completedLinks: [], defers: {}, notes: {}, activity: [], resolvedLog: [], follows: {}, comments: [], shares: [], notifications: [] }),
     }).catch(() => {})
   }
 
@@ -5966,10 +6550,22 @@ function App() {
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 {sidebarOpen
-                  ? <path strokeLinecap="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  : <path strokeLinecap="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
+                  ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />}
               </svg>
             </button>
+            {/* v45.36 — Notification Center (share / follow / comment / annotation alerts · Email·Teams·Message) */}
+            <NotificationCenter
+              notifs={notifs}
+              unread={unreadNotifs}
+              onOpenDoc={(num) => {
+                setActiveTab('contracts')
+                const target = visible.find((c) => c.num === num)
+                if (target) setSelected(target)
+              }}
+              onMarkAllRead={markNotifsRead}
+              onToggleRead={toggleNotifRead}
+            />
           </div>
         </div>
       </header>
@@ -6143,7 +6739,7 @@ function App() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] text-slate-400">Showing {activeVisible.length} contracts · {openFlagsCount} open flags{retiredNums.size > 0 ? ` · ${retiredNums.size} retired doc${retiredNums.size === 1 ? '' : 's'} out of scope` : ''}</span>
-                      <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); localStorage.removeItem('ccdm_uploads'); localStorage.removeItem('southlake_retired'); localStorage.removeItem('southlake_defers'); localStorage.removeItem('ccdm_notes'); localStorage.removeItem('ccdm_activity'); localStorage.removeItem('ccdm_savedviews'); localStorage.removeItem('resolvedLog'); resetAllShared(); window.location.reload() }} className="text-[11px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
+                      <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); localStorage.removeItem('ccdm_uploads'); localStorage.removeItem('southlake_retired'); localStorage.removeItem('southlake_defers'); localStorage.removeItem('ccdm_notes'); localStorage.removeItem('ccdm_activity'); localStorage.removeItem('ccdm_savedviews'); localStorage.removeItem('southlake_follows'); localStorage.removeItem('ccdm_comments'); localStorage.removeItem('ccdm_shares'); localStorage.removeItem('ccdm_notifications'); localStorage.removeItem('resolvedLog'); resetAllShared(); window.location.reload() }} className="text-[11px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
                     </div>
                     <RiskMatrixView contracts={activeVisible} onSelectContract={(c) => { setSelected(c); }} resolvedFlags={resolvedFlags} />
                     <RiskRegisterTable
@@ -6347,7 +6943,13 @@ function App() {
                     ? <ContractDetail selected={selected} onBack={() => setSelected(null)} docLinks={docLinks} onStatusOverride={(flagId) => { markFlagResolved(flagId) }} resolvedFlags={resolvedFlags}
                       retired={retiredNums.has(selected.num)} onToggleRetired={manageable ? () => toggleRetired(selected.num) : undefined}
                       notesFor={notes[selected.num] || []} eventsFor={(events.filter((e) => e.docNum === selected.num)).slice().reverse()}
-                      onAddNote={(text) => addNote(selected.num, text)} manageable={manageable} />
+                      onAddNote={(text) => addNote(selected.num, text)} manageable={manageable}
+                      isFollowing={!!follows[selected.num]} onToggleFollow={() => toggleFollow(selected.num)}
+                      collabComments={collabComments.filter((c) => c.docNum === selected.num)}
+                      onPostComment={(scope, text, quote) => postCollabComment(selected.num, scope, text, quote)}
+                      shareCount={shareEvents.filter((sh) => sh.docNum === selected.num).length}
+                      onOpenShare={manageable ? () => setShareFor(selected.num) : undefined}
+                      byPersona={role?.user || 'Legal Counsel'} />
                     : <RestrictedAccessPanel doc={selected} role={role} />}
                 </div>
               </aside>
@@ -6371,6 +6973,17 @@ function App() {
 
       {/* AI copilot (local Ollama, role-scoped) */}
       <AiBot open={aiOpen} onOpenChange={setAiOpen} context={botContext} roleLabel={role?.label || 'n/a'} role={role?.id || 'n/a'} excludedPaths={excludedPaths} anchor={aiIconPos} />
+      {shareFor != null && (
+        <ShareModal
+          open
+          onClose={() => setShareFor(null)}
+          docNum={shareFor}
+          docLabel={(visible.find((c) => c.num === shareFor)?.displayName) || `Document #${shareFor}`}
+          by={role?.user || 'Legal Counsel'}
+          manageable={manageable}
+          onShare={(recips, noteText, chans) => { shareDocument(shareFor, recips, noteText, chans); setShareFor(null); show(`Document #${shareFor} shared with ${recips.length} recipient${recips.length === 1 ? '' : 's'} — alerts sent via ${chans.map((c) => CHANNEL_LABEL[c]).join(' + ')}`, 'success') }}
+        />
+      )}
 
       {/* Confirm Modal */}
       {confirmState && (

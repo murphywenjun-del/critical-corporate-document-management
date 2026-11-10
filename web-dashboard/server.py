@@ -606,7 +606,7 @@ def get_state() -> dict:
             return json.loads(STATE_FILE.read_text(encoding="utf-8"))
         except Exception:
             pass
-    return {"resolvedFlags": [], "completedLinks": [], "defers": {}, "notes": {}, "activity": [], "resolvedLog": []}
+    return {"resolvedFlags": [], "completedLinks": [], "defers": {}, "notes": {}, "activity": [], "resolvedLog": [], "follows": {}, "comments": [], "shares": [], "notifications": []}
 
 @app.post("/api/state")
 async def save_state(payload: dict) -> dict:
@@ -618,6 +618,11 @@ async def save_state(payload: dict) -> dict:
         "notes": payload.get("notes") or {},
         "activity": (payload.get("activity") or [])[:80],
         "resolvedLog": (payload.get("resolvedLog") or [])[:80],
+        # v45.36 — collaboration layer: follows / comments & annotations / share events / notification inbox
+        "follows": payload.get("follows") or {},
+        "comments": (payload.get("comments") or [])[:300],
+        "shares": (payload.get("shares") or [])[:200],
+        "notifications": (payload.get("notifications") or [])[:200],
     }
     tmp = STATE_FILE.with_suffix(".tmp")
     tmp.write_text(json.dumps(clean, ensure_ascii=False, indent=1), encoding="utf-8")
