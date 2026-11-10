@@ -6,7 +6,7 @@
 - **Risk Score**: 4.0 / 5.0 (High — conflicting versions create legal 
   ambiguity)
 - **Rules Flags Count**: 0
-- **Expected Outcome**: 低质量扫描件 · 150 DPI scan, key fields illegible, cannot verify authority
+- **Expected Outcome**: 150 DPI scan, key fields illegible, cannot verify authority
 
 ---
 

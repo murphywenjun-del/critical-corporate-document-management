@@ -6,7 +6,7 @@
 - **Risk Score**: 3.0 / 5.0 (Medium-High — expired contracts create 
   legal uncertainty)
 - **Rules Flags Count**: 0
-- **Expected Outcome**: 续约即将到期 · Well-drafted but renewal within 90-day alert threshold
+- **Expected Outcome**: Well-drafted but renewal within 90-day alert threshold
 
 ---
 

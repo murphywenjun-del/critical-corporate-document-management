@@ -4,7 +4,7 @@ import { contracts, docLinks, SOUTHDEPARTMENTS, SUBCAT_DEPTS, type Flag, type Co
   ROLES, canView, canManage, archiveFileConf, contractToTemplateRef, DEMO_TODAY, CONF_LABEL, CONF_BADGE, retentionState, retentionUntil, type Role,
   TEMPLATE_LIBRARY, matchTemplate, classifyType, RISK_FRAMEWORK,
   SOUTHLAKE_RISK_TAXONOMY, flagHiroc, CRITERIA_BY_TYPE, RETENTION_BY_TYPE, DEFAULT_RETENTION, LITIGATION_HOLD_NOTE,
-  PIA_MATRIX, PIA_LIKELIHOOD_LABELS, PIA_IMPACT_LABELS, flagVelocity, piaPriority, piaBand, PRIORITY_BANDS, SEED_DEFERRED } from './data'
+  PIA_MATRIX, PIA_LIKELIHOOD_LABELS, PIA_IMPACT_LABELS, flagVelocity, piaPriority, piaBand, PRIORITY_BANDS, SEED_DEFERRED, type TextHighlight } from './data'
 
 
 // ── Toast Notification System ──────────────────────────────────────────────
@@ -100,6 +100,574 @@ function ConfirmModal({ title, message, onConfirm, onCancel, confirmLabel = 'Con
         <div className="flex gap-2">
           <button onClick={onCancel} className="flex-1 text-[13px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg py-2.5 transition">Cancel</button>
           <button onClick={() => onConfirm(showNote ? note : undefined)} className={`flex-1 text-[13px] font-bold text-white rounded-lg py-2.5 transition ${danger ? 'bg-red-600 hover:bg-red-700' : 'bg-teal-600 hover:bg-teal-700'}`}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── v45.35 — Fix Wizard: step 1 = issue + AI-drafted resolution; step 2 = full document with
+// Grammarly-style inline annotations (wavy severity underlines, hover AI popovers, insertable
+// AI suggestion block) so staff see the problem, the suggested fix, AND where it lives. ──
+type FixWizardInput = {
+  mode: 'fix' | 'renew'
+  itemId: string
+  what: string
+  docLabel: string
+  docNum: number
+  severity: string
+  contract: ContractDoc
+  field?: string
+  due?: string
+}
+
+type HlSpan = { line: number; start: number; end: number; hl: TextHighlight }
+
+const HL_STYLE: Record<string, { color: string; bg: string; label: string }> = {
+  Critical: { color: '#dc2626', bg: '#fee2e2', label: 'Critical' },
+  High: { color: '#d97706', bg: '#ffedd5', label: 'High' },
+  Medium: { color: '#ca8a04', bg: '#fef9c3', label: 'Medium' },
+}
+
+// v45.35.1 — anchor the AI block to the passage that MATCHES the current flag, not blindly the
+// first mark in the document. Field key → search keywords (4-char stem match), then score each
+// highlight by keyword hits in its reason+text; fall back to the first mark when nothing matches.
+const FLAG_KEYWORDS: Record<string, string[]> = {
+  expiry_date: ['expired', 'renewal', 'expiry', 'term'],
+  auto_renewal: ['renew', 'auto-renew', 'expired', 'term'],
+  phia_compliance: ['phip', 'compliance'],
+  signatories: ['signature', 'signator', 'authorized', 'vp'],
+  indemnity_cap: ['indemnity', 'liability', 'cap'],
+  indemnity_clause: ['indemnity', 'liability', 'cap'],
+  termination_conv: ['termination', 'terminate', 'notice'],
+  breach_timeline: ['breach', 'notification'],
+  purpose_limitation: ['purpose', 'publication', 'peer-reviewed', 'data use'],
+  security_standards: ['security', 'encryption', 'aes', 'tls'],
+  audit_rights: ['audit'],
+  data_minimization: ['minimiz', 'data use'],
+  confidentiality: ['confidential', 'disclosure'],
+}
+const flagKeywords = (field?: string): string[] => {
+  if (!field) return []
+  if (FLAG_KEYWORDS[field]) return FLAG_KEYWORDS[field]
+  return field.replace(/_/g, ' ').split(' ').filter((w) => w.length > 2)
+}
+const kwHit = (hay: string, kw: string): boolean => {
+  const k = kw.toLowerCase()
+  return hay.includes(k) || hay.includes(k.slice(0, Math.max(4, k.length - 1)))
+}
+
+// line-level matching with graceful fallbacks: exact → case-insensitive → whitespace-normalized → token-coverage
+function matchHighlights(docText: string, hls: TextHighlight[]): { spans: HlSpan[]; unmatched: TextHighlight[] } {
+  const lines = docText.split('\n')
+  const norm = (s: string) => s.replace(/\s+/g, ' ')
+  const spans: HlSpan[] = []
+  const unmatched: TextHighlight[] = []
+  // paragraph groups (consecutive non-empty lines) for the fallback paths
+  const paras: number[][] = []
+  {
+    let cur: number[] = []
+    lines.forEach((_, i) => {
+      if (lines[i].trim() === '') { if (cur.length) paras.push(cur); cur = [] } else cur.push(i)
+    })
+    if (cur.length) paras.push(cur)
+  }
+  const inLine = (line: string, needle: string) => {
+    let i = line.indexOf(needle)
+    if (i >= 0) return i
+    i = line.toLowerCase().indexOf(needle.toLowerCase())
+    if (i >= 0) return i
+    // whitespace-normalized fallback with a normalized→original position map
+    const normChars: string[] = []
+    const map: number[] = []
+    let lastWs = false
+    for (let k = 0; k < line.length; k++) {
+      const ws = /\s/.test(line[k])
+      if (ws) { if (!lastWs) { normChars.push(' '); map.push(k) }; lastWs = true }
+      else { normChars.push(line[k]); map.push(k); lastWs = false }
+    }
+    const ni = normChars.join(' ').indexOf(norm(needle))
+    if (ni >= 0 && map[ni] != null) return map[ni]
+    return -1
+  }
+  for (const hl of hls) {
+    let found = false
+    for (let li = 0; li < lines.length; li++) {
+      const i = inLine(lines[li], hl.text)
+      if (i >= 0) { spans.push({ line: li, start: i, end: i + hl.text.length, hl }); found = true; break }
+    }
+    if (!found) {
+      // token-coverage fallback across paragraph ranges: highlight where ≥50% of the
+      // significant words of the snippet actually appear
+      const words = norm(hl.text).split(' ').filter((w) => w.length >= 4)
+      let bestA: { line: number; col: number } | null = null
+      let bestB: { line: number; col: number } | null = null
+      let bestScore = 0
+      if (words.length > 0) {
+        for (const p of paras) {
+          const joined = p.map((i) => lines[i]).join(' ').toLowerCase()
+          const hit = words.filter((w) => joined.includes(w.toLowerCase()))
+          const score = hit.length / words.length
+          if (score >= 0.5 && score > bestScore) {
+            const sPos = joined.indexOf(hit[0].toLowerCase())
+            const ePos = joined.lastIndexOf(hit[hit.length - 1].toLowerCase())
+            const mapPos = (target: number, isEnd: boolean): { line: number; col: number } => {
+              let off = 0
+              for (const i of p) {
+                const ln = lines[i]
+                if (isEnd ? off + ln.length + 1 > target : off + ln.length >= target) return { line: i, col: Math.max(0, Math.min(ln.length, target - off)) }
+                off += ln.length + 1
+              }
+              return { line: p[p.length - 1], col: lines[p[p.length - 1]].length }
+            }
+            bestA = mapPos(sPos, false)
+            bestB = mapPos(ePos + hit[hit.length - 1].length, true)
+            bestScore = score
+          }
+        }
+      }
+      if (bestA && bestB) {
+        if (bestA.line === bestB.line) spans.push({ line: bestA.line, start: bestA.col, end: bestB.col, hl })
+        else spans.push({ line: bestA.line, start: bestA.col, end: lines[bestA.line].length, hl }) // phrase wraps lines: mark the start line
+        found = true
+      }
+    }
+    if (!found) unmatched.push(hl)
+  }
+  spans.sort((x, y) => x.line - y.line || x.start - y.start)
+  // drop overlaps on the same line (keep the longer span)
+  const merged: HlSpan[] = []
+  for (const s of spans) {
+    const last = merged[merged.length - 1]
+    if (last && last.line === s.line && s.start < last.end) {
+      if (s.end - s.start > last.end - last.start) merged.pop()
+      else continue
+    }
+    merged.push(s)
+  }
+  return { spans: merged, unmatched }
+}
+
+// v45.35.3 — per-passage AI blocks: EVERY wavy mark gets its own editable suggested fix;
+// the original line is also manually editable; a master "Insert all" switch previews every
+// passage at once for staff who don't want to hunt the marks down one by one.
+type PassageSug = { text: string; source: 'ai' | 'library' | 'manual' | 'pending'; busy: boolean; failed: boolean }
+
+function AnnotatedDoc({ lines, spans, issues, sugs, allInserted, lineEdits, editingLine, onSugChange, onGen, onToggleEditLine, onApplyLineEdit, onLineEditChange }: {
+  lines: string[]
+  spans: HlSpan[]
+  issues: TextHighlight[]
+  sugs: Record<number, PassageSug>
+  allInserted: boolean
+  lineEdits: Record<number, string>
+  editingLine: number | null // global span index whose original line is being edited
+  onSugChange: (gi: number, text: string) => void
+  onGen: (gi: number) => void
+  onToggleEditLine: (gi: number) => void
+  onApplyLineEdit: (lineIdx: number) => void
+  onLineEditChange: (lineIdx: number, text: string) => void
+}) {
+  const perLine = new Map<number, Array<{ s: HlSpan; gi: number }>>()
+  spans.forEach((s, gi) => { const arr = perLine.get(s.line) || []; arr.push({ s, gi }); perLine.set(s.line, arr) })
+  return (
+    <div className="space-y-3">
+      {lines.map((ln, i) => {
+        const isHead = /^#{1,3}\s/.test(ln)
+        const ls = perLine.get(i)
+        const display = lineEdits[i] !== undefined ? lineEdits[i] : ln
+        const edited = lineEdits[i] !== undefined
+        const showEditor = ls && ls.some(({ gi }) => editingLine === gi)
+        return (
+          <div key={i} className="relative">
+            {showEditor ? (
+              <div className="flex gap-2 items-start my-1">
+                <textarea
+                  value={lineEdits[i] ?? ln}
+                  onChange={(e) => onLineEditChange(i, e.target.value)}
+                  rows={2}
+                  className="flex-1 text-[13px] leading-6 font-mono border border-teal-400 rounded-md p-2 focus:outline-none focus:ring-2 focus:ring-teal-300 bg-white"
+                />
+                <div className="flex flex-col gap-1 shrink-0">
+                  <button onClick={() => onApplyLineEdit(i)} className="text-[10px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded px-2 py-1 transition">✓ Save</button>
+                  <button onClick={() => onToggleEditLine(-1)} className="text-[10px] font-semibold text-slate-500 hover:text-slate-700 bg-slate-100 rounded px-2 py-1 transition">Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div id={`docline-${i}`} className={`whitespace-pre-wrap text-[13px] leading-6 ${isHead ? 'font-bold text-slate-800 text-[14px] mt-2' : 'text-slate-700'}`}>
+                {ls && ls.length > 0 && !edited ? (() => {
+                  const segs: React.ReactNode[] = []
+                  let pos = 0
+                  for (const { s } of ls) {
+                    if (s.start > pos) segs.push(<span key={`p${pos}`}>{display.slice(pos, s.start)}</span>)
+                    const st = HL_STYLE[s.hl.severity] || HL_STYLE.Medium
+                    segs.push(
+                      <span key={`h${s.start}`} className="relative group">
+                        <span id={`hlspan-${s.line}-${s.start}`} className="px-0.5 rounded-sm" style={{ backgroundColor: st.bg, borderBottom: `2px solid ${st.color}`, textDecorationLine: 'underline', textDecorationStyle: 'wavy', textDecorationColor: st.color }}>
+                          {display.slice(s.start, s.end)}
+                        </span>
+                        <span className="hidden group-hover:block absolute left-0 top-full mt-1 z-50 w-64 bg-slate-900 text-white text-[11px] rounded-lg p-2 shadow-xl pointer-events-none">
+                          <b style={{ color: st.color === '#ca8a04' ? '#fbbf24' : st.color === '#d97706' ? '#fdba74' : '#fca5a5' }}>{st.label} · AI annotation</b>
+                          <div className="mt-1 text-slate-200">{s.hl.reason}</div>
+                        </span>
+                      </span>
+                    )
+                    pos = s.end
+                  }
+                  if (pos < display.length) segs.push(<span key="tail">{display.slice(pos)}</span>)
+                  return segs
+                })() : edited ? display : (display || ' ')}
+                {edited && <span className="ml-2 text-[10px] font-bold text-teal-700 bg-teal-100 border border-teal-300 rounded px-1.5 py-0.5 align-middle">✎ edited locally</span>}
+              </div>
+            )}
+            {/* v45.35.3 — one AI block PER flagged passage on this line (master switch or per-passage generation) */}
+            {(ls || []).map(({ s, gi }) => {
+              const sug = sugs[gi]
+              const show = allInserted || !!sug
+              if (!show) return null
+              const st = HL_STYLE[s.hl.severity] || HL_STYLE.Medium
+              return (
+                <div key={gi} id={`ai-sug-${gi}`} className="border border-teal-300 bg-teal-50/70 rounded-lg p-2.5 my-1.5">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[10px] font-bold text-white rounded px-1.5 py-0.5 shrink-0" style={{ backgroundColor: st.color }}>{st.label}</span>
+                    <span className="text-[11px] font-mono text-slate-600 truncate flex-1" title={s.hl.text}>“{s.hl.text}”</span>
+                    <span className="text-[10px] text-slate-500 shrink-0">
+                      {sug?.busy ? 'Generating…' : sug?.source === 'ai' ? 'AI-drafted · editable' : sug?.failed ? 'clause library · editable' : 'editable'}
+                    </span>
+                  </div>
+                  <textarea
+                    id={`ai-sug-input-${gi}`}
+                    value={sug?.text || ''}
+                    onChange={(e) => onSugChange(gi, e.target.value)}
+                    placeholder="No suggestion yet — generate the AI fix or type your own replacement wording"
+                    disabled={!!sug?.busy}
+                    rows={2}
+                    className="w-full text-[12px] leading-relaxed font-mono border border-teal-200 rounded p-2 bg-white focus:outline-none focus:ring-2 focus:ring-teal-300 resize-y disabled:opacity-60"
+                  />
+                  <div className="flex items-center gap-2 mt-1.5">
+                    {(!sug?.text || sug.failed) && (
+                      <button id={`ai-gen-${gi}`} onClick={() => onGen(gi)} disabled={!!sug?.busy}
+                        className="text-[10px] font-bold text-white bg-slate-800 hover:bg-slate-700 rounded px-2 py-1 transition disabled:opacity-50">
+                        {sug?.busy ? '⚡ Generating…' : '⚡ Generate AI fix'}
+                      </button>
+                    )}
+                    <button onClick={() => onToggleEditLine(gi)}
+                      className="text-[10px] font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded px-2 py-1 transition">
+                      ✎ Edit original text
+                    </button>
+                    {(sug?.text || '').trim() && <span className="text-[10px] text-slate-400 ml-auto">Attached to the record on confirm</span>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      })}
+      {issues.length > 0 && (
+        <div className="border border-slate-200 bg-slate-50 rounded-lg p-3">
+          <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5">Issues not matched to specific text in this document</div>
+          <div className="flex flex-wrap gap-1.5">
+            {issues.map((h, i) => {
+              const st = HL_STYLE[h.severity] || HL_STYLE.Medium
+              return <span key={i} className="text-[11px] px-2 py-1 rounded border bg-white" style={{ borderColor: st.color, color: st.color }}>{st.label} · {h.reason}</span>
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+function FixWizard({ input, getDraft, fallbackNote, onCancel, onConfirm }: {
+  input: FixWizardInput
+  getDraft: () => Promise<string>
+  fallbackNote: string
+  onCancel: () => void
+  onConfirm: (note?: string, attached?: { fixes: number; edits: number }) => void
+}) {
+  const [step, setStep] = useState<1 | 2>(1)
+  const [note, setNote] = useState(fallbackNote)
+  const [aiBusy, setAiBusy] = useState(true)
+  const [aiFailed, setAiFailed] = useState(false)
+  const [docText, setDocText] = useState<string | null>(null)
+  const [docStatus, setDocStatus] = useState<'idle' | 'loading' | 'ok' | 'missing'>('idle')
+  // v45.35.3 — per-passage state: sugs[globalSpanIndex] = editable AI/manual suggestion for THAT mark
+  const [sugs, setSugs] = useState<Record<number, PassageSug>>({})
+  const [allInserted, setAllInserted] = useState(false)
+  const [lineEdits, setLineEdits] = useState<Record<number, string>>({})
+  const [editingLine, setEditingLine] = useState<number | null>(null) // global span index being line-edited
+  const [savedLines, setSavedLines] = useState<Set<number>>(new Set())
+  const [genAllBusy, setGenAllBusy] = useState(false)
+
+  const genSug = (gi: number) => {
+    const s = spans[gi]
+    if (!s) return
+    setSugs((p) => ({ ...p, [gi]: { ...(p[gi] || { text: '', source: 'pending', busy: false, failed: false }), busy: true, failed: false } }))
+    aiProposalDraft({
+      flag_field: input.field || 'text_amendment',
+      flag_if: `${s.hl.reason} — flagged text: “${s.hl.text.slice(0, 90)}”`,
+      doc_num: input.docNum, doc_name: input.docLabel, doc_type: input.contract.type, severity: s.hl.severity.toLowerCase(),
+    })
+      .then((t) => setSugs((p) => ({ ...p, [gi]: { text: t, source: 'ai', busy: false, failed: false } })))
+      .catch(() => setSugs((p) => ({ ...p, [gi]: { text: p[gi]?.text || getAIProposal(s.hl.reason, input.docLabel), source: 'library', busy: false, failed: true } })))
+  }
+  const genAll = async () => {
+    setGenAllBusy(true)
+    for (let gi = 0; gi < spans.length; gi++) {
+      if (!sugs[gi]?.text) {
+        await new Promise((r) => {
+          aiProposalDraft({
+            flag_field: input.field || 'text_amendment',
+            flag_if: `${spans[gi].hl.reason} — flagged text: “${spans[gi].hl.text.slice(0, 90)}”`,
+            doc_num: input.docNum, doc_name: input.docLabel, doc_type: input.contract.type, severity: spans[gi].hl.severity.toLowerCase(),
+          })
+            .then((t) => { setSugs((p) => ({ ...p, [gi]: { text: t, source: 'ai', busy: false, failed: false } })); r(null) })
+            .catch(() => { setSugs((p) => ({ ...p, [gi]: { text: p[gi]?.text || getAIProposal(spans[gi].hl.reason, input.docLabel), source: 'library', busy: false, failed: true } })); r(null) })
+        })
+      }
+    }
+    setGenAllBusy(false)
+  }
+  const onToggleEditLine = (gi: number) => {
+    if (gi < 0) { // cancel
+      setEditingLine((cur) => {
+        if (cur != null) { const l = spans[cur]?.line; if (l != null) setLineEdits((p) => { const n = { ...p }; delete n[l]; return n }) }
+        return null
+      })
+      return
+    }
+    const l = spans[gi].line
+    setLineEdits((p) => (p[l] !== undefined ? p : { ...p, [l]: docText!.split('\n')[l] }))
+    setEditingLine(gi)
+  }
+  const onApplyLineEdit = (lineIdx: number) => { setSavedLines((p) => new Set(p).add(lineIdx)); setEditingLine(null) }
+  const onLineEditChange = (lineIdx: number, text: string) => setLineEdits((p) => ({ ...p, [lineIdx]: text }))
+  const onSugChange = (gi: number, text: string) => setSugs((p) => ({ ...p, [gi]: { text, source: 'manual', busy: false, failed: false } }))
+
+  useEffect(() => {
+    let cancelled = false
+    setAiBusy(true); setAiFailed(false)
+    getDraft()
+      .then((t) => { if (!cancelled && t) { setNote(t); setAiBusy(false) } })
+      .catch(() => { if (!cancelled) { setAiBusy(false); setAiFailed(true) } })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    if (step !== 2) return
+    const c = input.contract
+    if (c.isUpload || !c.filePath) { setDocStatus('missing'); return }
+    setDocStatus('loading')
+    fetch(`${import.meta.env.BASE_URL}${c.filePath}`)
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+      .then((t) => {
+        // v45.35.3 — a missing file can surface as a 200'd index.html (dev fallback / SPA
+        // rewrite). Never render that as "document text": treat HTML payloads as missing.
+        const head = t.slice(0, 300).toLowerCase()
+        if (head.includes('<!doctype') || head.includes('<html')) { setDocStatus('missing'); return }
+        setDocText(t); setDocStatus('ok')
+      })
+      .catch(() => setDocStatus('missing'))
+  }, [step])
+
+  const lines = docText ? docText.split('\n') : []
+  const { spans, unmatched } = docText ? matchHighlights(docText, input.contract.textHighlights || []) : { spans: [], unmatched: [] }
+  // v45.35.1 — "Insert all" scroll target: the passage that matches THIS flag's field (first mark as fallback)
+  const kws = flagKeywords(input.field)
+  let insertTarget: HlSpan | undefined
+  let insertScore = 0
+  for (const s of spans) {
+    const hay = `${s.hl.reason} ${s.hl.text}`.toLowerCase()
+    let sc = 0
+    for (const k of kws) if (kwHit(hay, k)) sc++
+    if (sc > insertScore) { insertScore = sc; insertTarget = s }
+  }
+  const insertTargetLine = insertTarget ? insertTarget.line : spans.length ? spans[0].line : -1
+  const attachedFixes = spans.filter((_, gi) => (sugs[gi]?.text || '').trim()).length
+  const attachedEdits = Object.entries(lineEdits).filter(([li]) => savedLines.has(Number(li))).length
+  const sevChip = input.severity === 'critical' ? 'bg-red-600' : input.severity === 'high' ? 'bg-orange-500' : 'bg-amber-400 text-slate-900'
+  const label = input.mode === 'renew' ? 'Renewal' : 'Fix'
+  const step1 = step === 1
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 p-7 flex flex-col" style={{ maxHeight: '92vh' }}>
+        {/* header + step indicator */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="text-base font-bold text-slate-900 flex-1">
+            {label} review · {input.docLabel} (#{input.docNum})
+          </div>
+          <span className={`text-[10px] font-bold text-white rounded px-1.5 py-0.5 ${sevChip}`}>{(input.severity || 'medium').toUpperCase()}</span>
+          <div className="flex items-center gap-1.5" title="Step 1: issue + AI-drafted resolution · Step 2: annotated document">
+            <span className={`text-[11px] font-bold rounded-full px-2 py-0.5 ${step1 ? 'bg-teal-600 text-white' : 'bg-emerald-100 text-emerald-700'}`}>1 · What &amp; fix</span>
+            <span className="text-slate-300 text-[11px]">→</span>
+            <span className={`text-[11px] font-bold rounded-full px-2 py-0.5 ${!step1 ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-500'}`}>2 · Document</span>
+          </div>
+        </div>
+
+        {step1 ? (
+          <div className="overflow-y-auto flex-1 space-y-4 pr-1">
+            {/* What's wrong */}
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3.5">
+              <div className="text-[11px] font-bold text-red-700 uppercase tracking-wide mb-1">What's wrong</div>
+              <div className="text-[13px] text-slate-800 leading-relaxed">{input.what}</div>
+              {input.mode === 'renew' && input.due && (
+                <div className="text-[12px] text-slate-600 mt-2">Renewal window: expires {new Date(input.due).toLocaleDateString()} — next step after this review: counterparty signature → upload the amendment through Smart Filing.</div>
+              )}
+            </div>
+            {/* AI-drafted resolution */}
+            <div className="bg-teal-50 border border-teal-200 rounded-lg p-3.5">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                {aiBusy ? (
+                  <>
+                    <span className="w-3 h-3 border-2 border-teal-200 border-t-teal-600 rounded-full animate-spin shrink-0" />
+                    <span className="text-[11px] font-bold text-teal-700 uppercase">Local AI is drafting a resolution…</span>
+                    <span className="text-[11px] text-slate-500">gemma3:1b on this machine · usually ~15 s</span>
+                  </>
+                ) : aiFailed ? (
+                  <>
+                    <span className="text-[11px] font-bold text-slate-600 uppercase">Suggested Resolution</span>
+                    <span className="text-[11px] text-slate-500">standard clause library · local AI unavailable · editable</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[11px] font-bold text-teal-700 uppercase">AI-Drafted Resolution</span>
+                    <span className="text-[11px] text-slate-500">local Ollama · editable</span>
+                  </>
+                )}
+              </div>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder={aiBusy ? 'Drafting locally… (read-only until the AI finishes, ~15 s)' : 'Editable resolution note'}
+                readOnly={aiBusy}
+                rows={6}
+                className={`w-full text-[13px] leading-relaxed border border-teal-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-teal-300 resize-y ${aiBusy ? 'bg-white/60 text-slate-500' : ''}`}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="overflow-y-auto flex-1 space-y-3 pr-1">
+            {/* v45.35.3 — master bar: main resolution note (editable) + one-step "Insert all" + generate-all */}
+            <div className="space-y-2 bg-teal-50 border border-teal-200 rounded-lg p-3">
+              <div className="flex items-start gap-3">
+                <span className="text-[10px] font-bold text-teal-700 bg-teal-600 text-white rounded px-1.5 py-0.5 shrink-0 mt-1">AI</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-bold text-teal-800 mb-1">Suggested resolution for this flag (from step 1 — edit freely)</div>
+                  <textarea
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    rows={3}
+                    className="w-full text-[12px] leading-relaxed font-mono border border-teal-200 rounded p-2 bg-white focus:outline-none focus:ring-2 focus:ring-teal-300 resize-y"
+                  />
+                  <div className="text-[10px] text-slate-500 mt-1">Confirm attaches: this note + every passage fix below{attachedFixes + attachedEdits > 0 ? ` (${attachedFixes} passage fix${attachedFixes === 1 ? '' : 'es'}${attachedEdits > 0 ? ` + ${attachedEdits} edited line${attachedEdits === 1 ? '' : 's'}` : ''})` : ''}.</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button id="insert-all" onClick={() => {
+                  const v = !allInserted
+                  setAllInserted(v)
+                  if (v) setTimeout(() => {
+                    const target = document.getElementById(`docline-${insertTargetLine >= 0 ? insertTargetLine : 0}`)
+                    target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+                  }, 80)
+                }} className={`text-[11px] font-bold rounded-md px-3 py-1.5 transition ${allInserted ? 'bg-teal-700 text-white' : 'bg-white border border-teal-400 text-teal-700 hover:bg-teal-100'}`}>
+                  {allInserted ? '✓ All passages inserted in view' : `Insert all ${spans.length || ''} into view`}
+                </button>
+                <button id="gen-all" onClick={genAll} disabled={genAllBusy || spans.length === 0}
+                  className="text-[11px] font-semibold rounded-md px-3 py-1.5 transition bg-slate-800 text-white hover:bg-slate-700 disabled:opacity-50">
+                  {genAllBusy ? '⚡ Generating all fixes…' : '⚡ Generate all AI fixes'}
+                </button>
+                <span className="text-[10px] text-slate-500">One switch to preview every flagged passage — or generate each one in place below</span>
+              </div>
+              {spans.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 items-center">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase">Passages:</span>
+                  {spans.map((s, gi) => {
+                    const st = HL_STYLE[s.hl.severity] || HL_STYLE.Medium
+                    const hasText = !!(sugs[gi]?.text || '').trim()
+                    return (
+                      <button key={gi} onClick={() => document.getElementById(`hlspan-${s.line}-${s.start}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })}
+                        className="text-[11px] px-2 py-0.5 rounded border bg-white hover:bg-slate-50 transition"
+                        style={{ borderColor: st.color, color: st.color }}
+                        title={s.hl.reason}>
+                        {st.label} · “{s.hl.text.slice(0, 28)}{s.hl.text.length > 28 ? '…' : ''}” {hasText ? '✓' : ''}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+            {/* document body */}
+            {docStatus === 'loading' && (
+              <div className="text-[12px] text-slate-500 py-8 text-center"><span className="inline-block w-4 h-4 border-2 border-slate-200 border-t-teal-600 rounded-full animate-spin align-middle mr-2" />Loading document text…</div>
+            )}
+            {docStatus === 'missing' && (
+              <div className="border border-slate-200 rounded-lg p-4 space-y-2.5">
+                <div className="text-[12px] text-slate-600"><b>Document text not available for this upload</b> — showing the structured overview instead.</div>
+                <div className="text-[12px] text-slate-700">{input.contract.summary}</div>
+                <table className="text-[11px] w-full">
+                  <tbody>
+                    {input.contract.extractedFields.slice(0, 6).map((f) => (
+                      <tr key={f.label} className="border-b border-slate-100">
+                        <td className="py-1 pr-3 text-slate-500 font-semibold">{f.label}</td>
+                        <td className="py-1 text-slate-700">{f.value}</td>
+                        <td className="py-1 text-slate-400">{f.status}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {(input.contract.textHighlights || []).length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {input.contract.textHighlights.map((h, i) => {
+                      const st = HL_STYLE[h.severity] || HL_STYLE.Medium
+                      return <span key={i} className="text-[11px] px-2 py-1 rounded border bg-white" style={{ borderColor: st.color, color: st.color }} title={h.reason}>{st.label} · {h.reason}</span>
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+            {docStatus === 'ok' && (
+              <div className="border border-slate-200 rounded-lg p-4 bg-white" style={{ maxHeight: '46vh' }} >
+                <div className="text-[11px] text-slate-400 mb-2 flex items-center gap-2">
+                  <span className="font-semibold text-slate-500">{input.contract.filePath}</span>
+                  <span>{spans.length} annotation{spans.length === 1 ? '' : 's'} in this document · hover a mark for the AI note</span>
+                </div>
+                <div className="overflow-auto" style={{ maxHeight: '42vh' }}>
+                  <AnnotatedDoc
+                    lines={lines}
+                    spans={spans}
+                    issues={unmatched}
+                    sugs={sugs}
+                    allInserted={allInserted}
+                    lineEdits={lineEdits}
+                    editingLine={editingLine}
+                    onSugChange={onSugChange}
+                    onGen={genSug}
+                    onToggleEditLine={onToggleEditLine}
+                    onApplyLineEdit={onApplyLineEdit}
+                    onLineEditChange={onLineEditChange}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* footer */}
+        <div className="flex gap-2 mt-4 pt-3 border-t border-slate-100">
+          {step1 ? (
+            <>
+              <button onClick={onCancel} className="text-[13px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg px-4 py-2.5 transition">Cancel</button>
+              <button onClick={() => onConfirm(note)} title="Skip the document review — resolves now with this note attached" className="text-[13px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg px-4 py-2.5 transition">Resolve without review</button>
+              <button onClick={() => setStep(2)} className="flex-1 text-[13px] font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg px-4 py-2.5 transition">Next: open document →</button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => setStep(1)} className="text-[13px] font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg px-4 py-2.5 transition">← Back</button>
+              <button onClick={() => onConfirm(note, { fixes: attachedFixes, edits: attachedEdits })} className="flex-1 text-[13px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg px-4 py-2.5 transition">Confirm &amp; resolve ✓</button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -842,6 +1410,7 @@ function ContractList({
   bulkSelected,
   onBulkToggle,
   onBulkAll,
+  flashNum, // v45.34 — "Open the document" jump from the post-action banner: highlight that row
 }: {
   contracts: ContractDoc[]
   selectedNum: number | null
@@ -853,6 +1422,7 @@ function ContractList({
   bulkSelected?: Set<number>
   onBulkToggle?: (num: number) => void
   onBulkAll?: () => void
+  flashNum?: number | null
 }) {
   const bulkMode = !!bulkSelected
   const allChecked = bulkMode && allContracts.length > 0 && allContracts.every((c) => bulkSelected!.has(c.num))
@@ -975,7 +1545,7 @@ function ContractList({
             </div>
         )
         return (
-          <div key={c.num} className={`relative ${rowCls}`} onClick={() => onSelect(c)} role="button" tabIndex={0}>
+          <div key={c.num} data-docnum={c.num} className={`relative ${rowCls} ${flashNum === c.num ? 'ring-2 ring-emerald-400 ring-inset bg-emerald-50/60' : ''}`} onClick={() => onSelect(c)} role="button" tabIndex={0}>
             {bulkMode && (
               <input
                 type="checkbox"
@@ -2660,7 +3230,7 @@ function ContractDetail({
   retired?: boolean
   onToggleRetired?: () => void
   notesFor?: { ts: string; text: string; who: string }[]
-  eventsFor?: { ts: string; text: string; kind: string; docNum?: number }[]
+  eventsFor?: { ts: string; text: string; kind: string; docNum?: number; who?: string }[]
   onAddNote?: (text: string) => void
   manageable?: boolean
 }) {
@@ -2881,7 +3451,7 @@ function ContractDetail({
               {(eventsFor || []).slice(0, 6).map((e, i) => (
                 <div key={i} className="flex items-start gap-2 text-[11px]">
                   <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${e.kind === 'resolve' ? 'bg-emerald-500' : e.kind === 'file' ? 'bg-teal-500' : e.kind === 'defer' ? 'bg-slate-400' : e.kind === 'note' ? 'bg-amber-400' : 'bg-red-400'}`} />
-                  <span className="text-slate-600 flex-1">{e.text}</span>
+                  <span className="text-slate-600 flex-1">{e.text}{e.who ? <span className="text-slate-400"> · by {e.who}</span> : null}</span>
                   <span className="text-slate-400 shrink-0">{e.ts}</span>
                 </div>
               ))}
@@ -3041,18 +3611,27 @@ function SettingsSidebar({
 
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
-function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields, manageable, expiryFilter, onClearExpiry, retiredNums, deferMap, onDefer, onClearDefer, onBulkResolve, onBulkDefer, viewRequest, onSaveWqView, onReportWqTile }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string, aiDraft?: () => Promise<string>) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[]; manageable?: boolean; expiryFilter?: string; onClearExpiry?: () => void; retiredNums?: Set<number>; deferMap?: Record<string, { until: string; note?: string }>; onDefer?: (id: string, days: number) => void; onClearDefer?: (id: string) => void; onBulkResolve?: (ids: string[]) => void; onBulkDefer?: (ids: string[], days: number) => void; viewRequest?: { filter: string; ts: number } | null; onSaveWqView?: (name: string, tile: string) => void; onReportWqTile?: (tile: string) => void }) {
+function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields, manageable, expiryFilter, onClearExpiry, retiredNums, deferMap, onDefer, onClearDefer, onBulkResolve, onBulkDefer, viewRequest, onSaveWqView, onReportWqTile, flashEntry, onOpenFixWizard }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string, aiDraft?: () => Promise<string>) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[]; manageable?: boolean; expiryFilter?: string; onClearExpiry?: () => void; retiredNums?: Set<number>; deferMap?: Record<string, { until: string; note?: string }>; onDefer?: (id: string, days: number, note?: string) => void; onClearDefer?: (id: string) => void; onBulkResolve?: (ids: string[]) => void; onBulkDefer?: (ids: string[], days: number, note?: string) => void; viewRequest?: { filter: string; ts: number } | null; onSaveWqView?: (name: string, tile: string) => void; onReportWqTile?: (tile: string) => void; flashEntry?: string | null; onOpenFixWizard?: (item: { id: string; what: string; docLabel: string; docNum: number; contract: ContractDoc; severity: string; due?: string; action?: string }, mode: 'fix' | 'renew') => void }) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref' | 'resolved' | 'deferred'>('all')
   const [wqPage, setWqPage] = useState(1) // task-table pagination (15 per page)
   const [showResolved, setShowResolved] = useState(false)
   const [search, setSearch] = useState('')
   const [deferFor, setDeferFor] = useState<string | null>(null) // v45.31 — which row is showing the defer-duration picker
+  const [deferReason, setDeferReason] = useState('') // v45.33 · G2 — optional defer reason (handoff: why it was held)
   // v45.32 — bulk selection + saved views (paperless-style)
   const [wqSel, setWqSel] = useState<Set<string>>(new Set())
   const [wqSavingView, setWqSavingView] = useState(false)
   const [wqViewName, setWqViewName] = useState('')
+  const [bulkDeferReason, setBulkDeferReason] = useState('') // v45.33 · G2 — shared reason for bulk defers
   useEffect(() => { if (viewRequest) setFilter(viewRequest.filter as typeof filter) }, [viewRequest?.ts])
   useEffect(() => { onReportWqTile?.(filter) }, [filter])
+  // v45.34 — when the post-action banner says "Show record": expand the green strip and flash-highlight that entry
+  useEffect(() => {
+    if (!flashEntry) return
+    setShowResolved(true)
+    const el = document.querySelector(`[data-resolved-id="${flashEntry}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [flashEntry])
 
   // Compute work items
   type WorkItem = {
@@ -3067,6 +3646,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
     due?: string
     pri?: number
     isNew?: boolean // from a Smart Filing upload — surface at the top of its severity tier
+    deferNote?: string // v45.33 · G2 — why the item is deferred (visible to the next employee)
   }
 
   const items: WorkItem[] = []
@@ -3089,6 +3669,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           status: defActive ? `Deferred · until ${new Date(def!.until).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : f.status,
           action: 'Fix',
           isNew: c.isUpload === true,
+          deferNote: defActive ? def!.note : undefined,
           pri: piaPriority(f),
         })
       } else if (f.severity === 'High' && f.status === 'open') {
@@ -3104,6 +3685,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           status: defActive ? `Deferred · until ${new Date(def!.until).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : f.status,
           action: 'Review',
           isNew: c.isUpload === true,
+          deferNote: defActive ? def!.note : undefined,
           pri: piaPriority(f),
         })
       }
@@ -3300,12 +3882,19 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
             Resolve selected
           </button>
           {[30, 60, 90].map((d) => (
-            <button key={d} onClick={() => { onBulkDefer?.([...wqSel], d); setWqSel(new Set()) }} disabled={!manageable}
-              title={`Defer for ${d} days — stops alerting, auto-reverts to open when the window passes`}
+            <button key={d} onClick={() => { onBulkDefer?.([...wqSel], d, bulkDeferReason.trim() || undefined); setWqSel(new Set()); setBulkDeferReason('') }} disabled={!manageable}
+              title={`Defer for ${d} days — stops alerting, auto-reverts to open when the window passes. A shared reason is recorded for the next employee.`}
               className="text-[12px] font-semibold bg-slate-700 hover:bg-slate-600 rounded-md px-3 py-1.5 transition disabled:opacity-40">
               Defer {d}d
             </button>
           ))}
+          <input
+            value={bulkDeferReason}
+            onChange={(e) => setBulkDeferReason(e.target.value)}
+            placeholder="Shared reason (optional)"
+            title="Recorded on every deferred item — the next employee sees why these were held"
+            className="w-44 text-[12px] bg-slate-800 border border-slate-600 rounded-md px-2 py-1.5 text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-400"
+          />
           <button onClick={() => setWqSel(new Set())} className="ml-auto text-[12px] text-slate-300 hover:text-white transition">✕ Clear selection</button>
         </div>
       )}
@@ -3334,7 +3923,8 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           {showResolved && (
             <div className="divide-y divide-emerald-100 bg-white/50">
               {resolvedLog.slice(0, 10).map((entry) => (
-                <div key={entry.id} className="px-4 py-2 text-[11px]">
+                <div key={entry.id} data-resolved-id={entry.id}
+                  className={`px-4 py-2 text-[11px] transition ${flashEntry === entry.id ? 'bg-emerald-100 ring-1 ring-emerald-300 rounded' : ''}`}>
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-medium text-slate-700 truncate">{entry.label}</span>
                     <span className="text-slate-400 shrink-0">{entry.time}</span>
@@ -3356,7 +3946,7 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
             <span className="text-[13px] font-semibold text-emerald-800">Resolved log ({totalResolved})</span>
             {totalResolved > 0 && (
               <button
-                onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); window.location.reload() }}
+                onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); localStorage.removeItem('ccdm_uploads'); localStorage.removeItem('southlake_retired'); localStorage.removeItem('southlake_defers'); localStorage.removeItem('ccdm_notes'); localStorage.removeItem('ccdm_activity'); localStorage.removeItem('ccdm_savedviews'); localStorage.removeItem('resolvedLog'); fetch('/api/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resolvedFlags: [], completedLinks: [], defers: {}, notes: {}, activity: [], resolvedLog: [] }) }).catch(() => {}); window.location.reload() }}
                 className="text-[11px] font-semibold text-emerald-600 hover:text-emerald-800 hover:underline"
               >
                 Reset all
@@ -3526,7 +4116,15 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                     'bg-blue-500 text-white'
                   }`}>{item.severity}</span>
                 </td>
-                <td className="px-4 py-2.5 text-[13px] font-medium text-slate-700">{item.status}</td>
+                <td className="px-4 py-2.5 text-[13px] font-medium text-slate-700">
+                  {item.status}
+                  {/* v45.33 · G2 — handoff: WHY it was deferred, so the next employee isn't guessing */}
+                  {item.deferNote && (
+                    <span className="block text-[11px] font-normal text-slate-400 mt-0.5" title={`Defer reason: ${item.deferNote}`}>
+                      ↳ {item.deferNote.length > 40 ? item.deferNote.slice(0, 40) + '…' : item.deferNote}
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-2.5 text-right">
                   <div className="flex items-center justify-end gap-1.5 flex-wrap">
                     {/* v45.31 — deferred rows: stop alerting is already in effect, offer to end it early */}
@@ -3547,7 +4145,9 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                             const link = docLinks.find((d) => d.sourceNum === item.docNum && d.status !== 'synced' && item.id.includes(d.targetName))
                             if (link) onProcess(link)
                           } else if (item.action === 'Fix' || item.action === 'Review') {
-                            onConfirmAction?.(`Resolve Flag`, `"${item.what}"\n\nDocument: ${item.docLabel} (#${item.docNum})\nSeverity: ${item.severity}`, () => {
+                            // v45.35 — two-step review: AI-drafted resolution → annotated document
+                            if (onOpenFixWizard) onOpenFixWizard(item, 'fix')
+                            else onConfirmAction?.(`Resolve Flag`, `"${item.what}"\n\nDocument: ${item.docLabel} (#${item.docNum})\nSeverity: ${item.severity}`, () => {
                               onResolveFlag?.(item.id)
                             }, true, getAIProposal(item.what, item.docLabel), () =>
                               aiProposalDraft({
@@ -3559,7 +4159,8 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                                 severity: item.severity,
                               }))
                           } else if (item.action === 'Renew' || item.action === 'Schedule') {
-                            onConfirmAction?.(`Schedule Renewal`, `${item.docLabel} (#${item.docNum})\nExpiry: ${item.due || 'unknown'}\n\nConfirm renewal has been scheduled with the counterparty.`, () => {
+                            if (onOpenFixWizard) onOpenFixWizard(item, 'renew')
+                            else onConfirmAction?.(`Schedule Renewal`, `${item.docLabel} (#${item.docNum})\nExpiry: ${item.due || 'unknown'}\n\nConfirm renewal has been scheduled with the counterparty.`, () => {
                               onResolveFlag?.(item.id)
                             })
                           } else if (item.id.startsWith('t-')) {
@@ -3581,14 +4182,21 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
                         {item.action} →
                       </button>
                     )}
-                    {/* v45.31 — Defer (in-progress remediation): pick a 30/60/90-day window */}
+                    {/* v45.31 — Defer (in-progress remediation): pick a 30/60/90-day window; v45.33 · G2 — optional reason for the next employee */}
                     {!item.status.startsWith('Deferred') && (item.action === 'Fix' || item.action === 'Review') && (
                       deferFor === item.id ? (
                         <span className="inline-flex items-center gap-1 text-[11px]">
                           <span className="text-slate-500 font-medium">Defer</span>
+                          <input
+                            value={deferReason}
+                            onChange={(e) => setDeferReason(e.target.value)}
+                            placeholder="Reason (optional — e.g. awaiting vendor response)"
+                            title="Recorded on the item so the next employee knows WHY it was held"
+                            className="w-52 text-[11px] border border-slate-300 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-teal-400"
+                          />
                           {[30, 60, 90].map((d) => (
                             <button key={d}
-                              onClick={(e) => { e.stopPropagation(); onDefer?.(item.id, d); setDeferFor(null) }}
+                              onClick={(e) => { e.stopPropagation(); onDefer?.(item.id, d, deferReason.trim() || undefined); setDeferFor(null); setDeferReason('') }}
                               disabled={!manageable}
                               title={`Stop alerting for ${d} days — auto-reverts to open when the window passes`}
                               className="font-bold text-white bg-slate-500 hover:bg-slate-600 rounded px-2 py-1 transition disabled:opacity-40 disabled:cursor-not-allowed"
@@ -4510,13 +5118,21 @@ function getAIProposal(field: string, contractName: string): string {
 // Local-LLM remediation draft (Ollama via /api/ai-proposal, server.py — runs on this machine).
 // Resolves to generated proposal text; throws when the engine is offline or output unusable,
 // in which case the modal falls back to the standard clause library (getAIProposal), labelled as such.
+const aiDraftCache = new Map<string, Promise<string>>()
 function aiProposalDraft(p: { flag_field: string; flag_if?: string; doc_num: number; doc_name: string; doc_type: string; severity: string }): Promise<string> {
-  return fetch('/api/ai-proposal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) })
+  // de-dup identical in-flight requests (React StrictMode double-mounts dev effects; also saves Ollama loads)
+  const key = JSON.stringify(p)
+  if (aiDraftCache.has(key)) return aiDraftCache.get(key)!
+  const req = fetch('/api/ai-proposal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p) })
     .then((res) => res.json())
     .then((d: { ok: boolean; error?: string; data?: { proposal: string; rationale: string } }) => {
       if (!d.ok || !d.data) throw new Error(d.error || 'AI unavailable')
       return `${d.data.proposal}\n\nWhy it matters: ${d.data.rationale}`.trim()
     })
+    .catch((e: unknown) => { aiDraftCache.delete(key); throw e })
+    .finally(() => { /* keep the settled result cached for a short window so a re-opened wizard reuses it */ setTimeout(() => aiDraftCache.delete(key), 60_000) })
+  aiDraftCache.set(key, req)
+  return req
 }
 
 // ── Process Wizard (standalone, used from Work Queue) ──────────────────────
@@ -4678,6 +5294,8 @@ function App() {
     try { const r = localStorage.getItem('resolvedLog'); return r ? JSON.parse(r) : [] } catch { return [] }
   })
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: (note?: string) => void; showNote?: boolean; defaultNote?: string; aiDraft?: () => Promise<string> } | null>(null)
+  // v45.35 — Fix Wizard (two-step: AI-drafted resolution → annotated document)
+  const [fixWiz, setFixWiz] = useState<{ input: FixWizardInput; ai: () => Promise<string>; fallback: string } | null>(null)
   const [focusFields, setFocusFields] = useState<string[]>([])
   // Persisted state
   const [resolvedFlags, setResolvedFlags] = useState<Set<string>>(() => {
@@ -4697,19 +5315,68 @@ function App() {
     const now = new Date()
     const dateTime = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     setResolvedLog((prev) => {
-      const entry = { id: flagId, label: `${fieldLabel} → ${docNum}`, who: 'You', time: dateTime, type: flagId.startsWith('x-') ? 'workflow' : 'flag' }
+      // v45.33 · G1 — record WHO resolved it (the active role's persona, not a hardcoded "You")
+      const entry = { id: flagId, label: `${fieldLabel} → ${docNum}`, who: role.user, time: dateTime, type: flagId.startsWith('x-') ? 'workflow' : 'flag' }
       const next = [entry, ...prev]
       localStorage.setItem('resolvedLog', JSON.stringify(next))
       return next
     })
     const dn = parts[1] ? Number(parts[1]) : undefined
     logEvent('resolve', `${fieldLabel} resolved → ${docNum || 'n/a'}`, dn)
-    show('Flag resolved ✓', 'success')
+    // v45.34 — result banner: WHAT happened, WHO, WHERE the record lives + jump links (replaces the bare G4 toast)
+    reportAction({
+      kind: 'resolve',
+      title: `${fieldLabel} → ${docNum || 'n/a'}`,
+      detail: `Recorded in the green Resolved strip at the top of Work Queue · by ${role.user}.`,
+      docNum: dn,
+      recordId: flagId,
+    })
   }
   const completeLink = (linkId: string) => {
     setCompletedLinks((prev) => { const next = new Set(prev); next.add(linkId); localStorage.setItem('completedLinks', JSON.stringify([...next])); return next })
-    show('Workflow completed ✓', 'success')
+    // v45.33 · G3 — cross-ref / workflow completions leave a handoff record too
+    // (previously only a toast, so "who verified this cross-reference" was a blank in the audit trail)
+    const now = new Date()
+    const dateTime = now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    setResolvedLog((prev) => {
+      const entry = { id: linkId, label: `Cross-ref verified → #${linkId.replace(/^x-/, '')}`, who: role.user, time: dateTime, type: 'workflow' }
+      const next = [entry, ...prev]
+      localStorage.setItem('resolvedLog', JSON.stringify(next))
+      return next
+    })
+    logEvent('resolve', `Cross-reference verification completed → #${linkId.replace(/^x-/, '')}`, Number(linkId.split('-')[1]))
+    reportAction({ kind: 'xref', title: `Cross-ref verified → #${linkId.replace(/^x-/, '')}`, detail: 'Recorded in the green Resolved strip (top of Work Queue) and the activity feed.', docNum: Number(linkId.split('-')[1]), recordId: linkId })
   }
+
+  // ── v45.34 — post-action result banner: after any WQ operation the user is told WHAT happened,
+  // WHO did it, WHERE the record lives, and can jump straight to the document or the record.
+  // (Replaces the old "nothing seems to have happened" moment after Fix / Defer / Renew.)
+  const [actionResult, setActionResult] = useState<{ key: number; kind: 'resolve' | 'defer' | 'xref' | 'bulk'; title: string; detail: string; docNum?: number; recordId?: string } | null>(null)
+  const reportAction = (a: { kind: 'resolve' | 'defer' | 'xref' | 'bulk'; title: string; detail: string; docNum?: number; recordId?: string }) => {
+    const key = Date.now()
+    setActionResult({ ...a, key })
+    window.setTimeout(() => setActionResult((cur) => (cur && cur.key === key ? null : cur)), 10000)
+  }
+  const [flashDocNum, setFlashDocNum] = useState<number | null>(null)
+  const openDoc = (num?: number) => {
+    if (num == null) return
+    const c = liveContracts.find((x) => x.num === num)
+    if (c) setSelected(c)
+    setActiveTab('contracts')
+    setFlashDocNum(num)
+    window.setTimeout(() => setFlashDocNum(null), 4000)
+  }
+  const [flashEntry, setFlashEntry] = useState<string | null>(null)
+  const showRecord = (recordId: string) => {
+    setActiveTab('work-queue')
+    setFlashEntry(recordId)
+    window.setTimeout(() => setFlashEntry(null), 4000)
+  }
+  useEffect(() => {
+    if (flashDocNum == null) return
+    const el = document.querySelector(`[data-docnum="${flashDocNum}"]`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [flashDocNum])
   void setCreatedTasks
 
   const today = new Date(DEMO_TODAY)
@@ -4771,9 +5438,16 @@ function App() {
       localStorage.setItem('southlake_defers', JSON.stringify(m))
       return m
     })
-    show('Item deferred — stops alerting until the window closes, then auto-reverts to open', 'info')
     const dn = Number(id.split('-')[1])
-    logEvent('defer', `${id.split('-').slice(2).join('-').replace(/_/g, ' ')} deferred ${days}d → #${dn || '?'}`, id.startsWith('f-') ? dn : undefined)
+    logEvent('defer', `${id.split('-').slice(2).join('-').replace(/_/g, ' ')} deferred ${days}d → #${dn || '?'}${note ? ` · reason: ${note}` : ''}`, id.startsWith('f-') ? dn : undefined)
+    // v45.34 — result banner: the next employee (and the user) see WHY and UNTIL WHEN without digging
+    const until = new Date(Date.now() + days * 86400000)
+    reportAction({
+      kind: 'defer',
+      title: `Deferred ${days} days → #${dn || '?'}`,
+      detail: `Until ${until.toLocaleDateString()}${note ? ` · reason: “${note}”` : ''} — alerting paused; auto-reverts to open when the window closes.`,
+      docNum: dn,
+    })
   }
   const clearDefer = (id: string) => {
     setDeferMap((prev) => {
@@ -4789,13 +5463,14 @@ function App() {
   // ── v45.32 · paperless-inspired batch: Notes & Activity · Bulk actions ·
   //    Saved views · Drag-anywhere filing · Archive health check ─────────────
   // Activity feed: every action the system/user took on the portfolio (persisted, newest first, capped)
-  const [events, setEvents] = useState<{ ts: string; text: string; kind: string; docNum?: number }[]>(() => {
+  const [events, setEvents] = useState<{ ts: string; text: string; kind: string; docNum?: number; who?: string }[]>(() => {
     try { return JSON.parse(localStorage.getItem('ccdm_activity') || '[]') } catch { return [] }
   })
   const logEvent = (kind: string, text: string, docNum?: number) => {
     setEvents((prev) => {
       const now = new Date()
-      const entry = { ts: now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), text, kind, docNum }
+      // v45.33 · G1 — handoff record: every activity entry carries WHO acted (role persona), not just when
+      const entry = { ts: now.toLocaleDateString() + ' ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), text, kind, docNum, who: role.user }
       const next = [entry, ...prev].slice(0, 80)
       localStorage.setItem('ccdm_activity', JSON.stringify(next))
       return next
@@ -4838,7 +5513,13 @@ function App() {
     for (const c of bulkDocs) for (const f of c.flags) if (f.status === 'open' && !resolvedFlags.has(`f-${c.num}-${f.field}`)) ids.push(`f-${c.num}-${f.field}`)
     if (ids.length === 0) { show('No open flags on the selected documents — nothing to resolve', 'info'); setBulkSel(new Set()); return }
     ids.forEach((id) => { markFlagResolvedSilent(id); logEvent('resolve', `${id.split('-').slice(2).join('-').replace(/_/g, ' ')} resolved → #${id.split('-')[1]} (bulk)`, Number(id.split('-')[1])) })
-    show(`Resolved ${ids.length} flag${ids.length > 1 ? 's' : ''} across ${bulkDocs.length} document${bulkDocs.length > 1 ? 's' : ''} ✓`, 'success')
+    // v45.34 — one summary banner for the batch (markFlagResolvedSilent writes records without per-item banners)
+    reportAction({
+      kind: 'bulk',
+      title: `${ids.length} flag${ids.length > 1 ? 's' : ''} resolved across ${bulkDocs.length} document${bulkDocs.length > 1 ? 's' : ''}`,
+      detail: `Every resolution is recorded in the green Resolved strip at the top of Work Queue · by ${role.user}.`,
+      recordId: ids[0],
+    })
     setBulkSel(new Set())
   }
   const bulkRefile = async (toCat: string) => {
@@ -4877,9 +5558,16 @@ function App() {
   }
   const [bulkNoteText, setBulkNoteText] = useState('')
   // v45.32 — bulk defer of Work Queue flag items (per-item 30/60/90d windows, each auto-reverts)
-  const bulkDefer = (ids: string[], days: number) => {
-    ids.forEach((id) => deferItem(id, days))
-    show(`${ids.length} item${ids.length > 1 ? 's' : ''} deferred for ${days} days — alerting paused, auto-reverts to open after the window`, 'success')
+  const bulkDefer = (ids: string[], days: number, note?: string) => {
+    ids.forEach((id) => deferItem(id, days, note))
+    // v45.34 — one banner for the whole batch (deferItem's per-item banner is replaced by this summary)
+    const until = new Date(Date.now() + days * 86400000)
+    reportAction({
+      kind: 'bulk',
+      title: `${ids.length} item${ids.length > 1 ? 's' : ''} deferred ${days} days`,
+      detail: `Until ${until.toLocaleDateString()}${note ? ` · shared reason: “${note}”` : ''} — alerting paused on every listed item; each auto-reverts when its window closes.`,
+      recordId: ids[0],
+    })
   }
 
   // Saved views (paperless-style "save the current filter combo"): docs tab = the 4 sidebar filters,
@@ -4959,6 +5647,74 @@ function App() {
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((d) => setArchCheck({ loading: false, data: d }))
       .catch(() => { setArchCheck({ loading: false, data: null }); show('Archive check offline — start the API server (port 8000)', 'warn') })
+  }
+
+  // ── v45.33 · G5 — shared handoff record on the hospital server ("把数据放到服务器里") ──
+  // Resolutions / cross-ref completions / defers (+ reasons) / notes / activity feed sync
+  // to one server-side file so the next employee — different browser or machine — opens
+  // the system to the same record. localStorage stays the fast offline path; the server
+  // is the system of record when reachable (dev: vite proxies /api → :8000; the static
+  // GH-Pages build has no backend and degrades to local-only, shown honestly in the UI).
+  const [syncState, setSyncState] = useState<'idle' | 'synced' | 'offline'>('idle')
+  const [hydrated, setHydrated] = useState(false) // v45.33 · G5 — upsync must not fire before the server record has been read
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/state')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((s) => {
+        if (cancelled) return
+        // merge server into local (union for sets, server-wins per key for maps, dedupe for logs)
+        setResolvedFlags((prev) => { const next = new Set([...prev, ...(s.resolvedFlags || [])]); localStorage.setItem('resolvedFlags', JSON.stringify([...next])); return next })
+        setCompletedLinks((prev) => { const next = new Set([...prev, ...(s.completedLinks || [])]); localStorage.setItem('completedLinks', JSON.stringify([...next])); return next })
+        setDeferMap((prev) => { const next = { ...prev, ...(s.defers || {}) }; localStorage.setItem('southlake_defers', JSON.stringify(next)); return next })
+        setNotes((prev) => { const next = { ...prev, ...(s.notes || {}) }; localStorage.setItem('ccdm_notes', JSON.stringify(next)); return next })
+        setEvents((prev) => {
+          const seen = new Set(prev.map((e) => e.ts + '|' + e.text))
+          const merged = [...(s.activity || []).filter((e: { ts: string; text: string }) => !seen.has(e.ts + '|' + e.text)), ...prev].slice(0, 80)
+          localStorage.setItem('ccdm_activity', JSON.stringify(merged))
+          return merged
+        })
+        setResolvedLog((prev) => {
+          const ids = new Set(prev.map((e) => e.id))
+          const merged = [...(s.resolvedLog || []).filter((e: { id: string }) => !ids.has(e.id)), ...prev]
+          localStorage.setItem('resolvedLog', JSON.stringify(merged))
+          return merged
+        })
+        setHydrated(true)
+      })
+      .catch(() => { if (!cancelled) { setSyncState('offline'); setHydrated(true) } })
+    return () => { cancelled = true }
+    // hydrate once on mount only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  // debounced upsync: every handoff-relevant write lands on the server ~700ms after settling
+  useEffect(() => {
+    if (!hydrated) return
+    const t = setTimeout(() => {
+      fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resolvedFlags: [...resolvedFlags],
+          completedLinks: [...completedLinks],
+          defers: deferMap,
+          notes,
+          activity: events,
+          resolvedLog,
+        }),
+      })
+        .then((r) => setSyncState(r.ok ? 'synced' : 'offline'))
+        .catch(() => setSyncState('offline'))
+    }, 700)
+    return () => clearTimeout(t)
+  }, [hydrated, resolvedFlags, completedLinks, deferMap, notes, events, resolvedLog])
+  // G5 — "Reset all" also clears the shared server record so a fresh demo starts clean
+  const resetAllShared = () => {
+    fetch('/api/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resolvedFlags: [], completedLinks: [], defers: {}, notes: {}, activity: [], resolvedLog: [] }),
+    }).catch(() => {})
   }
 
   const filtered = liveContracts.filter((c) => {
@@ -5323,9 +6079,41 @@ function App() {
           {/* Main Content + Detail Panel */}
           <main className="flex-1 min-w-0 overflow-x-auto flex">
             <div className="flex-1 min-w-0">
+              {/* v45.34 — post-action result banner (global: visible on every tab after any WQ operation) */}
+              {actionResult && (
+                <div className="mb-4 bg-white border-l-4 border-emerald-500 rounded-lg shadow-sm px-4 py-3 flex flex-wrap items-center gap-3" role="status">
+                  <span className="text-[15px] font-bold text-emerald-600 shrink-0">
+                    {actionResult.kind === 'defer' ? '⏸' : actionResult.kind === 'xref' ? '⇄' : actionResult.kind === 'bulk' ? '✓✓' : '✓'}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-bold text-slate-800">
+                      {actionResult.title}
+                      <span className="text-[11px] font-semibold text-slate-400 ml-2">by {role.user}</span>
+                    </div>
+                    <div className="text-[12px] text-slate-500 mt-0.5">{actionResult.detail}</div>
+                  </div>
+                  <div className="ml-auto flex items-center gap-2 shrink-0">
+                    {actionResult.docNum != null && (
+                      <button
+                        onClick={() => { openDoc(actionResult.docNum); setActionResult(null) }}
+                        title="Go to the document in the Documents tab — it is selected there and the row is highlighted"
+                        className="text-[12px] font-semibold bg-teal-600 hover:bg-teal-700 text-white rounded-md px-3 py-1.5 transition"
+                      >Open the document →</button>
+                    )}
+                    {actionResult.recordId && (
+                      <button
+                        onClick={() => { showRecord(actionResult.recordId!); setActionResult(null) }}
+                        title="Jump to the green Resolved strip in Work Queue and highlight this record"
+                        className="text-[12px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-md px-3 py-1.5 transition"
+                      >Show record</button>
+                    )}
+                    <button onClick={() => setActionResult(null)} className="text-[12px] text-slate-400 hover:text-slate-600 transition px-1.5 py-1.5" title="Dismiss">✕</button>
+                  </div>
+                </div>
+              )}
               <>
                 {activeTab === 'work-queue' && (
-                  <WorkQueueView contracts={visible} onSelectContract={(c) => setSelected(c)}
+                  <WorkQueueView contracts={visible} onSelectContract={(c) => openDoc(c.num)}
                     onProcess={(link) => { setProcessLink(link); setSelected(null) }}
                     resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} onResolveFlag={(id) => markFlagResolved(id)}
                     manageable={!!role && canManage(role)} resolvedLog={resolvedLog}
@@ -5333,13 +6121,29 @@ function App() {
                     retiredNums={retiredNums} deferMap={deferMap} onDefer={deferItem} onClearDefer={clearDefer}
                     onBulkResolve={bulkResolve} onBulkDefer={bulkDefer}
                     viewRequest={wqViewReq} onSaveWqView={commitWqView} onReportWqTile={setWqViewTile}
+                    flashEntry={flashEntry}
+                    onOpenFixWizard={(item, mode) => setFixWiz({
+                      input: {
+                        mode,
+                        itemId: item.id,
+                        what: item.what,
+                        docLabel: item.docLabel,
+                        docNum: item.docNum,
+                        severity: item.severity,
+                        contract: item.contract,
+                        field: item.id.startsWith('f-') ? item.id.replace(/^f-\d+-/, '') : mode === 'renew' ? 'auto_renewal' : undefined,
+                        due: item.due,
+                      },
+                      ai: () => aiProposalDraft({ flag_field: mode === 'renew' ? 'auto_renewal' : (item.id.startsWith('f-') ? item.id.replace(/^f-\d+-/, '') : item.what), flag_if: item.what, doc_num: item.docNum, doc_name: item.docLabel, doc_type: item.contract.type, severity: item.severity }),
+                      fallback: getAIProposal(mode === 'renew' ? 'auto_renewal' : (item.id.startsWith('f-') ? item.id.replace(/^f-\d+-/, '') : item.what), item.docLabel),
+                    })}
                     onConfirmAction={(title, msg, action, showNote, defaultNote, aiDraft) => setConfirmState({ title, message: msg, onConfirm: action, showNote, defaultNote, aiDraft })} />
                 )}
                 {activeTab === 'risk-register' && (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-[11px] text-slate-400">Showing {activeVisible.length} contracts · {openFlagsCount} open flags{retiredNums.size > 0 ? ` · ${retiredNums.size} retired doc${retiredNums.size === 1 ? '' : 's'} out of scope` : ''}</span>
-                      <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); localStorage.removeItem('ccdm_uploads'); localStorage.removeItem('southlake_retired'); localStorage.removeItem('southlake_defers'); window.location.reload() }} className="text-[11px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
+                      <button onClick={() => { localStorage.removeItem('resolvedFlags'); localStorage.removeItem('completedLinks'); localStorage.removeItem('createdTasks'); localStorage.removeItem('southlake_status_overrides'); localStorage.removeItem('ccdm_uploads'); localStorage.removeItem('southlake_retired'); localStorage.removeItem('southlake_defers'); localStorage.removeItem('ccdm_notes'); localStorage.removeItem('ccdm_activity'); localStorage.removeItem('ccdm_savedviews'); localStorage.removeItem('resolvedLog'); resetAllShared(); window.location.reload() }} className="text-[11px] text-emerald-600 hover:text-emerald-800 hover:underline">Reset all</button>
                     </div>
                     <RiskMatrixView contracts={activeVisible} onSelectContract={(c) => { setSelected(c); }} resolvedFlags={resolvedFlags} />
                     <RiskRegisterTable
@@ -5460,6 +6264,7 @@ function App() {
                       bulkSelected={activeTab === 'contracts' ? bulkSel : undefined}
                       onBulkToggle={(n) => bulkToggle(n)}
                       onBulkAll={() => setBulkSel(new Set(filtered.map((c) => c.num)))}
+                      flashNum={flashDocNum}
                     />
 
                     {/* v45.32 — activity feed: the record of what happened across the portfolio (resolves, filings, deferrals, notes) */}
@@ -5467,9 +6272,19 @@ function App() {
                       <div className="flex items-center gap-2 mb-2">
                         <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Recent Activity</h3>
                         <span className="text-[11px] text-slate-400">{events.length} event{events.length === 1 ? '' : 's'} recorded</span>
+                        {/* v45.33 · G5 — shared record: where this handoff data actually lives */}
+                        <span
+                          className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${syncState === 'offline' ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'}`}
+                          title={syncState === 'offline'
+                            ? 'The document service (API on port 8000) is not reachable — records are stored in this browser only. Start the service (python3 server.py) to share them on the server.'
+                            : 'Resolutions, defers, notes and this feed sync to the shared server record (data/state/handoff.json), so the next employee sees the same state.'}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${syncState === 'offline' ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+                          {syncState === 'offline' ? 'Local only · server offline' : 'Shared on server ✓'}
+                        </span>
                         {events.length > 0 && (
                           <button
-                            onClick={() => { setEvents([]); localStorage.removeItem('ccdm_activity') }}
+                            onClick={() => { setEvents([]); localStorage.removeItem('ccdm_activity'); resetAllShared() }}
                             className="ml-auto text-[11px] text-slate-400 hover:text-slate-600 transition"
                           >Clear feed</button>
                         )}
@@ -5487,7 +6302,7 @@ function App() {
                                 : e.kind === 'defer' || e.kind === 'defer-clear' ? 'bg-slate-400'
                                 : e.kind === 'retire' || e.kind === 'unretire' ? 'bg-purple-400'
                                 : 'bg-red-400'}`} />
-                              <span className="text-slate-700 flex-1 leading-snug">{e.text}</span>
+                              <span className="text-slate-700 flex-1 leading-snug">{e.text}{e.who ? <span className="text-slate-400"> · by {e.who}</span> : null}</span>
                               <span className="text-slate-400 shrink-0 text-[11px] font-mono">{e.ts}</span>
                             </div>
                           ))}
@@ -5568,6 +6383,37 @@ function App() {
           defaultNote={confirmState.defaultNote || ''}
           aiDraft={confirmState.aiDraft}
           confirmLabel="Confirm"
+        />
+      )}
+
+      {/* v45.35 — Fix Wizard (two-step: AI-drafted resolution → annotated document) */}
+      {fixWiz && (
+        <FixWizard
+          input={fixWiz.input}
+          getDraft={fixWiz.ai}
+          fallbackNote={fixWiz.fallback}
+          onCancel={() => setFixWiz(null)}
+          onConfirm={(note, attached) => {
+            const n = fixWiz.input
+            const trimmed = (note || '').trim()
+            const nFixes = attached?.fixes || 0
+            const nEdits = attached?.edits || 0
+            markFlagResolved(n.itemId)
+            if (trimmed || nFixes > 0 || nEdits > 0) logEvent(n.mode === 'renew' ? 'renew-scheduled' : 'fix-wizard', `Resolution on #${n.docNum} (${n.docLabel}) via ${n.mode} wizard: ${trimmed.slice(0, 140)}${trimmed.length > 140 ? '…' : ''}${nFixes + nEdits > 0 ? ` · attached ${nFixes} passage fix${nFixes === 1 ? '' : 'es'}${nEdits > 0 ? ` + ${nEdits} edited line${nEdits === 1 ? '' : 's'}` : ''}` : ''}`, n.docNum)
+            reportAction({
+              kind: 'resolve',
+              title: n.mode === 'renew' ? `⇄ Renewal scheduled → #${n.docNum} · ${n.docLabel}` : `✓ ${n.field ? n.field.replace(/_/g, ' ') + ' ' : ''}resolved → #${n.docNum} · ${n.docLabel}`,
+              detail: (() => {
+                const notePart = trimmed ? `${n.mode === 'renew' ? 'Renewal' : 'Fix'} note recorded: “${trimmed.slice(0, 70)}${trimmed.length > 70 ? '…' : ''}” · ` : ''
+                const attach = nFixes + nEdits > 0 ? `Attached ${nFixes} passage fix${nFixes === 1 ? '' : 'es'}${nEdits > 0 ? ` + ${nEdits} edited line${nEdits === 1 ? '' : 's'}` : ''} to the record · ` : ''
+                const next = n.mode === 'renew' ? 'Next step: counterparty signature → upload the amendment via Smart Filing' : 'Documented review attached to the record'
+                return notePart + attach + next + ` · by ${role?.user || '—'} · Recorded in the green Resolved strip.`
+              })(),
+              docNum: n.docNum,
+              recordId: n.itemId,
+            })
+            setFixWiz(null)
+          }}
         />
       )}
 

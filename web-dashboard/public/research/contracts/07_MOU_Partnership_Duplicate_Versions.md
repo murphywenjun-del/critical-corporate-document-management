@@ -5,7 +5,7 @@
 - **File Name**: MOU_Partnership_Duplicate_Versions.pdf
 - **Risk Score**: 1.0 / 5.0 (Low — well-drafted, but needs renewal attention)
 - **Rules Flags Count**: 0
-- **Expected Outcome**: 重复/冲突版本 · Two conflicting MOUs with different terms and signatories
+- **Expected Outcome**: Two conflicting MOUs with different terms and signatories
 
 ---
 

@@ -591,6 +591,39 @@ async def re_file(payload: dict):
         "path": f"data/archive/{to_cat}/{sub}/{found.name}",
     }
 
+# ── v45.33 · G5 — shared handoff record ("put the data on the hospital server") ──
+# Resolutions, cross-ref completions, defers (+ reasons), notes and the activity
+# feed persist to one server-side file so the NEXT employee (different browser /
+# machine) opens the system to the same record. The browser keeps localStorage as
+# the fast offline path; this endpoint is the system of record when reachable.
+STATE_DIR = BASE_DIR / "web-dashboard" / "data" / "state"
+STATE_FILE = STATE_DIR / "handoff.json"
+
+@app.get("/api/state")
+def get_state() -> dict:
+    if STATE_FILE.exists():
+        try:
+            return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {"resolvedFlags": [], "completedLinks": [], "defers": {}, "notes": {}, "activity": [], "resolvedLog": []}
+
+@app.post("/api/state")
+async def save_state(payload: dict) -> dict:
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    clean = {
+        "resolvedFlags": payload.get("resolvedFlags") or [],
+        "completedLinks": payload.get("completedLinks") or [],
+        "defers": payload.get("defers") or {},
+        "notes": payload.get("notes") or {},
+        "activity": (payload.get("activity") or [])[:80],
+        "resolvedLog": (payload.get("resolvedLog") or [])[:80],
+    }
+    tmp = STATE_FILE.with_suffix(".tmp")
+    tmp.write_text(json.dumps(clean, ensure_ascii=False, indent=1), encoding="utf-8")
+    tmp.replace(STATE_FILE)
+    return {"ok": True, "path": "data/state/handoff.json"}
+
 # Field → (client category, risk name). Mirrors FLAG_TO_HIROC in src/data.ts — keep in sync.
 SOUTHLAKE_FLAG_MAP = {
     "signatories": ("Leadership", "Governance"),
