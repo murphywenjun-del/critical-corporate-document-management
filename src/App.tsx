@@ -842,6 +842,7 @@ function ContractList({
   bulkSelected,
   onBulkToggle,
   onBulkAll,
+  flashNum, // v45.34 — "Open the document" jump from the post-action banner: highlight that row
 }: {
   contracts: ContractDoc[]
   selectedNum: number | null
@@ -853,6 +854,7 @@ function ContractList({
   bulkSelected?: Set<number>
   onBulkToggle?: (num: number) => void
   onBulkAll?: () => void
+  flashNum?: number | null
 }) {
   const bulkMode = !!bulkSelected
   const allChecked = bulkMode && allContracts.length > 0 && allContracts.every((c) => bulkSelected!.has(c.num))
@@ -975,7 +977,7 @@ function ContractList({
             </div>
         )
         return (
-          <div key={c.num} className={`relative ${rowCls}`} onClick={() => onSelect(c)} role="button" tabIndex={0}>
+          <div key={c.num} data-docnum={c.num} className={`relative ${rowCls} ${flashNum === c.num ? 'ring-2 ring-emerald-400 ring-inset bg-emerald-50/60' : ''}`} onClick={() => onSelect(c)} role="button" tabIndex={0}>
             {bulkMode && (
               <input
                 type="checkbox"
@@ -3041,7 +3043,7 @@ function SettingsSidebar({
 
 // ── Work Queue View (action-oriented workbench) ─────────────────────────────
 
-function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields, manageable, expiryFilter, onClearExpiry, retiredNums, deferMap, onDefer, onClearDefer, onBulkResolve, onBulkDefer, viewRequest, onSaveWqView, onReportWqTile }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string, aiDraft?: () => Promise<string>) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[]; manageable?: boolean; expiryFilter?: string; onClearExpiry?: () => void; retiredNums?: Set<number>; deferMap?: Record<string, { until: string; note?: string }>; onDefer?: (id: string, days: number, note?: string) => void; onClearDefer?: (id: string) => void; onBulkResolve?: (ids: string[]) => void; onBulkDefer?: (ids: string[], days: number, note?: string) => void; viewRequest?: { filter: string; ts: number } | null; onSaveWqView?: (name: string, tile: string) => void; onReportWqTile?: (tile: string) => void }) {
+function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, resolvedFlags, completedLinks, createdTasks, onResolveFlag, onConfirmAction, resolvedLog, focusFields, manageable, expiryFilter, onClearExpiry, retiredNums, deferMap, onDefer, onClearDefer, onBulkResolve, onBulkDefer, viewRequest, onSaveWqView, onReportWqTile, flashEntry }: { contracts: ContractDoc[]; onSelectContract: (c: ContractDoc) => void; onProcess?: (link: DocLink) => void; resolvedFlags: Set<string>; completedLinks: Set<string>; createdTasks: { id: string; label: string; contractNum: number; time: string }[]; onResolveFlag?: (id: string) => void; onConfirmAction?: (title: string, message: string, action: () => void, showNote?: boolean, defaultNote?: string, aiDraft?: () => Promise<string>) => void; resolvedLog?: { id: string; label: string; time: string; type: string; who?: string }[]; focusFields?: string[]; manageable?: boolean; expiryFilter?: string; onClearExpiry?: () => void; retiredNums?: Set<number>; deferMap?: Record<string, { until: string; note?: string }>; onDefer?: (id: string, days: number, note?: string) => void; onClearDefer?: (id: string) => void; onBulkResolve?: (ids: string[]) => void; onBulkDefer?: (ids: string[], days: number, note?: string) => void; viewRequest?: { filter: string; ts: number } | null; onSaveWqView?: (name: string, tile: string) => void; onReportWqTile?: (tile: string) => void; flashEntry?: string | null }) {
   const [filter, setFilter] = useState<'all' | 'critical' | 'high' | 'expiring' | 'crossref' | 'resolved' | 'deferred'>('all')
   const [wqPage, setWqPage] = useState(1) // task-table pagination (15 per page)
   const [showResolved, setShowResolved] = useState(false)
@@ -3055,6 +3057,13 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
   const [bulkDeferReason, setBulkDeferReason] = useState('') // v45.33 · G2 — shared reason for bulk defers
   useEffect(() => { if (viewRequest) setFilter(viewRequest.filter as typeof filter) }, [viewRequest?.ts])
   useEffect(() => { onReportWqTile?.(filter) }, [filter])
+  // v45.34 — when the post-action banner says "Show record": expand the green strip and flash-highlight that entry
+  useEffect(() => {
+    if (!flashEntry) return
+    setShowResolved(true)
+    const el = document.querySelector(`[data-resolved-id="${flashEntry}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [flashEntry])
 
   // Compute work items
   type WorkItem = {
@@ -3346,7 +3355,8 @@ function WorkQueueView({ contracts: allContracts, onSelectContract, onProcess, r
           {showResolved && (
             <div className="divide-y divide-emerald-100 bg-white/50">
               {resolvedLog.slice(0, 10).map((entry) => (
-                <div key={entry.id} className="px-4 py-2 text-[11px]">
+                <div key={entry.id} data-resolved-id={entry.id}
+                  className={`px-4 py-2 text-[11px] transition ${flashEntry === entry.id ? 'bg-emerald-100 ring-1 ring-emerald-300 rounded' : ''}`}>
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-medium text-slate-700 truncate">{entry.label}</span>
                     <span className="text-slate-400 shrink-0">{entry.time}</span>
@@ -4732,8 +4742,14 @@ function App() {
     })
     const dn = parts[1] ? Number(parts[1]) : undefined
     logEvent('resolve', `${fieldLabel} resolved → ${docNum || 'n/a'}`, dn)
-    // v45.33 · G4 — tell the user where the result went (the item leaves the open list but the record stays)
-    show('Flag resolved ✓ — see the green Resolved strip at the top of Work Queue', 'success')
+    // v45.34 — result banner: WHAT happened, WHO, WHERE the record lives + jump links (replaces the bare G4 toast)
+    reportAction({
+      kind: 'resolve',
+      title: `${fieldLabel} → ${docNum || 'n/a'}`,
+      detail: `Recorded in the green Resolved strip at the top of Work Queue · by ${role.user}.`,
+      docNum: dn,
+      recordId: flagId,
+    })
   }
   const completeLink = (linkId: string) => {
     setCompletedLinks((prev) => { const next = new Set(prev); next.add(linkId); localStorage.setItem('completedLinks', JSON.stringify([...next])); return next })
@@ -4748,8 +4764,38 @@ function App() {
       return next
     })
     logEvent('resolve', `Cross-reference verification completed → #${linkId.replace(/^x-/, '')}`, Number(linkId.split('-')[1]))
-    show('Cross-ref verified ✓ — recorded in the Resolved log and activity feed', 'success')
+    reportAction({ kind: 'xref', title: `Cross-ref verified → #${linkId.replace(/^x-/, '')}`, detail: 'Recorded in the green Resolved strip (top of Work Queue) and the activity feed.', docNum: Number(linkId.split('-')[1]), recordId: linkId })
   }
+
+  // ── v45.34 — post-action result banner: after any WQ operation the user is told WHAT happened,
+  // WHO did it, WHERE the record lives, and can jump straight to the document or the record.
+  // (Replaces the old "nothing seems to have happened" moment after Fix / Defer / Renew.)
+  const [actionResult, setActionResult] = useState<{ key: number; kind: 'resolve' | 'defer' | 'xref' | 'bulk'; title: string; detail: string; docNum?: number; recordId?: string } | null>(null)
+  const reportAction = (a: { kind: 'resolve' | 'defer' | 'xref' | 'bulk'; title: string; detail: string; docNum?: number; recordId?: string }) => {
+    const key = Date.now()
+    setActionResult({ ...a, key })
+    window.setTimeout(() => setActionResult((cur) => (cur && cur.key === key ? null : cur)), 10000)
+  }
+  const [flashDocNum, setFlashDocNum] = useState<number | null>(null)
+  const openDoc = (num?: number) => {
+    if (num == null) return
+    const c = liveContracts.find((x) => x.num === num)
+    if (c) setSelected(c)
+    setActiveTab('contracts')
+    setFlashDocNum(num)
+    window.setTimeout(() => setFlashDocNum(null), 4000)
+  }
+  const [flashEntry, setFlashEntry] = useState<string | null>(null)
+  const showRecord = (recordId: string) => {
+    setActiveTab('work-queue')
+    setFlashEntry(recordId)
+    window.setTimeout(() => setFlashEntry(null), 4000)
+  }
+  useEffect(() => {
+    if (flashDocNum == null) return
+    const el = document.querySelector(`[data-docnum="${flashDocNum}"]`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [flashDocNum])
   void setCreatedTasks
 
   const today = new Date(DEMO_TODAY)
@@ -4811,9 +4857,16 @@ function App() {
       localStorage.setItem('southlake_defers', JSON.stringify(m))
       return m
     })
-    show('Item deferred — stops alerting until the window closes, then auto-reverts to open', 'info')
     const dn = Number(id.split('-')[1])
     logEvent('defer', `${id.split('-').slice(2).join('-').replace(/_/g, ' ')} deferred ${days}d → #${dn || '?'}${note ? ` · reason: ${note}` : ''}`, id.startsWith('f-') ? dn : undefined)
+    // v45.34 — result banner: the next employee (and the user) see WHY and UNTIL WHEN without digging
+    const until = new Date(Date.now() + days * 86400000)
+    reportAction({
+      kind: 'defer',
+      title: `Deferred ${days} days → #${dn || '?'}`,
+      detail: `Until ${until.toLocaleDateString()}${note ? ` · reason: “${note}”` : ''} — alerting paused; auto-reverts to open when the window closes.`,
+      docNum: dn,
+    })
   }
   const clearDefer = (id: string) => {
     setDeferMap((prev) => {
@@ -4879,7 +4932,13 @@ function App() {
     for (const c of bulkDocs) for (const f of c.flags) if (f.status === 'open' && !resolvedFlags.has(`f-${c.num}-${f.field}`)) ids.push(`f-${c.num}-${f.field}`)
     if (ids.length === 0) { show('No open flags on the selected documents — nothing to resolve', 'info'); setBulkSel(new Set()); return }
     ids.forEach((id) => { markFlagResolvedSilent(id); logEvent('resolve', `${id.split('-').slice(2).join('-').replace(/_/g, ' ')} resolved → #${id.split('-')[1]} (bulk)`, Number(id.split('-')[1])) })
-    show(`Resolved ${ids.length} flag${ids.length > 1 ? 's' : ''} across ${bulkDocs.length} document${bulkDocs.length > 1 ? 's' : ''} ✓ — recorded in the green Resolved strip (Work Queue)`, 'success')
+    // v45.34 — one summary banner for the batch (markFlagResolvedSilent writes records without per-item banners)
+    reportAction({
+      kind: 'bulk',
+      title: `${ids.length} flag${ids.length > 1 ? 's' : ''} resolved across ${bulkDocs.length} document${bulkDocs.length > 1 ? 's' : ''}`,
+      detail: `Every resolution is recorded in the green Resolved strip at the top of Work Queue · by ${role.user}.`,
+      recordId: ids[0],
+    })
     setBulkSel(new Set())
   }
   const bulkRefile = async (toCat: string) => {
@@ -4920,7 +4979,14 @@ function App() {
   // v45.32 — bulk defer of Work Queue flag items (per-item 30/60/90d windows, each auto-reverts)
   const bulkDefer = (ids: string[], days: number, note?: string) => {
     ids.forEach((id) => deferItem(id, days, note))
-    show(`${ids.length} item${ids.length > 1 ? 's' : ''} deferred for ${days} days${note ? ` — reason recorded: “${note}”` : ''} (alerting paused, auto-reverts to open after the window)`, 'success')
+    // v45.34 — one banner for the whole batch (deferItem's per-item banner is replaced by this summary)
+    const until = new Date(Date.now() + days * 86400000)
+    reportAction({
+      kind: 'bulk',
+      title: `${ids.length} item${ids.length > 1 ? 's' : ''} deferred ${days} days`,
+      detail: `Until ${until.toLocaleDateString()}${note ? ` · shared reason: “${note}”` : ''} — alerting paused on every listed item; each auto-reverts when its window closes.`,
+      recordId: ids[0],
+    })
   }
 
   // Saved views (paperless-style "save the current filter combo"): docs tab = the 4 sidebar filters,
@@ -5432,9 +5498,41 @@ function App() {
           {/* Main Content + Detail Panel */}
           <main className="flex-1 min-w-0 overflow-x-auto flex">
             <div className="flex-1 min-w-0">
+              {/* v45.34 — post-action result banner (global: visible on every tab after any WQ operation) */}
+              {actionResult && (
+                <div className="mb-4 bg-white border-l-4 border-emerald-500 rounded-lg shadow-sm px-4 py-3 flex flex-wrap items-center gap-3" role="status">
+                  <span className="text-[15px] font-bold text-emerald-600 shrink-0">
+                    {actionResult.kind === 'defer' ? '⏸' : actionResult.kind === 'xref' ? '⇄' : actionResult.kind === 'bulk' ? '✓✓' : '✓'}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-[13px] font-bold text-slate-800">
+                      {actionResult.title}
+                      <span className="text-[11px] font-semibold text-slate-400 ml-2">by {role.user}</span>
+                    </div>
+                    <div className="text-[12px] text-slate-500 mt-0.5">{actionResult.detail}</div>
+                  </div>
+                  <div className="ml-auto flex items-center gap-2 shrink-0">
+                    {actionResult.docNum != null && (
+                      <button
+                        onClick={() => { openDoc(actionResult.docNum); setActionResult(null) }}
+                        title="Go to the document in the Documents tab — it is selected there and the row is highlighted"
+                        className="text-[12px] font-semibold bg-teal-600 hover:bg-teal-700 text-white rounded-md px-3 py-1.5 transition"
+                      >Open the document →</button>
+                    )}
+                    {actionResult.recordId && (
+                      <button
+                        onClick={() => { showRecord(actionResult.recordId!); setActionResult(null) }}
+                        title="Jump to the green Resolved strip in Work Queue and highlight this record"
+                        className="text-[12px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-md px-3 py-1.5 transition"
+                      >Show record</button>
+                    )}
+                    <button onClick={() => setActionResult(null)} className="text-[12px] text-slate-400 hover:text-slate-600 transition px-1.5 py-1.5" title="Dismiss">✕</button>
+                  </div>
+                </div>
+              )}
               <>
                 {activeTab === 'work-queue' && (
-                  <WorkQueueView contracts={visible} onSelectContract={(c) => setSelected(c)}
+                  <WorkQueueView contracts={visible} onSelectContract={(c) => openDoc(c.num)}
                     onProcess={(link) => { setProcessLink(link); setSelected(null) }}
                     resolvedFlags={resolvedFlags} completedLinks={completedLinks} createdTasks={createdTasks} onResolveFlag={(id) => markFlagResolved(id)}
                     manageable={!!role && canManage(role)} resolvedLog={resolvedLog}
@@ -5442,6 +5540,7 @@ function App() {
                     retiredNums={retiredNums} deferMap={deferMap} onDefer={deferItem} onClearDefer={clearDefer}
                     onBulkResolve={bulkResolve} onBulkDefer={bulkDefer}
                     viewRequest={wqViewReq} onSaveWqView={commitWqView} onReportWqTile={setWqViewTile}
+                    flashEntry={flashEntry}
                     onConfirmAction={(title, msg, action, showNote, defaultNote, aiDraft) => setConfirmState({ title, message: msg, onConfirm: action, showNote, defaultNote, aiDraft })} />
                 )}
                 {activeTab === 'risk-register' && (
@@ -5569,6 +5668,7 @@ function App() {
                       bulkSelected={activeTab === 'contracts' ? bulkSel : undefined}
                       onBulkToggle={(n) => bulkToggle(n)}
                       onBulkAll={() => setBulkSel(new Set(filtered.map((c) => c.num)))}
+                      flashNum={flashDocNum}
                     />
 
                     {/* v45.32 — activity feed: the record of what happened across the portfolio (resolves, filings, deferrals, notes) */}
